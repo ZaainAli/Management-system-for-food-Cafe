@@ -26,6 +26,7 @@ function runMigrations(db) {
       name TEXT NOT NULL,
       description TEXT DEFAULT '',
       price REAL NOT NULL,
+      halfPrice REAL,
       categoryId TEXT,
       isAvailable INTEGER NOT NULL DEFAULT 1,
       createdAt TEXT NOT NULL,
@@ -145,6 +146,12 @@ function runMigrations(db) {
       UNIQUE(employeeId, date)
     );
   `);
+
+  // Lightweight column migrations
+  const menuCols = db.prepare("PRAGMA table_info(menu_items)").all().map(c => c.name);
+  if (!menuCols.includes('halfPrice')) {
+    db.prepare('ALTER TABLE menu_items ADD COLUMN halfPrice REAL').run();
+  }
 
   // Migration: Add canManage column to users table if it doesn't exist
   const columns = db.prepare("PRAGMA table_info(users)").all();

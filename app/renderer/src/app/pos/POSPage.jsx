@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function POSPage() {
   const [menuItems, setMenuItems] = useState([]);
@@ -9,6 +9,9 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [loading, setLoading] = useState(true);
   const [billSuccess, setBillSuccess] = useState(null);
+  const [activeLineId, setActiveLineId] = useState(null);
+  const qtyBufferRef = useRef('');
+  const qtyTimerRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -30,24 +33,84 @@ export default function POSPage() {
     }
   }, [billSuccess]);
 
+  // Keyboard quantity entry for selected cart line
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!activeLineId) return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      const isDigit = e.key >= '0' && e.key <= '9';
+      if (!isDigit && e.key !== 'Backspace' && e.key !== 'Escape' && e.key !== 'Enter') return;
+      e.preventDefault();
+
+      if (e.key === 'Escape') {
+        qtyBufferRef.current = '';
+        return;
+      }
+      if (e.key === 'Backspace') {
+        qtyBufferRef.current = qtyBufferRef.current.slice(0, -1);
+      } else if (isDigit) {
+        qtyBufferRef.current += e.key;
+      } else if (e.key === 'Enter') {
+        qtyBufferRef.current = '';
+        return;
+      }
+
+      const nextQty = Number(qtyBufferRef.current);
+      if (Number.isFinite(nextQty) && nextQty >= 0) {
+        updateLine(activeLineId, { quantity: Math.max(0, nextQty) });
+      }
+
+      if (qtyTimerRef.current) clearTimeout(qtyTimerRef.current);
+      qtyTimerRef.current = setTimeout(() => { qtyBufferRef.current = ''; }, 1500);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (qtyTimerRef.current) clearTimeout(qtyTimerRef.current);
+    };
+  }, [activeLineId]);
+
   const filteredItems = activeCategory === 'All'
     ? menuItems
     : menuItems.filter(i => i.categoryName === activeCategory);
 
+  const makeLineId = (menuItemId) => `${menuItemId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
   const addToCart = (item) => {
     setCart(prev => {
-      const existing = prev.find(c => c.id === item.id);
-      if (existing) return prev.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c);
-      return [...prev, { ...item, quantity: 1 }];
+      const existing = prev.find(c => c.id === item.id && Number(c.price) === Number(item.price));
+      if (existing) {
+        return prev.map(c => c.lineId === existing.lineId ? { ...c, quantity: c.quantity + 1 } : c);
+      }
+      return [...prev, {
+        lineId: makeLineId(item.id),
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        isAvailable: item.isAvailable,
+        basePrice: Number(item.price),
+        halfPrice: item.halfPrice !== null && item.halfPrice !== undefined ? Number(item.halfPrice) : null,
+        price: Number(item.price),
+        quantity: 1,
+      }];
     });
   };
 
-  const removeFromCart = (id) => {
+  const removeFromCart = (lineId) => {
     setCart(prev => {
-      const item = prev.find(c => c.id === id);
-      if (item && item.quantity > 1) return prev.map(c => c.id === id ? { ...c, quantity: c.quantity - 1 } : c);
-      return prev.filter(c => c.id !== id);
+      const item = prev.find(c => c.lineId === lineId);
+      if (item && item.quantity > 1) {
+        return prev.map(c => c.lineId === lineId ? { ...c, quantity: c.quantity - 1 } : c);
+      }
+      return prev.filter(c => c.lineId !== lineId);
     });
+  };
+
+  const updateLine = (lineId, updates) => {
+    setCart(prev => prev.map(c => c.lineId === lineId ? { ...c, ...updates } : c));
   };
 
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -58,7 +121,7 @@ export default function POSPage() {
   const createBill = async () => {
     if (cart.length === 0) return;
     const res = await window.api.pos.createBill({
-      items: cart.map(i => ({ menuItemId: i.id, quantity: i.quantity })),
+      items: cart.map(i => ({ menuItemId: i.id, quantity: i.quantity, priceOverride: i.price })),
       discount,
       paymentMethod,
     });
@@ -129,19 +192,44 @@ export default function POSPage() {
               <p className="text-slate-600 text-xs text-center py-8">No items in order</p>
             ) : (
               cart.map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-medium truncate">{item.name}</p>
-                    <p className="text-slate-500 text-xs">PKR {item.price.toLocaleString()} ea</p>
+                <div
+                  key={item.lineId}
+                  onClick={() => setActiveLineId(item.lineId)}
+                  className={`bg-slate-700/50 rounded-lg px-3 py-2 border ${
+                    activeLineId === item.lineId ? 'border-primary-500' : 'border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-xs font-medium truncate">{item.name}</p>
+                      <p className="text-slate-500 text-xs">Unit price</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => removeFromCart(item.lineId)} className="w-5 h-5 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs flex items-center justify-center">−</button>
+                      <span className="text-white text-xs w-5 text-center">{item.quantity}</span>
+                      <button onClick={() => addToCart({ ...item, price: item.price })} className="w-5 h-5 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs flex items-center justify-center">+</button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => removeFromCart(item.id)} className="w-5 h-5 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs flex items-center justify-center">−</button>
-                    <span className="text-white text-xs w-5 text-center">{item.quantity}</span>
-                    <button onClick={() => addToCart(item)} className="w-5 h-5 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs flex items-center justify-center">+</button>
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.price}
+                      onChange={e => updateLine(item.lineId, { price: Math.max(0, Number(e.target.value)) })}
+                      className="input-field py-1.5 text-xs w-24"
+                    />
+                    <button onClick={() => updateLine(item.lineId, { price: item.basePrice })} className="text-xs text-slate-300 hover:text-white">
+                      Full
+                    </button>
+                    {item.halfPrice !== null && item.halfPrice !== undefined && (
+                      <button onClick={() => updateLine(item.lineId, { price: item.halfPrice })} className="text-xs text-slate-300 hover:text-white">
+                        Half
+                      </button>
+                    )}
+                    <div className="ml-auto text-white text-xs font-medium">
+                      PKR {(item.price * item.quantity).toLocaleString()}
+                    </div>
                   </div>
-                  <p className="text-white text-xs font-medium ml-3 w-16 text-right">
-                    PKR {(item.price * item.quantity).toLocaleString()}
-                  </p>
                 </div>
               ))
             )}

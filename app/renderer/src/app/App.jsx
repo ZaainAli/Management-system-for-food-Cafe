@@ -5,6 +5,7 @@ import LoginPage from './auth/LoginPage';
 import SidebarLayout from '../layouts/SidebarLayout';
 import Dashboard from './reports/Dashboard';
 import POSPage from './pos/POSPage';
+import MenuPage from './menu/MenuPage';
 import StockPage from './stock/StockPage';
 import ExpensesPage from './expenses/ExpensesPage';
 import StaffPage from './staff/StaffPage';
@@ -39,6 +40,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/pos" element={<POSPage />} />
+        <Route path="/menu" element={
+          <ProtectedRoute permission="canManageMenu"><MenuPage /></ProtectedRoute>
+        } />
         <Route path="/stock" element={
           <ProtectedRoute permission="canAccessStock"><StockPage /></ProtectedRoute>
         } />

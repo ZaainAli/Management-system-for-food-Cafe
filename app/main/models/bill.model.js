@@ -20,18 +20,18 @@ function getMenuItemById(id) {
 function insertMenuItem(item) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO menu_items (id, name, description, price, categoryId, isAvailable, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(item.id, item.name, item.description, item.price, item.categoryId, item.isAvailable ? 1 : 0, item.createdAt);
+    INSERT INTO menu_items (id, name, description, price, halfPrice, categoryId, isAvailable, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(item.id, item.name, item.description, item.price, item.halfPrice, item.categoryId, item.isAvailable ? 1 : 0, item.createdAt);
   return item;
 }
 
 function updateMenuItem(item) {
   const db = getDb();
   db.prepare(`
-    UPDATE menu_items SET name = ?, description = ?, price = ?, categoryId = ?, isAvailable = ?, updatedAt = ?
+    UPDATE menu_items SET name = ?, description = ?, price = ?, halfPrice = ?, categoryId = ?, isAvailable = ?, updatedAt = ?
     WHERE id = ?
-  `).run(item.name, item.description, item.price, item.categoryId, item.isAvailable ? 1 : 0, item.updatedAt, item.id);
+  `).run(item.name, item.description, item.price, item.halfPrice, item.categoryId, item.isAvailable ? 1 : 0, item.updatedAt, item.id);
   return item;
 }
 

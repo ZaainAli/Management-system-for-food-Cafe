@@ -14,11 +14,15 @@ async function addMenuItem(item) {
   if (item.price < 0) {
     throw new Error('Price cannot be negative');
   }
+  if (item.halfPrice !== undefined && item.halfPrice !== null && item.halfPrice < 0) {
+    throw new Error('Half price cannot be negative');
+  }
   const newItem = {
     id: uuidv4(),
     name: item.name,
     description: item.description || '',
     price: parseFloat(item.price),
+    halfPrice: item.halfPrice !== undefined && item.halfPrice !== null ? parseFloat(item.halfPrice) : null,
     categoryId: item.categoryId || null,
     isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
     createdAt: new Date().toISOString(),
@@ -29,6 +33,9 @@ async function addMenuItem(item) {
 async function updateMenuItem(id, updates) {
   const item = await billModel.getMenuItemById(id);
   if (!item) throw new Error('Menu item not found');
+  if (updates.halfPrice !== undefined && updates.halfPrice !== null && updates.halfPrice < 0) {
+    throw new Error('Half price cannot be negative');
+  }
   const updated = { ...item, ...updates, updatedAt: new Date().toISOString() };
   return billModel.updateMenuItem(updated);
 }
@@ -71,14 +78,19 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     if (!menuItem.isAvailable) throw new Error(`Item unavailable: ${menuItem.name}`);
 
     const qty = parseInt(item.quantity) || 1;
-    const lineTotal = menuItem.price * qty;
+    const unitPrice = item.priceOverride !== undefined && item.priceOverride !== null
+      ? Number(item.priceOverride)
+      : menuItem.price;
+    if (!Number.isFinite(unitPrice)) throw new Error('Invalid item price');
+    if (unitPrice < 0) throw new Error('Item price cannot be negative');
+    const lineTotal = unitPrice * qty;
     subtotal += lineTotal;
 
     lineItems.push({
       id: uuidv4(),
       menuItemId: menuItem.id,
       name: menuItem.name,
-      price: menuItem.price,
+      price: unitPrice,
       quantity: qty,
       lineTotal,
     });

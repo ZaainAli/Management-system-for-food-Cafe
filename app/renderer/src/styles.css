@@ -29,6 +29,32 @@
 }
 
 @layer components {
+  /* Title Bar */
+  .title-bar {
+    @apply flex items-center justify-between bg-slate-800 border-b border-slate-700;
+    height: 32px;
+    -webkit-app-region: drag;
+  }
+  .title-bar-drag-region {
+    @apply flex-1 flex items-center px-3;
+  }
+  .title-bar-title {
+    @apply text-xs text-slate-400 font-medium;
+  }
+  .title-bar-controls {
+    @apply flex items-center;
+    -webkit-app-region: no-drag;
+  }
+  .title-bar-button {
+    @apply w-11 h-8 flex items-center justify-center text-slate-400 hover:text-white transition-colors;
+  }
+  .title-bar-button.close:hover {
+    @apply bg-red-600 text-white;
+  }
+  .title-bar-button.minimize:hover,
+  .title-bar-button.maximize:hover {
+    @apply bg-slate-700;
+  }
   .btn-primary {
     @apply bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }

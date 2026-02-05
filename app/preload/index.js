@@ -77,6 +77,16 @@ const userAPI = {
   resetPassword: (payload) => ipcRenderer.invoke('user:resetPassword', payload),
 };
 
+// ─── Window API ─────────────────────────────────────────────
+const windowAPI = {
+  minimize: () => ipcRenderer.invoke('window:minimize'),
+  maximize: () => ipcRenderer.invoke('window:maximize'),
+  close: () => ipcRenderer.invoke('window:close'),
+  isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onMaximize: (callback) => ipcRenderer.on('window:maximized', callback),
+  onUnmaximize: (callback) => ipcRenderer.on('window:unmaximized', callback),
+};
+
 // ─── Expose to Renderer ─────────────────────────────────────
 contextBridge.exposeInMainWorld('api', {
   auth: authAPI,
@@ -86,4 +96,5 @@ contextBridge.exposeInMainWorld('api', {
   staff: staffAPI,
   report: reportAPI,
   user: userAPI,
+  window: windowAPI,
 });

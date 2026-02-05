@@ -1,6 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 const AuthContext = createContext(null);
+
+function getEffectiveRoles(user) {
+  if (!user) return [];
+  const { role, canManage } = user;
+  switch (role) {
+    case 'admin':   return ['admin', 'manager', 'cashier', 'staff'];
+    case 'manager': return ['manager', 'cashier'];
+    case 'cashier': return canManage ? ['cashier', 'manager'] : ['cashier'];
+    default:        return [role];
+  }
+}
+
+function hasRole(user, ...roles) {
+  const effective = getEffectiveRoles(user);
+  return roles.some(r => effective.includes(r));
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -39,8 +55,23 @@ export function AuthProvider({ children }) {
     return window.api.auth.changePassword(payload);
   }, []);
 
+  const permissions = useMemo(() => {
+    if (!user) return {};
+    return {
+      canAccessPOS: true,
+      canManageMenu: hasRole(user, 'admin', 'manager'),
+      canAccessStaff: hasRole(user, 'admin', 'manager'),
+      canAccessStock: hasRole(user, 'admin', 'manager'),
+      canAccessExpenses: hasRole(user, 'admin', 'manager'),
+      canAccessReports: hasRole(user, 'admin', 'manager'),
+      canAccessDashboard: true,
+      canManageUsers: hasRole(user, 'admin'),
+      isAdmin: hasRole(user, 'admin'),
+    };
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, changePassword }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, changePassword, permissions }}>
       {children}
     </AuthContext.Provider>
   );

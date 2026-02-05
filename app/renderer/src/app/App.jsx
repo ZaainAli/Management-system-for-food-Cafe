@@ -9,6 +9,15 @@ import StockPage from './stock/StockPage';
 import ExpensesPage from './expenses/ExpensesPage';
 import StaffPage from './staff/StaffPage';
 import ReportsPage from './reports/ReportsPage';
+import UsersPage from './users/UsersPage';
+
+function ProtectedRoute({ permission, children }) {
+  const { permissions } = useAuth();
+  if (permission && !permissions[permission]) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -30,10 +39,21 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/pos" element={<POSPage />} />
-        <Route path="/stock" element={<StockPage />} />
-        <Route path="/expenses" element={<ExpensesPage />} />
-        <Route path="/staff" element={<StaffPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/stock" element={
+          <ProtectedRoute permission="canAccessStock"><StockPage /></ProtectedRoute>
+        } />
+        <Route path="/expenses" element={
+          <ProtectedRoute permission="canAccessExpenses"><ExpensesPage /></ProtectedRoute>
+        } />
+        <Route path="/staff" element={
+          <ProtectedRoute permission="canAccessStaff"><StaffPage /></ProtectedRoute>
+        } />
+        <Route path="/reports" element={
+          <ProtectedRoute permission="canAccessReports"><ReportsPage /></ProtectedRoute>
+        } />
+        <Route path="/users" element={
+          <ProtectedRoute permission="canManageUsers"><UsersPage /></ProtectedRoute>
+        } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </SidebarLayout>

@@ -146,6 +146,14 @@ function runMigrations(db) {
     );
   `);
 
+  // Migration: Add canManage column to users table if it doesn't exist
+  const columns = db.prepare("PRAGMA table_info(users)").all();
+  const hasCanManage = columns.some(col => col.name === 'canManage');
+  if (!hasCanManage) {
+    db.exec('ALTER TABLE users ADD COLUMN canManage INTEGER NOT NULL DEFAULT 0');
+    logger.info('Migration: Added canManage column to users table');
+  }
+
   // Seed default admin user if none exists
   const adminExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get('admin');
   if (adminExists.count === 0) {
@@ -155,6 +163,17 @@ function runMigrations(db) {
       VALUES ('admin-001', 'admin', ?, 'admin', ?)
     `).run(hashedPassword, new Date().toISOString());
     logger.info('Default admin user seeded (username: admin, password: admin123)');
+  }
+
+  // Seed default cashier user if none exists
+  const cashierExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get('cashier');
+  if (cashierExists.count === 0) {
+    const hashedCashierPw = hashPassword('cashier123');
+    db.prepare(`
+      INSERT INTO users (id, username, password, role, canManage, createdAt)
+      VALUES ('cashier-001', 'cashier', ?, 'cashier', 0, ?)
+    `).run(hashedCashierPw, new Date().toISOString());
+    logger.info('Default cashier user seeded (username: cashier, password: cashier123)');
   }
 
   // Seed default tables (1–10)

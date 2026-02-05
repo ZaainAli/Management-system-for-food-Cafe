@@ -76,7 +76,7 @@ export default function LoginPage() {
             </button>
           </form>
           <p className="text-slate-600 text-xs text-center mt-4">
-            Default: admin / admin123
+            Default: admin / admin123 | cashier / cashier123
           </p>
         </div>
       </div>

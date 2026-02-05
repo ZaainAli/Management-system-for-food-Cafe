@@ -11,6 +11,7 @@ async function login({ username, password }) {
       id: user.id,
       username: user.username,
       role: user.role,
+      canManage: user.canManage || 0,
       loginAt: new Date().toISOString(),
     };
     logger.info(`User logged in: ${user.username}`);

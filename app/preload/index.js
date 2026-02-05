@@ -68,6 +68,15 @@ const reportAPI = {
   getProfitLoss: (filters) => ipcRenderer.invoke('report:getProfitLoss', filters),
 };
 
+// ─── User Management API ───────────────────────────────────
+const userAPI = {
+  getAll: () => ipcRenderer.invoke('user:getAll'),
+  create: (userData) => ipcRenderer.invoke('user:create', userData),
+  update: (payload) => ipcRenderer.invoke('user:update', payload),
+  delete: (payload) => ipcRenderer.invoke('user:delete', payload),
+  resetPassword: (payload) => ipcRenderer.invoke('user:resetPassword', payload),
+};
+
 // ─── Expose to Renderer ─────────────────────────────────────
 contextBridge.exposeInMainWorld('api', {
   auth: authAPI,
@@ -76,4 +85,5 @@ contextBridge.exposeInMainWorld('api', {
   expense: expenseAPI,
   staff: staffAPI,
   report: reportAPI,
+  user: userAPI,
 });

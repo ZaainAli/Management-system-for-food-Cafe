@@ -17,12 +17,11 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false,
     },
     backgroundColor: '#0f172a',
     show: false,
-    titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 12, y: 12 },
+    frame: false,
   });
 
   // Disable the default menu
@@ -48,6 +47,14 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     logger.info('Main window ready and shown');
+  });
+
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window:maximized');
+  });
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window:unmaximized');
   });
 
   mainWindow.on('closed', () => {

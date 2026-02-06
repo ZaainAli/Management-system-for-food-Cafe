@@ -1,4 +1,5 @@
 const billingService = require('../services/billing.service');
+const { printBillReceipt } = require('../services/print.service');
 const logger = require('../utils/logger');
 
 async function getMenuItems() {
@@ -66,7 +67,19 @@ async function createBill(billData) {
   try {
     const bill = await billingService.createBill(billData);
     logger.info(`Bill created: #${bill.id}`);
-    return { success: true, data: bill };
+    let printError = null;
+    let printSkipped = false;
+    try {
+      const printResult = await printBillReceipt(bill);
+      if (printResult?.skipped) {
+        printSkipped = true;
+        printError = printResult.reason || 'Receipt print skipped';
+      }
+    } catch (err) {
+      printError = err.message || 'Receipt print failed';
+      logger.error('Receipt print failed', err);
+    }
+    return { success: true, data: bill, printError, printSkipped };
   } catch (err) {
     logger.error('createBill failed', err);
     return { success: false, error: err.message };

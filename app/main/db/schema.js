@@ -109,29 +109,6 @@ function runMigrations(db) {
       updatedAt TEXT
     );
 
-    -- Bill owners (Billing)
-    CREATE TABLE IF NOT EXISTS bill_owners (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      phone TEXT DEFAULT '',
-      description TEXT DEFAULT '',
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT
-    );
-
-    -- Bill payments (Billing)
-    CREATE TABLE IF NOT EXISTS bill_payments (
-      id TEXT PRIMARY KEY,
-      ownerId TEXT NOT NULL,
-      ownerName TEXT NOT NULL,
-      amount REAL NOT NULL,
-      payDate TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'today_sale',
-      notes TEXT DEFAULT '',
-      createdAt TEXT NOT NULL,
-      FOREIGN KEY (ownerId) REFERENCES bill_owners(id)
-    );
-
     -- Employees
     CREATE TABLE IF NOT EXISTS employees (
       id TEXT PRIMARY KEY,
@@ -169,6 +146,12 @@ function runMigrations(db) {
       FOREIGN KEY (employeeId) REFERENCES employees(id),
       UNIQUE(employeeId, date)
     );
+
+    -- App metadata (schema/data migrations)
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // Lightweight column migrations
@@ -177,22 +160,88 @@ function runMigrations(db) {
     db.prepare('ALTER TABLE menu_items ADD COLUMN halfPrice REAL').run();
   }
 
+  // Seed menu categories (must come before menu items)
+  const catCount = db.prepare('SELECT COUNT(*) as count FROM menu_categories').get();
+  if (catCount.count === 0) {
+    const insertCat = db.prepare('INSERT INTO menu_categories (id, name, createdAt) VALUES (?, ?, ?)');
+    const categories = [
+      { id: 'cat-01', name: 'Main Course' },
+      { id: 'cat-02', name: 'Drinks' }
+    ];
+    categories.forEach(({ id, name }) => {
+      insertCat.run(id, name, new Date().toISOString());
+    });
+    logger.info('Seeded menu categories');
+  }
+
+  // Migration: Update default menu items if seed version changes
+  const getMeta = db.prepare('SELECT value FROM app_meta WHERE key = ?');
+  const setMeta = db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+  const menuSeedVersion = Number((getMeta.get('menu_seed_version') || {}).value || 0);
+  const targetMenuSeedVersion = 1;
+  if (menuSeedVersion < targetMenuSeedVersion) {
+    const now = new Date().toISOString();
+    const upsertItem = db.prepare(`
+      INSERT INTO menu_items (id, name, description, price, halfPrice, categoryId, isAvailable, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        description = excluded.description,
+        price = excluded.price,
+        halfPrice = excluded.halfPrice,
+        categoryId = excluded.categoryId,
+        isAvailable = excluded.isAvailable,
+        updatedAt = excluded.updatedAt
+    `);
+
+    const seedItems = [
+      { id: 'item-001', name: 'Dall Mash', desc: 'Herb-marinated chicken with roasted vegetables', price: 180.00, halfPrice: 120.00, catId: 'cat-01' },
+      { id: 'item-002', name: 'Dall Chana', desc: 'Classic burger with lettuce, tomato, and fries', price: 180.00, halfPrice: 120.00, catId: 'cat-01' },
+      { id: 'item-003', name: 'Beef Kabab', desc: 'Fresh mozzarella, tomato sauce, and basil', price: 130.00, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-004', name: 'S-Beef Kabab', desc: 'Creamy pasta with bacon and parmesan', price: 180.00, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-005', name: 'Sabzi', desc: 'Atlantic salmon with lemon butter sauce', price: 180.00, halfPrice: 120.00, catId: 'cat-01' },
+      { id: 'item-006', name: 'Qeema', desc: 'Mixed vegetables with tofu in teriyaki sauce', price: 400.00, halfPrice: 250.00, catId: 'cat-01' },
+      { id: 'item-007', name: 'Rita', desc: 'Tender pork ribs with BBQ sauce and coleslaw', price: 10.00, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-008', name: 'Alu-Anda', desc: 'Battered cod with french fries and tartar sauce', price: 150.00, halfPrice: 100.00, catId: 'cat-01' },
+      { id: 'item-009', name: 'Kalaji', desc: 'Grilled vegetable stir-fry with garlic sauce', price: 250.00, halfPrice: 150.00, catId: 'cat-01' },
+      { id: 'item-010', name: 'Chicken Kharai', desc: 'Marinated chicken pieces grilled to perfection', price: 300.00, halfPrice: 200.00, catId: 'cat-01' },
+      { id: 'item-011', name: 'Roti', desc: 'Tender mutton pieces grilled to perfection', price: 150.00, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-012', name: 'Regular', desc: 'Chilled soft drink', price: 70.00, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-013', name: 'Drink-1 Liter', desc: '', price: 170.00, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-014', name: 'Drink-1.5 Liter', desc: '', price: 200.00, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-015', name: 'Drink-2.5 Liter', desc: '', price: 240.00, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-016', name: 'Chay', desc: '', price: 70.00, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-017', name: 'S-Chay', desc: '', price: 90.00, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-018', name: 'Mineral Water-1.5 Liter', desc: '', price: 120.00, halfPrice: null, catId: 'cat-02' },
+    ];
+
+    const seedTx = db.transaction(() => {
+      seedItems.forEach(item => {
+        upsertItem.run(
+          item.id,
+          item.name,
+          item.desc,
+          item.price,
+          item.halfPrice,
+          item.catId,
+          1,
+          now,
+          now
+        );
+      });
+      setMeta.run('menu_seed_version', String(targetMenuSeedVersion));
+    });
+
+    seedTx();
+    logger.info('Migration: Updated default menu items (seed v1)');
+  }
+
   // Migration: Add canManage column to users table if it doesn't exist
   const columns = db.prepare("PRAGMA table_info(users)").all();
   const hasCanManage = columns.some(col => col.name === 'canManage');
   if (!hasCanManage) {
     db.exec('ALTER TABLE users ADD COLUMN canManage INTEGER NOT NULL DEFAULT 0');
     logger.info('Migration: Added canManage column to users table');
-  }
-
-  // Migration: Backfill missing employee IDs (legacy rows with NULL/empty id)
-  const employeesMissingId = db.prepare("SELECT rowid FROM employees WHERE id IS NULL OR id = ''").all();
-  if (employeesMissingId.length > 0) {
-    const updateEmpId = db.prepare('UPDATE employees SET id = ? WHERE rowid = ?');
-    employeesMissingId.forEach(row => {
-      updateEmpId.run(uuidv4(), row.rowid);
-    });
-    logger.info(`Migration: Backfilled ${employeesMissingId.length} employee IDs`);
   }
 
   // Seed default admin user if none exists
@@ -227,17 +276,6 @@ function runMigrations(db) {
     logger.info('Seeded 10 default tables');
   }
 
-  // Seed sample menu categories
-  const catCount = db.prepare('SELECT COUNT(*) as count FROM menu_categories').get();
-  if (catCount.count === 0) {
-    const insertCat = db.prepare('INSERT INTO menu_categories (id, name, createdAt) VALUES (?, ?, ?)');
-    const categories = ['Appetizers', 'Main Course', 'Desserts', 'Drinks', 'Sides'];
-    categories.forEach((name, i) => {
-      insertCat.run(`cat-${String(i + 1).padStart(2, '0')}`, name, new Date().toISOString());
-    });
-    logger.info('Seeded menu categories');
-  }
-
   // Seed default menu items
   const itemCount = db.prepare('SELECT COUNT(*) as count FROM menu_items').get();
   if (itemCount.count === 0) {
@@ -248,65 +286,39 @@ function runMigrations(db) {
 
     const now = new Date().toISOString();
 
-    // Appetizers (cat-01)
-    const appetizers = [
-      { name: 'Spring Rolls', desc: 'Crispy vegetable spring rolls with sweet chili sauce', price: 6.99 },
-      { name: 'Chicken Wings', desc: 'Spicy buffalo wings with ranch dip', price: 9.99 },
-      { name: 'Garlic Bread', desc: 'Toasted bread with garlic butter and herbs', price: 4.99 },
-      { name: 'Mozzarella Sticks', desc: 'Breaded mozzarella with marinara sauce', price: 7.99 },
-      { name: 'Bruschetta', desc: 'Grilled bread with tomatoes, basil, and olive oil', price: 8.99 }
-    ];
-
     // Main Course (cat-02)
     const mainCourse = [
-      { name: 'Grilled Chicken Breast', desc: 'Herb-marinated chicken with roasted vegetables', price: 16.99 },
-      { name: 'Beef Burger', desc: 'Classic burger with lettuce, tomato, and fries', price: 14.99 },
-      { name: 'Margherita Pizza', desc: 'Fresh mozzarella, tomato sauce, and basil', price: 12.99 },
-      { name: 'Spaghetti Carbonara', desc: 'Creamy pasta with bacon and parmesan', price: 13.99 },
-      { name: 'Grilled Salmon', desc: 'Atlantic salmon with lemon butter sauce', price: 19.99 },
-      { name: 'Vegetable Stir Fry', desc: 'Mixed vegetables with tofu in teriyaki sauce', price: 11.99 },
-      { name: 'BBQ Ribs', desc: 'Tender pork ribs with BBQ sauce and coleslaw', price: 18.99 },
-      { name: 'Fish and Chips', desc: 'Battered cod with french fries and tartar sauce', price: 15.99 }
+      { name: 'Dall Mash', desc: 'Herb-marinated chicken with roasted vegetables', price: 180.00, halfPrice: 120.00 },
+      { name: 'Dall Chana', desc: 'Classic burger with lettuce, tomato, and fries', price: 180.00, halfPrice: 120.00 },
+      { name: 'Beef Kabab', desc: 'Fresh mozzarella, tomato sauce, and basil', price: 130.00 },
+      { name: 'S-Beef Kabab', desc: 'Creamy pasta with bacon and parmesan', price: 180 },
+      { name: 'Sabzi', desc: 'Atlantic salmon with lemon butter sauce', price: 180.00, halfPrice: 120.00 },
+      { name: 'Qeema', desc: 'Mixed vegetables with tofu in teriyaki sauce', price: 400.00, halfPrice: 250.00 },
+      { name: 'Rita', desc: 'Tender pork ribs with BBQ sauce and coleslaw', price: 10.00 },
+      { name: 'Alu-Anda', desc: 'Battered cod with french fries and tartar sauce', price: 150.00, halfPrice: 100.00 },
+      { name: 'Kalaji', desc: 'Grilled vegetable stir-fry with garlic sauce', price: 250.00, halfPrice: 150.00 },
+      { name: 'Chicken Kharai', desc: 'Marinated chicken pieces grilled to perfection', price: 300.00, halfPrice: 200.00 },
+      { name: 'Roti', desc: 'Tender mutton pieces grilled to perfection', price: 150.00}
     ];
 
-    // Desserts (cat-03)
-    const desserts = [
-      { name: 'Chocolate Lava Cake', desc: 'Warm chocolate cake with vanilla ice cream', price: 7.99 },
-      { name: 'Cheesecake', desc: 'New York style cheesecake with berry compote', price: 6.99 },
-      { name: 'Tiramisu', desc: 'Classic Italian coffee-flavored dessert', price: 8.99 },
-      { name: 'Ice Cream Sundae', desc: 'Three scoops with toppings and whipped cream', price: 5.99 },
-      { name: 'Apple Pie', desc: 'Homemade apple pie with cinnamon', price: 6.49 }
-    ];
 
     // Drinks (cat-04)
     const drinks = [
-      { name: 'Coca Cola', desc: 'Chilled soft drink', price: 2.99 },
-      { name: 'Sprite', desc: 'Lemon-lime soda', price: 2.99 },
-      { name: 'Orange Juice', desc: 'Freshly squeezed orange juice', price: 4.99 },
-      { name: 'Coffee', desc: 'Freshly brewed coffee', price: 3.49 },
-      { name: 'Cappuccino', desc: 'Espresso with steamed milk foam', price: 4.99 },
-      { name: 'Iced Tea', desc: 'Refreshing iced tea with lemon', price: 3.49 },
-      { name: 'Mineral Water', desc: 'Still or sparkling', price: 2.49 },
-      { name: 'Milkshake', desc: 'Chocolate, vanilla, or strawberry', price: 5.99 }
+      { name: 'Regular', desc: 'Chilled soft drink', price: 70 },
+      { name: 'Drink-1 Liter', price: 170 },
+      { name: 'Drink-1.5 Liter', price: 200 },
+      { name: 'Drink-2.5 Liter',  price: 240 },
+      { name: 'Chay ', price: 70},
+      { name: 'S-Chay', price: 90 },
+      { name: 'Mineral Water-1.5 Liter', price:120 }
     ];
 
-    // Sides (cat-05)
-    const sides = [
-      { name: 'French Fries', desc: 'Crispy golden fries', price: 3.99 },
-      { name: 'Onion Rings', desc: 'Breaded and fried onion rings', price: 4.99 },
-      { name: 'Caesar Salad', desc: 'Romaine lettuce with Caesar dressing', price: 6.99 },
-      { name: 'Coleslaw', desc: 'Creamy cabbage salad', price: 3.49 },
-      { name: 'Mashed Potatoes', desc: 'Creamy mashed potatoes with gravy', price: 4.49 }
-    ];
 
     // Insert all items
     let itemId = 1;
     [
-      { catId: 'cat-01', items: appetizers },
-      { catId: 'cat-02', items: mainCourse },
-      { catId: 'cat-03', items: desserts },
-      { catId: 'cat-04', items: drinks },
-      { catId: 'cat-05', items: sides }
+      { catId: 'cat-01', items: mainCourse },
+      { catId: 'cat-02', items: drinks }
     ].forEach(({ catId, items }) => {
       items.forEach((item) => {
         insertItem.run(

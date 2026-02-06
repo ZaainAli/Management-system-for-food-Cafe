@@ -1,4 +1,5 @@
 const { hashPassword } = require('../utils/crypto');
+const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
 
 function runMigrations(db) {
@@ -108,6 +109,29 @@ function runMigrations(db) {
       updatedAt TEXT
     );
 
+    -- Bill owners (Billing)
+    CREATE TABLE IF NOT EXISTS bill_owners (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      phone TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT
+    );
+
+    -- Bill payments (Billing)
+    CREATE TABLE IF NOT EXISTS bill_payments (
+      id TEXT PRIMARY KEY,
+      ownerId TEXT NOT NULL,
+      ownerName TEXT NOT NULL,
+      amount REAL NOT NULL,
+      payDate TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'today_sale',
+      notes TEXT DEFAULT '',
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (ownerId) REFERENCES bill_owners(id)
+    );
+
     -- Employees
     CREATE TABLE IF NOT EXISTS employees (
       id TEXT PRIMARY KEY,
@@ -159,6 +183,16 @@ function runMigrations(db) {
   if (!hasCanManage) {
     db.exec('ALTER TABLE users ADD COLUMN canManage INTEGER NOT NULL DEFAULT 0');
     logger.info('Migration: Added canManage column to users table');
+  }
+
+  // Migration: Backfill missing employee IDs (legacy rows with NULL/empty id)
+  const employeesMissingId = db.prepare("SELECT rowid FROM employees WHERE id IS NULL OR id = ''").all();
+  if (employeesMissingId.length > 0) {
+    const updateEmpId = db.prepare('UPDATE employees SET id = ? WHERE rowid = ?');
+    employeesMissingId.forEach(row => {
+      updateEmpId.run(uuidv4(), row.rowid);
+    });
+    logger.info(`Migration: Backfilled ${employeesMissingId.length} employee IDs`);
   }
 
   // Seed default admin user if none exists

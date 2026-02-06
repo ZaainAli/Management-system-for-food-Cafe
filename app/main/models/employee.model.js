@@ -1,4 +1,5 @@
 const { getDb } = require('../db/index');
+const { v4: uuidv4 } = require('uuid');
 
 // ─── Employees ──────────────────────────────────────────────
 
@@ -32,17 +33,18 @@ function findById(id) {
 
 function create(employee) {
   const db = getDb();
+  const nextId = employee.id || uuidv4();
   db.prepare(`
     INSERT INTO employees (id, name, position, phone, email, monthlySalary, hireDate, isActive, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    employee.id, employee.name, employee.position || 'Staff',
+    nextId, employee.name, employee.position || 'Staff',
     employee.phone || '', employee.email || '',
     employee.monthlySalary || 0, employee.hireDate || new Date().toISOString().split('T')[0],
     employee.isActive !== undefined ? (employee.isActive ? 1 : 0) : 1,
     employee.createdAt || new Date().toISOString()
   );
-  return employee;
+  return { ...employee, id: nextId };
 }
 
 function update(employee) {

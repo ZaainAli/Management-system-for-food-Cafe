@@ -66,6 +66,7 @@ const reportAPI = {
   getExpenseReport: (filters) => ipcRenderer.invoke('report:getExpenseReport', filters),
   getStaffReport: (filters) => ipcRenderer.invoke('report:getStaffReport', filters),
   getProfitLoss: (filters) => ipcRenderer.invoke('report:getProfitLoss', filters),
+  exportReport: (filters) => ipcRenderer.invoke('report:exportReport', filters),
 };
 
 // ─── User Management API ───────────────────────────────────

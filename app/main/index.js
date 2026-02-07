@@ -11,8 +11,6 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 1024,
-    minHeight: 700,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -20,7 +18,6 @@ function createWindow() {
       sandbox: false,
     },
     backgroundColor: '#0f172a',
-    show: false,
     frame: false,
   });
 

@@ -134,6 +134,14 @@ const stmtItem = db.prepare(`
   INSERT INTO bill_items (id, billId, menuItemId, name, price, quantity, lineTotal)
   VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
+const stmtDailySales = db.prepare(`
+  INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+  VALUES (?, ?, 1, 0, ?)
+  ON CONFLICT(date) DO UPDATE SET
+    totalRevenue = totalRevenue + excluded.totalRevenue,
+    totalBills = totalBills + excluded.totalBills,
+    updatedAt = excluded.updatedAt
+`);
 
 function insertBill(bill) {
   stmtBill.run(
@@ -144,6 +152,9 @@ function insertBill(bill) {
   for (const li of bill.items) {
     stmtItem.run(li.id, bill.id, li.menuItemId, li.name, li.price, li.quantity, li.lineTotal);
   }
+  // Update daily_sales so the app dashboard/reports pick up these bills
+  const billDate = bill.createdAt.split('T')[0];
+  stmtDailySales.run(billDate, bill.total, new Date().toISOString());
 }
 
 // ─── Define three datasets with different item combos ──────

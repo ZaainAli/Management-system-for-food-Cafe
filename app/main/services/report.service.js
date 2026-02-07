@@ -31,7 +31,9 @@ function getDateRange(period = 'today') {
 }
 
 async function getDashboardStats(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('today');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'today');
 
   const fromDate = from.split('T')[0];
   const toDate = to.split('T')[0];
@@ -56,7 +58,9 @@ async function getDashboardStats(filters = {}) {
 }
 
 async function getSalesReport(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
   const fromDate = from.split('T')[0];
   const toDate = to.split('T')[0];
 
@@ -78,7 +82,9 @@ async function getSalesReport(filters = {}) {
 }
 
 async function getExpenseReport(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
   const expenses = await expenseModel.findAll({ from, to });
 
   // Group by category
@@ -106,7 +112,9 @@ async function getExpenseReport(filters = {}) {
 }
 
 async function getStaffReport(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
   const employees = await employeeModel.findAll({});
   const salaryRecords = await employeeModel.getAllSalaryRecords({ from, to });
 
@@ -129,7 +137,9 @@ async function getStaffReport(filters = {}) {
 }
 
 async function getProfitLoss(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
   const fromDate = from.split('T')[0];
   const toDate = to.split('T')[0];
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });

@@ -136,9 +136,41 @@ function getBillById(id) {
   return bill;
 }
 
+function getTopItems(filters = {}) {
+  const db = getDb();
+  let query = `
+    SELECT bi.name as name, SUM(bi.quantity) as quantity, SUM(bi.lineTotal) as revenue
+    FROM bill_items bi
+    JOIN bills b ON b.id = bi.billId
+  `;
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('b.createdAt >= ?');
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    conditions.push('b.createdAt <= ?');
+    params.push(filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' GROUP BY bi.name ORDER BY revenue DESC';
+  if (filters.limit) {
+    query += ' LIMIT ?';
+    params.push(filters.limit);
+  }
+
+  return db.prepare(query).all(...params);
+}
+
 module.exports = {
   getAllMenuItems, getMenuItemById, insertMenuItem, updateMenuItem, deleteMenuItem,
   getAllCategories, insertCategory,
   getAllTables, updateTableStatus,
-  insertBill, getBills, getBillById,
+  insertBill, getBills, getBillById, getTopItems,
 };

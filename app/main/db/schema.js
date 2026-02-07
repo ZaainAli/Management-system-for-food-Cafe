@@ -109,6 +109,15 @@ function runMigrations(db) {
       updatedAt TEXT
     );
 
+    -- Daily Sales Aggregates (for fast reports)
+    CREATE TABLE IF NOT EXISTS daily_sales (
+      date TEXT PRIMARY KEY, -- YYYY-MM-DD
+      totalRevenue REAL NOT NULL DEFAULT 0,
+      totalBills INTEGER NOT NULL DEFAULT 0,
+      totalExpenses REAL NOT NULL DEFAULT 0,
+      updatedAt TEXT
+    );
+
     -- Employees
     CREATE TABLE IF NOT EXISTS employees (
       id TEXT PRIMARY KEY,
@@ -158,6 +167,33 @@ function runMigrations(db) {
   const menuCols = db.prepare("PRAGMA table_info(menu_items)").all().map(c => c.name);
   if (!menuCols.includes('halfPrice')) {
     db.prepare('ALTER TABLE menu_items ADD COLUMN halfPrice REAL').run();
+  }
+
+  // Backfill daily_sales once (if empty)
+  const dailySalesCount = db.prepare('SELECT COUNT(*) as count FROM daily_sales').get();
+  if (dailySalesCount.count === 0) {
+    const now = new Date().toISOString();
+
+    // Aggregate bills by date
+    db.prepare(`
+      INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+      SELECT substr(createdAt, 1, 10) as date, SUM(total) as revenue, COUNT(*) as bills, 0 as expenses, ?
+      FROM bills
+      GROUP BY substr(createdAt, 1, 10)
+    `).run(now);
+
+    // Aggregate expenses by date (merge with existing rows)
+    db.prepare(`
+      INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+      SELECT date, 0 as revenue, 0 as bills, SUM(amount) as expenses, ?
+      FROM expenses
+      GROUP BY date
+      ON CONFLICT(date) DO UPDATE SET
+        totalExpenses = totalExpenses + excluded.totalExpenses,
+        updatedAt = excluded.updatedAt
+    `).run(now);
+
+    logger.info('Backfilled daily_sales from existing bills and expenses');
   }
 
   // Seed menu categories (must come before menu items)

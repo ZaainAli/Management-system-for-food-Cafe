@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 export default function POSPage() {
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [selectedTableId, setSelectedTableId] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
@@ -15,12 +17,14 @@ export default function POSPage() {
 
   useEffect(() => {
     (async () => {
-      const [itemsRes, catsRes] = await Promise.all([
+      const [itemsRes, catsRes, tablesRes] = await Promise.all([
         window.api.pos.getMenuItems(),
         window.api.pos.getMenuCategories(),
+        window.api.pos.getTables(),
       ]);
       if (itemsRes.success) setMenuItems(itemsRes.data);
       if (catsRes.success) setCategories(catsRes.data);
+      if (tablesRes.success) setTables(tablesRes.data);
       setLoading(false);
     })();
   }, []);
@@ -86,6 +90,7 @@ export default function POSPage() {
     if (cart.length === 0) return;
     const res = await window.api.pos.createBill({
       items: cart.map(i => ({ menuItemId: i.id, quantity: i.quantity, priceOverride: i.price })),
+      tableId: selectedTableId || null,
       discount,
       paymentMethod,
     });
@@ -93,6 +98,7 @@ export default function POSPage() {
       setBillSuccess(res.data);
       setCart([]);
       setDiscount(0);
+      setSelectedTableId('');
     }
   };
 
@@ -435,6 +441,24 @@ export default function POSPage() {
                 disabled={fsm !== 'IDLE'}
                 className="input-field py-1.5 text-xs"
               />
+            </div>
+
+            {/* Table */}
+            <div>
+              <label className="label text-xs">Table</label>
+              <select
+                value={selectedTableId}
+                onChange={e => setSelectedTableId(e.target.value)}
+                disabled={fsm !== 'IDLE'}
+                className="input-field py-1.5 text-xs bg-slate-700"
+              >
+                <option value="">No table</option>
+                {tables.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {`Table ${t.number}`}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Payment Method */}

@@ -1,4 +1,5 @@
 const billModel = require('../models/bill.model');
+const salesModel = require('../models/sales.model');
 const { v4: uuidv4 } = require('uuid');
 
 // ─── Menu Items ─────────────────────────────────────────────
@@ -115,7 +116,10 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     createdAt: new Date().toISOString(),
   };
 
-  return billModel.insertBill(bill);
+  const saved = billModel.insertBill(bill);
+  const billDate = saved.createdAt.split('T')[0];
+  salesModel.addBillToDailySales({ date: billDate, total: saved.total });
+  return saved;
 }
 
 async function getBills(filters = {}) {

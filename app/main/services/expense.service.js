@@ -1,4 +1,5 @@
 const expenseModel = require('../models/expense.model');
+const salesModel = require('../models/sales.model');
 const { v4: uuidv4 } = require('uuid');
 
 async function getAll(filters = {}) {
@@ -23,20 +24,33 @@ async function add(expense) {
     notes: expense.notes || '',
     createdAt: new Date().toISOString(),
   };
-  return expenseModel.insert(newExpense);
+  const saved = expenseModel.insert(newExpense);
+  salesModel.addExpenseToDailySales({ date: saved.date, amountDelta: saved.amount });
+  return saved;
 }
 
 async function update({ id, ...updates }) {
   const expense = await expenseModel.findById(id);
   if (!expense) throw new Error('Expense not found');
   if (updates.amount && updates.amount <= 0) throw new Error('Amount must be a positive number');
-  return expenseModel.update({ ...expense, ...updates, updatedAt: new Date().toISOString() });
+  const updated = { ...expense, ...updates, updatedAt: new Date().toISOString() };
+  const saved = expenseModel.update(updated);
+
+  // Adjust daily_sales for date/amount changes
+  if (expense.date !== saved.date || expense.amount !== saved.amount) {
+    salesModel.addExpenseToDailySales({ date: expense.date, amountDelta: -expense.amount });
+    salesModel.addExpenseToDailySales({ date: saved.date, amountDelta: saved.amount });
+  }
+
+  return saved;
 }
 
 async function remove(id) {
   const expense = await expenseModel.findById(id);
   if (!expense) throw new Error('Expense not found');
-  return expenseModel.remove(id);
+  const removed = expenseModel.remove(id);
+  salesModel.addExpenseToDailySales({ date: expense.date, amountDelta: -expense.amount });
+  return removed;
 }
 
 async function getCategories() {

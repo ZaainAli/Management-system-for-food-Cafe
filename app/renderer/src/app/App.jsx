@@ -10,6 +10,7 @@ import StockPage from './stock/StockPage';
 import ExpensesPage from './expenses/ExpensesPage';
 import StaffPage from './staff/StaffPage';
 import ReportsPage from './reports/ReportsPage';
+import ExportReportsPage from './reports/ExportReportsPage';
 import UsersPage from './users/UsersPage';
 
 function ProtectedRoute({ permission, children }) {
@@ -54,6 +55,9 @@ export default function App() {
         } />
         <Route path="/reports" element={
           <ProtectedRoute permission="canAccessReports"><ReportsPage /></ProtectedRoute>
+        } />
+        <Route path="/reports/export" element={
+          <ProtectedRoute permission="canAccessReports"><ExportReportsPage /></ProtectedRoute>
         } />
         <Route path="/users" element={
           <ProtectedRoute permission="canManageUsers"><UsersPage /></ProtectedRoute>

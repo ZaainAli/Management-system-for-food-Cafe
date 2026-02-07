@@ -3,24 +3,46 @@ import React, { useState, useEffect } from 'react';
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('sales');
   const [period, setPeriod] = useState('month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    // Skip fetching if custom is selected but dates are incomplete
+    if (period === 'custom' && (!customFrom || !customTo)) {
+      setLoading(false);
+      setData(null);
+      return;
+    }
+
     (async () => {
       setLoading(true);
-      let res;
-      switch (activeTab) {
-        case 'sales':   res = await window.api.report.getSalesReport({ period }); break;
-        case 'expense': res = await window.api.report.getExpenseReport({ period }); break;
-        case 'staff':   res = await window.api.report.getStaffReport({ period }); break;
-        case 'pl':      res = await window.api.report.getProfitLoss({ period }); break;
-        default: break;
+      setError('');
+      setData(null);
+      try {
+        const filters = period === 'custom'
+          ? { from: customFrom, to: customTo + 'T23:59:59.999Z' }
+          : { period };
+        let res;
+        switch (activeTab) {
+          case 'sales':   res = await window.api.report.getSalesReport(filters); break;
+          case 'expense': res = await window.api.report.getExpenseReport(filters); break;
+          case 'staff':   res = await window.api.report.getStaffReport(filters); break;
+          case 'pl':      res = await window.api.report.getProfitLoss(filters); break;
+          default: break;
+        }
+        console.log('Report data:', res);
+        if (res?.success) setData(res.data);
+        else setError(res?.error || 'Failed to load report.');
+      } catch (err) {
+        setError(err.message || 'Failed to load report.');
+      } finally {
+        setLoading(false);
       }
-      if (res?.success) setData(res.data);
-      setLoading(false);
     })();
-  }, [activeTab, period]);
+  }, [activeTab, period, customFrom, customTo]);
 
   const fmt = (n) => `PKR ${Number(n).toLocaleString()}`;
 
@@ -36,19 +58,31 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-white">Reports</h1>
         {/* Period Selector */}
-        <div className="flex gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700">
-          {['week','month','year'].map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-xs rounded-md transition-colors capitalize
-                ${period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'}`}>{p}</button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+            {['today','week','month','year','custom'].map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`px-3 py-1 text-xs rounded-md transition-colors capitalize
+                  ${period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'}`}>{p}</button>
+            ))}
+          </div>
+          {period === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500" />
+              <span className="text-slate-500 text-xs">to</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                min={customFrom}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500" />
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tab Selector */}
       <div className="flex gap-1 mb-5">
         {tabs.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+          <button key={tab.id} onClick={() => { setData(null); setActiveTab(tab.id); }}
             className={`px-4 py-2 text-sm rounded-lg transition-colors
               ${activeTab === tab.id ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
             {tab.label}
@@ -58,6 +92,10 @@ export default function ReportsPage() {
 
       {loading ? (
         <div className="card h-48 animate-pulse bg-slate-700" />
+      ) : error ? (
+        <div className="card border border-red-500/40 bg-red-500/10 text-red-300 text-sm">
+          {error}
+        </div>
       ) : (
         <div>
           {/* ── Sales Report ── */}

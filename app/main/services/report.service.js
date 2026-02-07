@@ -1,6 +1,7 @@
 const billModel = require('../models/bill.model');
 const expenseModel = require('../models/expense.model');
 const employeeModel = require('../models/employee.model');
+const salesModel = require('../models/sales.model');
 
 function getDateRange(period = 'today') {
   const now = new Date();
@@ -10,9 +11,10 @@ function getDateRange(period = 'today') {
     case 'today':
       return { from: startOfDay(now).toISOString(), to: now.toISOString() };
     case 'week': {
-      const dayOfWeek = now.getDay();
+      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
       const monday = new Date(now);
-      monday.setDate(now.getDate() - dayOfWeek + 1);
+      const daysBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      monday.setDate(now.getDate() - daysBack);
       return { from: startOfDay(monday).toISOString(), to: now.toISOString() };
     }
     case 'month': {
@@ -29,15 +31,18 @@ function getDateRange(period = 'today') {
 }
 
 async function getDashboardStats(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('today');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'today');
 
-  const bills = await billModel.getBills({ from, to });
-  const expenses = await expenseModel.findAll({ from, to });
+  const fromDate = from.split('T')[0];
+  const toDate = to.split('T')[0];
+  const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
   const employees = await employeeModel.findAll({});
 
-  const totalRevenue = bills.reduce((sum, b) => sum + b.total, 0);
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const totalBills = bills.length;
+  const totalRevenue = totals.totalRevenue || 0;
+  const totalExpenses = totals.totalExpenses || 0;
+  const totalBills = totals.totalBills || 0;
   const totalEmployees = employees.length;
   const averageBill = totalBills > 0 ? totalRevenue / totalBills : 0;
 
@@ -53,42 +58,33 @@ async function getDashboardStats(filters = {}) {
 }
 
 async function getSalesReport(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
-  const bills = await billModel.getBills({ from, to });
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
+  const fromDate = from.split('T')[0];
+  const toDate = to.split('T')[0];
 
-  // Group by date for chart data
-  const dailyTotals = {};
-  for (const bill of bills) {
-    const date = bill.createdAt.split('T')[0];
-    if (!dailyTotals[date]) dailyTotals[date] = { date, revenue: 0, bills: 0 };
-    dailyTotals[date].revenue += bill.total;
-    dailyTotals[date].bills += 1;
-  }
-
-  // Top selling items
-  const itemCounts = {};
-  for (const bill of bills) {
-    if (bill.items) {
-      for (const item of bill.items) {
-        if (!itemCounts[item.name]) itemCounts[item.name] = { name: item.name, quantity: 0, revenue: 0 };
-        itemCounts[item.name].quantity += item.quantity;
-        itemCounts[item.name].revenue += item.lineTotal;
-      }
-    }
-  }
-  const topItems = Object.values(itemCounts).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+  const dailyRows = await salesModel.getDailySales({ from: fromDate, to: toDate });
+  const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
+  const topItems = await billModel.getTopItems({ from, to, limit: 10 });
 
   return {
-    dailyTotals: Object.values(dailyTotals).sort((a, b) => a.date.localeCompare(b.date)),
+    dailyTotals: dailyRows.map(r => ({
+      date: r.date,
+      revenue: r.totalRevenue,
+      bills: r.totalBills,
+    })),
     topItems,
-    totalRevenue: parseFloat(bills.reduce((s, b) => s + b.total, 0).toFixed(2)),
-    totalBills: bills.length,
+    totalRevenue: parseFloat((totals.totalRevenue || 0).toFixed(2)),
+    totalBills: totals.totalBills || 0,
     period: filters.period || 'month',
   };
 }
 
 async function getExpenseReport(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
   const expenses = await expenseModel.findAll({ from, to });
 
   // Group by category
@@ -116,8 +112,11 @@ async function getExpenseReport(filters = {}) {
 }
 
 async function getStaffReport(filters = {}) {
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
   const employees = await employeeModel.findAll({});
-  const salaryRecords = await employeeModel.getAllSalaryRecords(filters);
+  const salaryRecords = await employeeModel.getAllSalaryRecords({ from, to });
 
   // Group salary by employee
   const bySalary = {};
@@ -138,12 +137,14 @@ async function getStaffReport(filters = {}) {
 }
 
 async function getProfitLoss(filters = {}) {
-  const { from, to } = filters.period ? getDateRange(filters.period) : getDateRange('month');
-  const bills = await billModel.getBills({ from, to });
-  const expenses = await expenseModel.findAll({ from, to });
-
-  const totalRevenue = bills.reduce((s, b) => s + b.total, 0);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
+  const fromDate = from.split('T')[0];
+  const toDate = to.split('T')[0];
+  const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
+  const totalRevenue = totals.totalRevenue || 0;
+  const totalExpenses = totals.totalExpenses || 0;
 
   return {
     totalRevenue: parseFloat(totalRevenue.toFixed(2)),

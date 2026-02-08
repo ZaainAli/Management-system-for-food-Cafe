@@ -102,8 +102,13 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   const discountAmount = subtotal * (discount / 100);
   const total = subtotal + tax - discountAmount;
 
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
+  const billNum = billModel.getTodayBillCount(dateStr) + 1;
+  const billId = `${dateStr}-${String(billNum).padStart(2, '0')}`;
+
   const bill = {
-    id: uuidv4(),
+    id: billId,
     tableId: tableId || null,
     customerName,
     items: lineItems,

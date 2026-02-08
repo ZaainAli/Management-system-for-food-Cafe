@@ -11,6 +11,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [loading, setLoading] = useState(true);
   const [billSuccess, setBillSuccess] = useState(null);
+  const [printWarning, setPrintWarning] = useState(null);
   const [fsm, setFsm] = useState('IDLE');           // 'IDLE' | 'PRICE' | 'QTY'
   const [pendingLineId, setPendingLineId] = useState(null);
   const inputBufferRef = useRef('');
@@ -36,6 +37,14 @@ export default function POSPage() {
       return () => clearTimeout(t);
     }
   }, [billSuccess]);
+
+  // Auto-dismiss print warning toast
+  useEffect(() => {
+    if (printWarning) {
+      const t = setTimeout(() => setPrintWarning(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [printWarning]);
 
   const filteredItems = activeCategory === 'All'
     ? menuItems
@@ -96,6 +105,9 @@ export default function POSPage() {
     });
     if (res.success) {
       setBillSuccess(res.data);
+      if (res.printError || res.printSkipped) {
+        setPrintWarning(res.printError || 'Receipt could not be printed');
+      }
       setCart([]);
       setDiscount(0);
       setSelectedTableId('');
@@ -486,7 +498,14 @@ export default function POSPage() {
         {/* Success Toast */}
         {billSuccess && (
           <div className="mt-3 bg-green-900/30 border border-green-700/50 text-green-300 text-xs rounded-lg px-4 py-3 text-center">
-            ✓ Bill created successfully!
+            Bill created successfully!
+          </div>
+        )}
+
+        {/* Print Warning Toast */}
+        {printWarning && (
+          <div className="mt-3 bg-yellow-900/30 border border-yellow-700/50 text-yellow-300 text-xs rounded-lg px-4 py-3 text-center">
+            Print failed: {printWarning}
           </div>
         )}
       </div>

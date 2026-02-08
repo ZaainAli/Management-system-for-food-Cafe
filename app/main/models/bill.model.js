@@ -69,6 +69,14 @@ function updateTableStatus(tableId, status) {
 
 // ─── Bills ──────────────────────────────────────────────────
 
+function getTodayBillCount(dateStr) {
+  const db = getDb();
+  const result = db.prepare(
+    "SELECT COUNT(*) as count FROM bills WHERE id LIKE ? || '-%'"
+  ).get(dateStr);
+  return result.count;
+}
+
 function insertBill(bill) {
   const db = getDb();
 
@@ -172,5 +180,5 @@ module.exports = {
   getAllMenuItems, getMenuItemById, insertMenuItem, updateMenuItem, deleteMenuItem,
   getAllCategories, insertCategory,
   getAllTables, updateTableStatus,
-  insertBill, getBills, getBillById, getTopItems,
+  insertBill, getBills, getBillById, getTopItems, getTodayBillCount,
 };

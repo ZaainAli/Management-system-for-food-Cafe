@@ -295,9 +295,24 @@ function runMigrations(db) {
     logger.info('Migration: Updated default menu items (seed v1)');
   }
 
-  // Migration: Add canManage column to users table if it doesn't exist
+  // Migration: Add createdAt column to users table if it doesn't exist
   const columns = db.prepare("PRAGMA table_info(users)").all();
-  const hasCanManage = columns.some(col => col.name === 'canManage');
+  const hasCreatedAt = columns.some(col => col.name === 'createdAt');
+  if (!hasCreatedAt) {
+    db.exec("ALTER TABLE users ADD COLUMN createdAt TEXT DEFAULT ''");
+    const now = new Date().toISOString();
+    db.prepare("UPDATE users SET createdAt = ? WHERE createdAt = '' OR createdAt IS NULL").run(now);
+    logger.info('Migration: Added createdAt column to users table');
+  }
+  const hasUpdatedAt = columns.some(col => col.name === 'updatedAt');
+  if (!hasUpdatedAt) {
+    db.exec("ALTER TABLE users ADD COLUMN updatedAt TEXT");
+    logger.info('Migration: Added updatedAt column to users table');
+  }
+
+  // Migration: Add canManage column to users table if it doesn't exist
+  const columnsAfter = db.prepare("PRAGMA table_info(users)").all();
+  const hasCanManage = columnsAfter.some(col => col.name === 'canManage');
   if (!hasCanManage) {
     db.exec('ALTER TABLE users ADD COLUMN canManage INTEGER NOT NULL DEFAULT 0');
     logger.info('Migration: Added canManage column to users table');

@@ -63,6 +63,7 @@ export function AuthProvider({ children }) {
       canAccessStaff: hasRole(user, 'admin', 'manager'),
       canAccessStock: hasRole(user, 'admin', 'manager'),
       canAccessExpenses: hasRole(user, 'admin', 'manager'),
+      canAccessKhata: hasRole(user, 'admin', 'manager'),
       canAccessReports: hasRole(user, 'admin', 'manager'),
       canAccessDashboard: true,
       canManageUsers: hasRole(user, 'admin'),

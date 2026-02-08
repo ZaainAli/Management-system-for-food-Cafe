@@ -109,6 +109,29 @@ function runMigrations(db) {
       updatedAt TEXT
     );
 
+    -- Khata (Ledger) profiles
+    CREATE TABLE IF NOT EXISTS khata_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      phone TEXT DEFAULT '',
+      businessDetails TEXT DEFAULT '',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT
+    );
+
+    -- Khata transactions (dues/payments)
+    CREATE TABLE IF NOT EXISTS khata_transactions (
+      id TEXT PRIMARY KEY,
+      khataId TEXT NOT NULL,
+      type TEXT NOT NULL, -- due | payment
+      amount REAL NOT NULL,
+      paymentSource TEXT DEFAULT NULL, -- today_sale | net_profit
+      note TEXT DEFAULT '',
+      date TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (khataId) REFERENCES khata_profiles(id)
+    );
+
     -- Daily Sales Aggregates (for fast reports)
     CREATE TABLE IF NOT EXISTS daily_sales (
       date TEXT PRIMARY KEY, -- YYYY-MM-DD

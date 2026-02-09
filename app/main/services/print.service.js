@@ -1,156 +1,120 @@
-const { BrowserWindow } = require('electron');
+const { execFile } = require('child_process');
 const logger = require('../utils/logger');
 
-function escapeHtml(value) {
-  if (value === null || value === undefined) return '';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+const RECEIPT_WIDTH = 42; // characters for 80mm thermal printer
+
+// ESC/POS commands for Epson TM-T88V
+const ESC = '\x1b';
+const BOLD_ON = `${ESC}\x45\x01`;
+const BOLD_OFF = `${ESC}\x45\x00`;
+const ALIGN_CENTER = `${ESC}\x61\x01`;
+const ALIGN_LEFT = `${ESC}\x61\x00`;
+const DOUBLE_HEIGHT_ON = `${ESC}\x21\x10`;
+const DOUBLE_HEIGHT_OFF = `${ESC}\x21\x00`;
+const CUT_PAPER = '\x1d\x56\x41\x03'; // GS V A 3 — feed 3 lines then partial cut
+
+function formatAmount(value) {
+  return String(Math.round(Number(value) || 0));
 }
 
-function formatCurrency(value) {
-  const num = Number(value) || 0;
-  return `PKR ${num.toFixed(2)}`;
+function centerText(text, width = RECEIPT_WIDTH) {
+  const pad = Math.max(0, Math.floor((width - text.length) / 2));
+  return ' '.repeat(pad) + text;
 }
 
-function renderReceiptHTML(bill, options = {}) {
+function line(char = '-', width = RECEIPT_WIDTH) {
+  return char.repeat(width);
+}
+
+function renderReceiptText(bill, options = {}) {
   const restaurantName = options.restaurantName || 'Restaurant';
   const restaurantAddress = options.restaurantAddress || '';
-  const footerNote = options.footerNote || 'Thank you for your visit!';
   const createdAt = bill.createdAt ? new Date(bill.createdAt) : new Date();
+  const timeStr = createdAt.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
-  const itemsHtml = (bill.items || []).map(item => `
-    <tr>
-      <td class="qty">${escapeHtml(item.quantity)}</td>
-      <td class="name">${escapeHtml(item.name)}</td>
-      <td class="price">${formatCurrency(item.price)}</td>
-      <td class="total">${formatCurrency(item.lineTotal)}</td>
-    </tr>
-  `).join('');
+  const parts = [];
 
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Receipt</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 10px 12px;
-      width: 80mm;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 11px;
-      color: #111;
-    }
-    h1 { font-size: 14px; margin: 0; text-align: center; }
-    .center { text-align: center; }
-    .muted { color: #444; }
-    .spacer { height: 6px; }
-    .line { border-top: 1px dashed #666; margin: 6px 0; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 2px 0; vertical-align: top; }
-    th { text-align: left; font-weight: 600; }
-    .qty { width: 12%; }
-    .name { width: 44%; }
-    .price { width: 22%; text-align: right; }
-    .total { width: 22%; text-align: right; }
-    .summary td { padding-top: 2px; }
-    .summary .label { text-align: left; }
-    .summary .value { text-align: right; }
-  </style>
-</head>
-<body>
-  <h1>${escapeHtml(restaurantName)}</h1>
-  ${restaurantAddress ? `<div class="center muted">${escapeHtml(restaurantAddress)}</div>` : ''}
-  <div class="spacer"></div>
-  <div>Bill: #${escapeHtml(bill.id)}</div>
-  <div>Date: ${escapeHtml(createdAt.toLocaleString())}</div>
-  ${bill.tableId ? `<div>Table: ${escapeHtml(bill.tableId)}</div>` : ''}
-  ${bill.customerName ? `<div>Customer: ${escapeHtml(bill.customerName)}</div>` : ''}
-  <div>Payment: ${escapeHtml(bill.paymentMethod || '')}</div>
-  <div class="line"></div>
-  <table>
-    <thead>
-      <tr>
-        <th class="qty">Qty</th>
-        <th class="name">Item</th>
-        <th class="price">Price</th>
-        <th class="total">Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemsHtml}
-    </tbody>
-  </table>
-  <div class="line"></div>
-  <table class="summary">
-    <tr><td class="label">Subtotal</td><td class="value">${formatCurrency(bill.subtotal)}</td></tr>
-    <tr><td class="label">Tax</td><td class="value">${formatCurrency(bill.tax)}</td></tr>
-    ${bill.discount > 0 ? `<tr><td class="label">Discount</td><td class="value">-${formatCurrency(bill.discount)}</td></tr>` : ''}
-    <tr><td class="label"><strong>Total</strong></td><td class="value"><strong>${formatCurrency(bill.total)}</strong></td></tr>
-  </table>
-  <div class="line"></div>
-  <div class="center muted">${escapeHtml(footerNote)}</div>
-</body>
-</html>`;
+  // Header
+  parts.push(ALIGN_CENTER);
+  parts.push(BOLD_ON + restaurantName + BOLD_OFF + '\n');
+  if (restaurantAddress) {
+    parts.push(restaurantAddress + '\n');
+  }
+  parts.push(ALIGN_LEFT);
+  parts.push('\n');
+
+  // Bill info - ID and time on same line
+  const billInfo = `Bill: ${bill.id}`;
+  parts.push(billInfo.padEnd(RECEIPT_WIDTH - timeStr.length) + timeStr + '\n');
+  if (bill.tableId) parts.push(`Table: ${bill.tableId}\n`);
+  if (bill.customerName) parts.push(`Customer: ${bill.customerName}\n`);
+  parts.push(`Payment: ${bill.paymentMethod || ''}\n`);
+  parts.push(line() + '\n');
+
+  // Column header
+  parts.push(
+    'Qty' + ' ' +
+    'Item'.padEnd(18) +
+    'Price'.padStart(10) +
+    'Total'.padStart(10) + '\n'
+  );
+  parts.push(line() + '\n');
+
+  // Items
+  for (const item of (bill.items || [])) {
+    const qty = String(item.quantity).padEnd(3);
+    const name = String(item.name).substring(0, 18).padEnd(18);
+    const price = formatAmount(item.price).padStart(10);
+    const total = formatAmount(item.lineTotal).padStart(10);
+    parts.push(`${qty} ${name}${price}${total}\n`);
+  }
+
+  parts.push(line() + '\n');
+
+  // Summary
+  const labelWidth = RECEIPT_WIDTH - 20;
+  if (bill.discount > 0) {
+    parts.push('Discount'.padEnd(labelWidth) + ('-' + formatAmount(bill.discount)).padStart(20) + '\n');
+    parts.push(line() + '\n');
+  }
+  
+
+  // TOTAL - bold and double height
+  const totalLine = 'TOTAL'.padEnd(labelWidth) + formatAmount(bill.total).padStart(20);
+  parts.push(BOLD_ON + DOUBLE_HEIGHT_ON + totalLine + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
+
+  parts.push(line() + '\n');
+
+  // Auto paper cut
+  parts.push(CUT_PAPER);
+
+  return parts.join('');
 }
 
 async function printBillReceipt(bill, options = {}) {
   if (!bill) throw new Error('Missing bill data for receipt');
 
-  const html = renderReceiptHTML(bill, options);
-  const printWindow = new BrowserWindow({
-    width: 320,
-    height: 600,
-    show: false,
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-    },
-  });
+  const text = renderReceiptText(bill, options);
+  const printerName = options.deviceName || 'TM-T88V';
 
-  try {
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  logger.info(`Printing receipt for bill #${bill.id} on printer: ${printerName}`);
 
-    const printers = await printWindow.webContents.getPrintersAsync();
-    if (!printers || printers.length === 0) {
-      logger.warn('No printers available; skipping receipt print');
-      return { skipped: true, reason: 'No printers available' };
-    }
-
-    const printOptions = {
-      silent: options.silent !== undefined ? options.silent : true,
-      printBackground: true,
-    };
-    if (options.deviceName) {
-      printOptions.deviceName = options.deviceName;
-    } else {
-      const defaultPrinter = printers.find(p => p.isDefault);
-      if (!defaultPrinter && printOptions.silent) {
-        logger.warn('No default printer; skipping silent receipt print');
-        return { skipped: true, reason: 'No default printer for silent print' };
+  return new Promise((resolve, reject) => {
+    const lp = execFile('lp', ['-d', printerName, '-o', 'raw'], (err, stdout, stderr) => {
+      if (err) {
+        logger.error(`lp command failed: ${err.message}`);
+        return reject(err);
       }
-    }
-
-    await new Promise((resolve, reject) => {
-      printWindow.webContents.print(printOptions, (success, failureReason) => {
-        if (!success) return reject(new Error(failureReason || 'Print failed'));
-        return resolve();
-      });
+      if (stderr) {
+        logger.warn(`lp stderr: ${stderr}`);
+      }
+      logger.info(`Print job submitted: ${stdout.trim()}`);
+      return resolve({ skipped: false });
     });
-    return { skipped: false };
-  } catch (err) {
-    logger.error('printBillReceipt failed', err);
-    throw err;
-  } finally {
-    if (!printWindow.isDestroyed()) printWindow.close();
-  }
+
+    lp.stdin.write(text);
+    lp.stdin.end();
+  });
 }
 
 module.exports = { printBillReceipt };

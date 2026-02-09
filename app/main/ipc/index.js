@@ -6,6 +6,7 @@ const { registerStaffRoutes } = require('./staff.routes');
 const { registerReportRoutes } = require('./report.routes');
 const { registerWindowRoutes } = require('./window.routes');
 const { registerUserRoutes } = require('./user.routes');
+const { registerKhataRoutes } = require('./khata.routes');
 
 function registerIPCHandlers() {
   registerAuthRoutes();
@@ -16,6 +17,7 @@ function registerIPCHandlers() {
   registerReportRoutes();
   registerWindowRoutes();
   registerUserRoutes();
+  registerKhataRoutes();
 }
 
 module.exports = { registerIPCHandlers };

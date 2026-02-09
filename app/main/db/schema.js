@@ -109,6 +109,29 @@ function runMigrations(db) {
       updatedAt TEXT
     );
 
+    -- Khata (Ledger) profiles
+    CREATE TABLE IF NOT EXISTS khata_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      phone TEXT DEFAULT '',
+      businessDetails TEXT DEFAULT '',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT
+    );
+
+    -- Khata transactions (dues/payments)
+    CREATE TABLE IF NOT EXISTS khata_transactions (
+      id TEXT PRIMARY KEY,
+      khataId TEXT NOT NULL,
+      type TEXT NOT NULL, -- due | payment
+      amount REAL NOT NULL,
+      paymentSource TEXT DEFAULT NULL, -- today_sale | net_profit
+      note TEXT DEFAULT '',
+      date TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (khataId) REFERENCES khata_profiles(id)
+    );
+
     -- Daily Sales Aggregates (for fast reports)
     CREATE TABLE IF NOT EXISTS daily_sales (
       date TEXT PRIMARY KEY, -- YYYY-MM-DD
@@ -272,9 +295,24 @@ function runMigrations(db) {
     logger.info('Migration: Updated default menu items (seed v1)');
   }
 
-  // Migration: Add canManage column to users table if it doesn't exist
+  // Migration: Add createdAt column to users table if it doesn't exist
   const columns = db.prepare("PRAGMA table_info(users)").all();
-  const hasCanManage = columns.some(col => col.name === 'canManage');
+  const hasCreatedAt = columns.some(col => col.name === 'createdAt');
+  if (!hasCreatedAt) {
+    db.exec("ALTER TABLE users ADD COLUMN createdAt TEXT DEFAULT ''");
+    const now = new Date().toISOString();
+    db.prepare("UPDATE users SET createdAt = ? WHERE createdAt = '' OR createdAt IS NULL").run(now);
+    logger.info('Migration: Added createdAt column to users table');
+  }
+  const hasUpdatedAt = columns.some(col => col.name === 'updatedAt');
+  if (!hasUpdatedAt) {
+    db.exec("ALTER TABLE users ADD COLUMN updatedAt TEXT");
+    logger.info('Migration: Added updatedAt column to users table');
+  }
+
+  // Migration: Add canManage column to users table if it doesn't exist
+  const columnsAfter = db.prepare("PRAGMA table_info(users)").all();
+  const hasCanManage = columnsAfter.some(col => col.name === 'canManage');
   if (!hasCanManage) {
     db.exec('ALTER TABLE users ADD COLUMN canManage INTEGER NOT NULL DEFAULT 0');
     logger.info('Migration: Added canManage column to users table');

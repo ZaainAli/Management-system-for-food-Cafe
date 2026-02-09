@@ -8,6 +8,7 @@ import POSPage from './pos/POSPage';
 import MenuPage from './menu/MenuPage';
 import StockPage from './stock/StockPage';
 import ExpensesPage from './expenses/ExpensesPage';
+import KhataPage from './khata/KhataPage';
 import StaffPage from './staff/StaffPage';
 import ReportsPage from './reports/ReportsPage';
 import ExportReportsPage from './reports/ExportReportsPage';
@@ -49,6 +50,9 @@ export default function App() {
         } />
         <Route path="/expenses" element={
           <ProtectedRoute permission="canAccessExpenses"><ExpensesPage /></ProtectedRoute>
+        } />
+        <Route path="/khata" element={
+          <ProtectedRoute permission="canAccessKhata"><KhataPage /></ProtectedRoute>
         } />
         <Route path="/staff" element={
           <ProtectedRoute permission="canAccessStaff"><StaffPage /></ProtectedRoute>

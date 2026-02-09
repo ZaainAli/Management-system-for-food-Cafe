@@ -6,7 +6,37 @@
   "scripts": {
     "start": "bash -c 'unset ELECTRON_RUN_AS_NODE && unset ELECTRON_NO_ATTACH_CONSOLE && electron --disable-gpu --disable-software-rasterizer --no-sandbox app/main/index.js'",
     "dev": "bash -c 'unset ELECTRON_RUN_AS_NODE && unset ELECTRON_NO_ATTACH_CONSOLE && concurrently \"vite --config vite.config.js\" \"electron --disable-gpu --disable-software-rasterizer --no-sandbox app/main/index.js\"'",
-    "rebuild": "electron-rebuild -f -w better-sqlite3"
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "build:renderer": "vite build --config vite.config.js",
+    "build:win": "npm run build:renderer && electron-builder --win",
+    "build:linux": "npm run build:renderer && electron-builder --linux",
+    "build": "npm run build:renderer && electron-builder"
+  },
+  "build": {
+    "appId": "com.restaurant.desktop",
+    "productName": "Restaurant Manager",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "app/**/*",
+      "!app/renderer/src/**",
+      "!app/renderer/index.html",
+      "node_modules/**/*"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
@@ -14,6 +44,7 @@
     "autoprefixer": "^10.4.0",
     "concurrently": "^9.0.0",
     "electron": "^28.3.3",
+    "electron-builder": "^26.7.0",
     "electron-rebuild": "^3.2.9",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",

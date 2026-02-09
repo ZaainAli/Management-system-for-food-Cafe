@@ -31,15 +31,17 @@ function createWindow() {
   registerIPCHandlers();
 
   // Load renderer
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+  const isDev = process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
 
-  // Try to load from dev server first
-  mainWindow.loadURL(devServerUrl).catch(() => {
-    // Fallback to production build if dev server unavailable
+  if (isDev) {
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+    mainWindow.loadURL(devServerUrl).catch(() => {
+      mainWindow.loadFile(path.join(__dirname, '../renderer/dist/index.html'));
+    });
+    mainWindow.webContents.openDevTools();
+  } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/dist/index.html'));
-  });
-
-  mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

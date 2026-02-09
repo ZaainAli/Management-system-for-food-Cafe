@@ -78,6 +78,15 @@ const userAPI = {
   resetPassword: (payload) => ipcRenderer.invoke('user:resetPassword', payload),
 };
 
+// ─── Khata API ──────────────────────────────────────────────
+const khataAPI = {
+  getAll: () => ipcRenderer.invoke('khata:getAll'),
+  getById: (payload) => ipcRenderer.invoke('khata:getById', payload),
+  addProfile: (payload) => ipcRenderer.invoke('khata:addProfile', payload),
+  addDue: (payload) => ipcRenderer.invoke('khata:addDue', payload),
+  addPayment: (payload) => ipcRenderer.invoke('khata:addPayment', payload),
+};
+
 // ─── Window API ─────────────────────────────────────────────
 const windowAPI = {
   minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -97,5 +106,6 @@ contextBridge.exposeInMainWorld('api', {
   staff: staffAPI,
   report: reportAPI,
   user: userAPI,
+  khata: khataAPI,
   window: windowAPI,
 });

@@ -97,10 +97,8 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     });
   }
 
-  const TAX_RATE = 0.05; // 5% tax — adjust as needed
-  const tax = subtotal * TAX_RATE;
-  const discountAmount = subtotal * (discount / 100);
-  const total = subtotal + tax - discountAmount;
+  const discountAmount = Math.min(discount, subtotal); // flat discount, capped at subtotal
+  const total = subtotal - discountAmount;
 
   const now = new Date();
   const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
@@ -113,7 +111,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     customerName,
     items: lineItems,
     subtotal: parseFloat(subtotal.toFixed(2)),
-    tax: parseFloat(tax.toFixed(2)),
+    tax: 0,
     discount: parseFloat(discountAmount.toFixed(2)),
     total: parseFloat(total.toFixed(2)),
     paymentMethod,
@@ -122,6 +120,19 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   };
 
   const saved = billModel.insertBill(bill);
+
+  // Save discounted bill record if discount was applied
+  if (discountAmount > 0) {
+    billModel.insertDiscountedBill({
+      id: uuidv4(),
+      billId: saved.id,
+      billAmount: parseFloat(subtotal.toFixed(2)),
+      discountAmount: parseFloat(discountAmount.toFixed(2)),
+      finalAmount: parseFloat(total.toFixed(2)),
+      createdAt: saved.createdAt,
+    });
+  }
+
   const billDate = saved.createdAt.split('T')[0];
   salesModel.addBillToDailySales({ date: billDate, total: saved.total });
   return saved;
@@ -145,9 +156,33 @@ async function updateTableStatus({ tableId, status }) {
   return billModel.updateTableStatus(tableId, status);
 }
 
+async function getDiscountedBills(filters = {}) {
+  return billModel.getDiscountedBills(filters);
+}
+
+// ─── Quick Keys ────────────────────────────────────────────
+
+async function getQuickKeys() {
+  return billModel.getQuickKeys();
+}
+
+async function setQuickKeys(assignments) {
+  const validKeys = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+  const filtered = assignments.filter(a => validKeys.includes(a.key) && a.menuItemId);
+  // Validate all menu items exist
+  for (const a of filtered) {
+    const item = await billModel.getMenuItemById(a.menuItemId);
+    if (!item) throw new Error(`Menu item not found: ${a.menuItemId}`);
+  }
+  billModel.setQuickKeys(filtered);
+  return billModel.getQuickKeys();
+}
+
 module.exports = {
   getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem,
   getMenuCategories, addMenuCategory,
   createBill, getBills, getBillById,
   getTables, updateTableStatus,
+  getDiscountedBills,
+  getQuickKeys, setQuickKeys,
 };

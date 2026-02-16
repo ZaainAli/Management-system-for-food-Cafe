@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 
+const QUICK_KEY_LIST = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+const QUICK_KEY_SET = new Set(QUICK_KEY_LIST);
+const GRID_KEYS = 'abcdfghjklmnsvxz'.split(''); // 16 letters excluding quick keys
+
 export default function POSPage() {
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tables, setTables] = useState([]);
+  const [quickKeys, setQuickKeys] = useState([]);
   const [selectedTableId, setSelectedTableId] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [cart, setCart] = useState([]);
@@ -14,18 +19,21 @@ export default function POSPage() {
   const [printWarning, setPrintWarning] = useState(null);
   const [fsm, setFsm] = useState('IDLE');           // 'IDLE' | 'PRICE' | 'QTY'
   const [pendingLineId, setPendingLineId] = useState(null);
+  const [pendingIsNewLine, setPendingIsNewLine] = useState(false);
   const inputBufferRef = useRef('');
 
   useEffect(() => {
     (async () => {
-      const [itemsRes, catsRes, tablesRes] = await Promise.all([
+      const [itemsRes, catsRes, tablesRes, qkRes] = await Promise.all([
         window.api.pos.getMenuItems(),
         window.api.pos.getMenuCategories(),
         window.api.pos.getTables(),
+        window.api.pos.getQuickKeys(),
       ]);
       if (itemsRes.success) setMenuItems(itemsRes.data);
       if (catsRes.success) setCategories(catsRes.data);
       if (tablesRes.success) setTables(tablesRes.data);
+      if (qkRes.success) setQuickKeys(qkRes.data);
       setLoading(false);
     })();
   }, []);
@@ -46,14 +54,33 @@ export default function POSPage() {
     }
   }, [printWarning]);
 
-  const filteredItems = activeCategory === 'All'
-    ? menuItems
-    : menuItems.filter(i => i.categoryName === activeCategory);
+  // Quick key map: q/w/e/r/t/y/u/i/o/p → fixed items (ignores category filter)
+  const quickKeyToItem = useMemo(() => {
+    const map = {};
+    quickKeys.forEach(qk => {
+      const fullItem = menuItems.find(mi => mi.id === qk.menuItemId);
+      if (fullItem) map[qk.key] = fullItem;
+    });
+    return map;
+  }, [quickKeys, menuItems]);
 
+  // IDs of items already on quick keys — exclude from grid
+  const quickKeyItemIds = useMemo(() => {
+    return new Set(Object.values(quickKeyToItem).map(item => item.id));
+  }, [quickKeyToItem]);
+
+  const filteredItems = useMemo(() => {
+    const byCategory = activeCategory === 'All'
+      ? menuItems
+      : menuItems.filter(i => i.categoryName === activeCategory);
+    return byCategory.filter(i => !quickKeyItemIds.has(i.id));
+  }, [menuItems, activeCategory, quickKeyItemIds]);
+
+  // Grid key map: a,b,c,d,f,g,h,j,k,l,m,n,s,v,x,z → filtered items (changes with category)
   const keyToItem = useMemo(() => {
     const map = {};
     filteredItems.forEach((item, idx) => {
-      if (idx < 26) map[String.fromCharCode(97 + idx)] = item;
+      if (idx < GRID_KEYS.length) map[GRID_KEYS[idx]] = item;
     });
     return map;
   }, [filteredItems]);
@@ -90,10 +117,8 @@ export default function POSPage() {
     setCart(prev => prev.map(c => c.lineId === lineId ? { ...c, ...updates } : c));
   };
 
-  const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const tax = subtotal * 0.05;
-  const discountAmt = subtotal * (discount / 100);
-  const total = subtotal + tax - discountAmt;
+  const cartTotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const total = cartTotal - discount;
 
   const createBill = async () => {
     if (cart.length === 0) return;
@@ -109,6 +134,10 @@ export default function POSPage() {
         setPrintWarning(res.printError || 'Receipt could not be printed');
       }
       setCart([]);
+      setPendingLineId(null);
+      setPendingIsNewLine(false);
+      inputBufferRef.current = '';
+      setFsm('IDLE');
       setDiscount(0);
       setSelectedTableId('');
     }
@@ -121,17 +150,40 @@ export default function POSPage() {
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
       const key = e.key.toLowerCase();
+      const pickCartLineByArrow = (arrowKey) => {
+        if (cart.length === 0) return false;
+        const currentIdx = cart.findIndex(c => c.lineId === pendingLineId);
+        const nextIdx = currentIdx === -1
+          ? (arrowKey === 'ArrowUp' ? cart.length - 1 : 0)
+          : (arrowKey === 'ArrowUp'
+            ? (currentIdx - 1 + cart.length) % cart.length
+            : (currentIdx + 1) % cart.length);
+        const line = cart[nextIdx];
+        setPendingLineId(line.lineId);
+        setPendingIsNewLine(false);
+        inputBufferRef.current = '';
+        setFsm(line.halfPrice !== null && line.halfPrice !== undefined ? 'PRICE' : 'QTY');
+        return true;
+      };
 
       // ── IDLE STATE ──
       if (fsm === 'IDLE') {
         if (key.length === 1 && key >= 'a' && key <= 'z' && !e.repeat) {
           e.preventDefault();
-          const item = keyToItem[key];
+          // Quick keys take priority, then grid keys
+          const item = QUICK_KEY_SET.has(key) ? quickKeyToItem[key] : keyToItem[key];
           if (!item || !item.isAvailable) return;
           const lineId = addToCart(item);
           setPendingLineId(lineId);
+          setPendingIsNewLine(true);
           inputBufferRef.current = '';
-          setFsm('PRICE');
+          // Skip price step for fixed-price items (no halfPrice)
+          setFsm(item.halfPrice !== null && item.halfPrice !== undefined ? 'PRICE' : 'QTY');
+          return;
+        }
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && cart.length > 0) {
+          e.preventDefault();
+          pickCartLineByArrow(e.key);
           return;
         }
         if (e.key === 'Escape' && cart.length > 0) {
@@ -144,6 +196,11 @@ export default function POSPage() {
 
       // ── PRICE STATE ──
       if (fsm === 'PRICE') {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          pickCartLineByArrow(e.key);
+          return;
+        }
         e.preventDefault();
         if (e.key === 'Enter') {
           if (inputBufferRef.current !== '') {
@@ -185,8 +242,11 @@ export default function POSPage() {
           return;
         }
         if (e.key === 'Escape') {
-          setCart(prev => prev.filter(c => c.lineId !== pendingLineId));
+          if (pendingIsNewLine) {
+            setCart(prev => prev.filter(c => c.lineId !== pendingLineId));
+          }
           setPendingLineId(null);
+          setPendingIsNewLine(false);
           inputBufferRef.current = '';
           setFsm('IDLE');
           return;
@@ -196,6 +256,11 @@ export default function POSPage() {
 
       // ── QTY STATE ──
       if (fsm === 'QTY') {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          pickCartLineByArrow(e.key);
+          return;
+        }
         e.preventDefault();
         if (e.key === 'Enter') {
           if (inputBufferRef.current !== '') {
@@ -205,6 +270,7 @@ export default function POSPage() {
             }
           }
           setPendingLineId(null);
+          setPendingIsNewLine(false);
           inputBufferRef.current = '';
           setFsm('IDLE');
           return;
@@ -224,8 +290,11 @@ export default function POSPage() {
           return;
         }
         if (e.key === 'Escape') {
-          setCart(prev => prev.filter(c => c.lineId !== pendingLineId));
+          if (pendingIsNewLine) {
+            setCart(prev => prev.filter(c => c.lineId !== pendingLineId));
+          }
           setPendingLineId(null);
+          setPendingIsNewLine(false);
           inputBufferRef.current = '';
           setFsm('IDLE');
           return;
@@ -236,7 +305,7 @@ export default function POSPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fsm, pendingLineId, keyToItem, cart]);
+  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart]);
 
   if (loading) return <div className="text-slate-400">Loading POS...</div>;
 
@@ -247,6 +316,41 @@ export default function POSPage() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-white">Point of Sale</h1>
         </div>
+
+        {/* Quick Keys Top Bar */}
+        {quickKeys.length > 0 && (
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {QUICK_KEY_LIST.map(k => {
+              const item = quickKeyToItem[k];
+              if (!item) return null;
+              const isBeingConfigured = pendingLineId && fsm !== 'IDLE' &&
+                cart.find(c => c.lineId === pendingLineId)?.id === item.id;
+              return (
+                <button
+                  key={k}
+                  onClick={() => {
+                    if (fsm !== 'IDLE' || !item.isAvailable) return;
+                    const lineId = addToCart(item);
+                    setPendingLineId(lineId);
+                    setPendingIsNewLine(true);
+                    inputBufferRef.current = '';
+                    setFsm(item.halfPrice !== null && item.halfPrice !== undefined ? 'PRICE' : 'QTY');
+                  }}
+                  disabled={!item.isAvailable || fsm !== 'IDLE'}
+                  className={`flex flex-col items-center px-3 py-2 rounded-lg border text-center min-w-[72px] transition-colors ${
+                    isBeingConfigured
+                      ? 'border-primary-500 bg-primary-900/30 ring-1 ring-primary-500/50'
+                      : 'border-slate-600 bg-slate-800 hover:border-primary-500 hover:bg-slate-700'
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-700 rounded px-1.5 py-0.5 mb-1 uppercase">{k}</span>
+                  <span className="text-white text-xs font-medium leading-tight truncate max-w-[64px]">{item.name}</span>
+                  <span className="text-primary-400 text-[10px] mt-0.5">PKR {item.price.toLocaleString()}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Category Filter */}
         <div className="flex gap-2 mb-4 flex-wrap">
@@ -309,7 +413,7 @@ export default function POSPage() {
         {/* Menu Grid */}
         <div className="grid grid-cols-3 gap-3 flex-1 overflow-y-auto pr-1">
           {filteredItems.map((item, idx) => {
-            const shortcutKey = idx < 26 ? String.fromCharCode(65 + idx) : null;
+            const shortcutKey = idx < GRID_KEYS.length ? GRID_KEYS[idx].toUpperCase() : null;
             const isBeingConfigured = pendingLineId && fsm !== 'IDLE' &&
               cart.find(c => c.lineId === pendingLineId)?.id === item.id;
             return (
@@ -319,8 +423,9 @@ export default function POSPage() {
                   if (fsm !== 'IDLE' || !item.isAvailable) return;
                   const lineId = addToCart(item);
                   setPendingLineId(lineId);
+                  setPendingIsNewLine(true);
                   inputBufferRef.current = '';
-                  setFsm('PRICE');
+                  setFsm(item.halfPrice !== null && item.halfPrice !== undefined ? 'PRICE' : 'QTY');
                 }}
                 disabled={!item.isAvailable || fsm !== 'IDLE'}
                 className={`card text-left transition-colors p-3 relative ${
@@ -357,7 +462,7 @@ export default function POSPage() {
           <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center justify-between">
             <span>Current Order</span>
             {cart.length > 0 && (
-              <button onClick={() => { setCart([]); setPendingLineId(null); inputBufferRef.current = ''; setFsm('IDLE'); }} className="text-xs text-red-400 hover:text-red-300">Clear</button>
+              <button onClick={() => { setCart([]); setPendingLineId(null); setPendingIsNewLine(false); inputBufferRef.current = ''; setFsm('IDLE'); }} className="text-xs text-red-400 hover:text-red-300">Clear</button>
             )}
           </h2>
 
@@ -369,9 +474,16 @@ export default function POSPage() {
               cart.map(item => (
                 <div
                   key={item.lineId}
+                  onClick={() => {
+                    if (fsm !== 'IDLE') return;
+                    setPendingLineId(item.lineId);
+                    setPendingIsNewLine(false);
+                    inputBufferRef.current = '';
+                    setFsm(item.halfPrice !== null && item.halfPrice !== undefined ? 'PRICE' : 'QTY');
+                  }}
                   className={`bg-slate-700/50 rounded-lg px-3 py-2 border ${
                     pendingLineId === item.lineId ? 'border-primary-500' : 'border-transparent'
-                  }`}
+                  } ${fsm === 'IDLE' ? 'cursor-pointer hover:border-slate-500' : ''}`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
@@ -427,29 +539,23 @@ export default function POSPage() {
 
           {/* Totals & Controls */}
           <div className="border-t border-slate-700 mt-3 pt-3 space-y-2">
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>Subtotal</span><span>PKR {subtotal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>Tax (5%)</span><span>PKR {tax.toLocaleString()}</span>
-            </div>
             {discount > 0 && (
               <div className="flex justify-between text-xs text-green-400">
-                <span>Discount ({discount}%)</span><span>−PKR {discountAmt.toLocaleString()}</span>
+                <span>Discount</span><span>−PKR {discount.toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-semibold text-white border-t border-slate-700 pt-2">
-              <span>Total</span><span>PKR {total.toLocaleString()}</span>
+              <span>Total</span><span>PKR {Math.max(0, total).toLocaleString()}</span>
             </div>
 
             {/* Discount */}
             <div>
-              <label className="label text-xs">Discount %</label>
+              <label className="label text-xs">Discount Amount:</label>
               <input
                 type="number"
-                min="0" max="100"
+                min="0"
                 value={discount}
-                onChange={e => setDiscount(Math.min(100, Math.max(0, Number(e.target.value))))}
+                onChange={e => setDiscount(Math.max(0, Number(e.target.value)))}
                 disabled={fsm !== 'IDLE'}
                 className="input-field py-1.5 text-xs"
               />
@@ -490,7 +596,7 @@ export default function POSPage() {
 
             {/* Create Bill */}
             <button onClick={createBill} disabled={cart.length === 0 || fsm !== 'IDLE'} className="btn-primary w-full text-sm py-2.5">
-              Create Bill — PKR {total.toLocaleString()}
+              Create Bill — PKR {Math.max(0, total).toLocaleString()}
             </button>
           </div>
         </div>

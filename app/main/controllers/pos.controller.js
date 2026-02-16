@@ -127,6 +127,37 @@ async function updateTableStatus(payload) {
   }
 }
 
+async function getDiscountedBills(filters = {}) {
+  try {
+    const data = await billingService.getDiscountedBills(filters);
+    return { success: true, data };
+  } catch (err) {
+    logger.error('getDiscountedBills failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function getQuickKeys() {
+  try {
+    const keys = await billingService.getQuickKeys();
+    return { success: true, data: keys };
+  } catch (err) {
+    logger.error('getQuickKeys failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function setQuickKeys(assignments) {
+  try {
+    const keys = await billingService.setQuickKeys(assignments);
+    logger.info('Quick keys updated');
+    return { success: true, data: keys };
+  } catch (err) {
+    logger.error('setQuickKeys failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   getMenuItems,
   addMenuItem,
@@ -139,4 +170,7 @@ module.exports = {
   getBillById,
   getTables,
   updateTableStatus,
+  getDiscountedBills,
+  getQuickKeys,
+  setQuickKeys,
 };

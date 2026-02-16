@@ -179,6 +179,24 @@ function runMigrations(db) {
       UNIQUE(employeeId, date)
     );
 
+    -- Discounted bills log
+    CREATE TABLE IF NOT EXISTS discounted_bills (
+      id TEXT PRIMARY KEY,
+      billId TEXT NOT NULL,
+      billAmount REAL NOT NULL,
+      discountAmount REAL NOT NULL,
+      finalAmount REAL NOT NULL,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (billId) REFERENCES bills(id)
+    );
+
+    -- Quick keys (POS keyboard shortcuts for frequent items)
+    CREATE TABLE IF NOT EXISTS quick_keys (
+      key TEXT PRIMARY KEY,
+      menuItemId TEXT NOT NULL,
+      FOREIGN KEY (menuItemId) REFERENCES menu_items(id)
+    );
+
     -- App metadata (schema/data migrations)
     CREATE TABLE IF NOT EXISTS app_meta (
       key TEXT PRIMARY KEY,

@@ -27,8 +27,14 @@ jobs:
       - name: Build Windows installer
         run: npm run build:win
 
+      - name: List build output
+        run: dir dist_electron
+        shell: cmd
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: dist_electron/*.exe
+          path: |
+            dist_electron/*.exe
+            dist_electron/*.msi

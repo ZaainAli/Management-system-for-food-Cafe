@@ -37,7 +37,18 @@ function updateMenuItem(item) {
 
 function deleteMenuItem(id) {
   const db = getDb();
-  db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
+  const tx = db.transaction((menuItemId) => {
+    const usage = db.prepare('SELECT COUNT(*) as count FROM bill_items WHERE menuItemId = ?').get(menuItemId);
+    if (usage.count > 0) {
+      throw new Error('Cannot delete this item because it exists in previous bills. Mark it unavailable instead.');
+    }
+
+    // Remove shortcut mappings first to satisfy FK constraints.
+    db.prepare('DELETE FROM quick_keys WHERE menuItemId = ?').run(menuItemId);
+    db.prepare('DELETE FROM menu_items WHERE id = ?').run(menuItemId);
+  });
+
+  tx(id);
 }
 
 // ─── Menu Categories ────────────────────────────────────────

@@ -80,6 +80,27 @@ function registerPosRoutes() {
       return posController.updateTableStatus(payload);
     });
   });
+
+  ipcMain.handle('pos:getDiscountedBills', async (_event, filters) => {
+    return requireAuth(async () => {
+      return posController.getDiscountedBills(filters);
+    });
+  });
+
+  // Quick Keys
+  ipcMain.handle('pos:getQuickKeys', async () => {
+    return requireAuth(async () => {
+      return posController.getQuickKeys();
+    });
+  });
+
+  ipcMain.handle('pos:setQuickKeys', async (_event, assignments) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager'], async () => {
+        return posController.setQuickKeys(assignments);
+      });
+    });
+  });
 }
 
 module.exports = { registerPosRoutes };

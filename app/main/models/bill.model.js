@@ -176,9 +176,69 @@ function getTopItems(filters = {}) {
   return db.prepare(query).all(...params);
 }
 
+// ─── Discounted Bills ──────────────────────────────────────
+
+function insertDiscountedBill(record) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO discounted_bills (id, billId, billAmount, discountAmount, finalAmount, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(record.id, record.billId, record.billAmount, record.discountAmount, record.finalAmount, record.createdAt);
+  return record;
+}
+
+function getDiscountedBills(filters = {}) {
+  const db = getDb();
+  let query = 'SELECT * FROM discounted_bills';
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('createdAt >= ?');
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    conditions.push('createdAt <= ?');
+    params.push(filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' ORDER BY createdAt DESC';
+  return db.prepare(query).all(...params);
+}
+
+// ─── Quick Keys ────────────────────────────────────────────
+
+function getQuickKeys() {
+  const db = getDb();
+  return db.prepare(`
+    SELECT qk.key, qk.menuItemId, mi.name, mi.price, mi.halfPrice, mi.isAvailable
+    FROM quick_keys qk
+    JOIN menu_items mi ON qk.menuItemId = mi.id
+    ORDER BY qk.key ASC
+  `).all();
+}
+
+function setQuickKeys(assignments) {
+  const db = getDb();
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM quick_keys').run();
+    const insert = db.prepare('INSERT INTO quick_keys (key, menuItemId) VALUES (?, ?)');
+    for (const { key, menuItemId } of assignments) {
+      insert.run(key, menuItemId);
+    }
+  });
+  tx();
+}
+
 module.exports = {
   getAllMenuItems, getMenuItemById, insertMenuItem, updateMenuItem, deleteMenuItem,
   getAllCategories, insertCategory,
   getAllTables, updateTableStatus,
   insertBill, getBills, getBillById, getTopItems, getTodayBillCount,
+  insertDiscountedBill, getDiscountedBills,
+  getQuickKeys, setQuickKeys,
 };

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
+const QUICK_KEYS = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+
 const emptyForm = {
   name: '',
   description: '',
@@ -19,14 +21,22 @@ export default function MenuPage() {
   const [editId, setEditId] = useState(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [quickKeys, setQuickKeys] = useState({});
+  const [quickKeySaving, setQuickKeySaving] = useState(false);
 
   const fetchData = async () => {
-    const [itemsRes, catsRes] = await Promise.all([
+    const [itemsRes, catsRes, qkRes] = await Promise.all([
       window.api.pos.getMenuItems(),
       window.api.pos.getMenuCategories(),
+      window.api.pos.getQuickKeys(),
     ]);
     if (itemsRes.success) setItems(itemsRes.data);
     if (catsRes.success) setCategories(catsRes.data);
+    if (qkRes.success) {
+      const map = {};
+      qkRes.data.forEach(qk => { map[qk.key] = qk.menuItemId; });
+      setQuickKeys(map);
+    }
     setLoading(false);
   };
 
@@ -95,6 +105,20 @@ export default function MenuPage() {
     }
   };
 
+  const handleSaveQuickKeys = async () => {
+    setQuickKeySaving(true);
+    const assignments = QUICK_KEYS
+      .filter(k => quickKeys[k])
+      .map(k => ({ key: k, menuItemId: quickKeys[k] }));
+    const res = await window.api.pos.setQuickKeys(assignments);
+    if (res.success) {
+      const map = {};
+      res.data.forEach(qk => { map[qk.key] = qk.menuItemId; });
+      setQuickKeys(map);
+    }
+    setQuickKeySaving(false);
+  };
+
   if (loading) return <div className="text-slate-400">Loading menu...</div>;
 
   return (
@@ -123,6 +147,34 @@ export default function MenuPage() {
             </button>
           );
         })}
+      </div>
+
+      {/* Quick Keys Assignment */}
+      <div className="card mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-slate-300">Quick Keys (POS Shortcuts)</h2>
+          <button onClick={handleSaveQuickKeys} disabled={quickKeySaving} className="btn-primary text-xs px-3 py-1.5">
+            {quickKeySaving ? 'Saving...' : 'Save Quick Keys'}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">Assign menu items to keyboard shortcuts. These keys always work in POS regardless of category filter.</p>
+        <div className="grid grid-cols-5 gap-2">
+          {QUICK_KEYS.map(k => (
+            <div key={k} className="flex flex-col gap-1">
+              <span className="text-xs font-bold text-slate-400 uppercase text-center bg-slate-700 rounded px-2 py-1 w-8 mx-auto">{k}</span>
+              <select
+                value={quickKeys[k] || ''}
+                onChange={e => setQuickKeys(prev => ({ ...prev, [k]: e.target.value || undefined }))}
+                className="input-field text-xs py-1.5 bg-slate-700"
+              >
+                <option value="">-- Empty --</option>
+                {items.map(item => (
+                  <option key={item.id} value={item.id}>{item.name} (PKR {Number(item.price).toLocaleString()})</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Table */}

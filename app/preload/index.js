@@ -21,6 +21,9 @@ const posAPI = {
   getBillById: (payload) => ipcRenderer.invoke('pos:getBillById', payload),
   getTables: () => ipcRenderer.invoke('pos:getTables'),
   updateTableStatus: (payload) => ipcRenderer.invoke('pos:updateTableStatus', payload),
+  getDiscountedBills: (filters) => ipcRenderer.invoke('pos:getDiscountedBills', filters),
+  getQuickKeys: () => ipcRenderer.invoke('pos:getQuickKeys'),
+  setQuickKeys: (assignments) => ipcRenderer.invoke('pos:setQuickKeys', assignments),
 };
 
 // ─── Stock API ──────────────────────────────────────────────
@@ -95,6 +98,7 @@ const windowAPI = {
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
   onMaximize: (callback) => ipcRenderer.on('window:maximized', callback),
   onUnmaximize: (callback) => ipcRenderer.on('window:unmaximized', callback),
+  openPOS: () => ipcRenderer.invoke('window:openPOS'),
 };
 
 // ─── Expose to Renderer ─────────────────────────────────────

@@ -27,7 +27,7 @@ function line(char = '-', width = RECEIPT_WIDTH) {
 }
 
 function renderReceiptText(bill, options = {}) {
-  const restaurantName = options.restaurantName || 'Restaurant';
+  const restaurantName = options.restaurantName || 'Peshwari Hotel & Chapli Kabab';
   const restaurantAddress = options.restaurantAddress || '';
   const createdAt = bill.createdAt ? new Date(bill.createdAt) : new Date();
   const timeStr = createdAt.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });

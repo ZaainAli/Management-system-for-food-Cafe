@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
 import LoginPage from './auth/LoginPage';
 import SidebarLayout from '../layouts/SidebarLayout';
+import TitleBar from '../components/TitleBar';
 import Dashboard from './reports/Dashboard';
 import POSPage from './pos/POSPage';
 import MenuPage from './menu/MenuPage';
@@ -12,6 +13,7 @@ import KhataPage from './khata/KhataPage';
 import StaffPage from './staff/StaffPage';
 import ReportsPage from './reports/ReportsPage';
 import ExportReportsPage from './reports/ExportReportsPage';
+import DiscountReportPage from './reports/DiscountReportPage';
 import UsersPage from './users/UsersPage';
 
 function ProtectedRoute({ permission, children }) {
@@ -22,7 +24,7 @@ function ProtectedRoute({ permission, children }) {
   return children;
 }
 
-export default function App() {
+export default function App({ isPOSWindow }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -35,6 +37,20 @@ export default function App() {
 
   if (!user) {
     return <LoginPage />;
+  }
+
+  // POS window: render only the POS page with TitleBar, no sidebar
+  if (isPOSWindow) {
+    return (
+      <div className="flex flex-col h-screen bg-slate-900">
+        <TitleBar />
+        <div className="flex-1 overflow-y-auto">
+          <main className="p-6">
+            <POSPage />
+          </main>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -62,6 +78,9 @@ export default function App() {
         } />
         <Route path="/reports/export" element={
           <ProtectedRoute permission="canAccessReports"><ExportReportsPage /></ProtectedRoute>
+        } />
+        <Route path="/reports/discount" element={
+          <ProtectedRoute permission="canAccessReports"><DiscountReportPage /></ProtectedRoute>
         } />
         <Route path="/users" element={
           <ProtectedRoute permission="canManageUsers"><UsersPage /></ProtectedRoute>

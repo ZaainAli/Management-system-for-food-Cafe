@@ -165,6 +165,48 @@ function buildExportCsv(type, data, range) {
         ),
       ].join('\n');
     }
+    case 'discounted': {
+      const parts = [];
+      parts.push(section('Discounted Bills Summary'));
+      parts.push(toCsv(
+        ['Total Discounted Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount'],
+        [[data.totalRecords, data.totalBillAmount, data.totalDiscount, data.totalFinalAmount]]
+      ));
+      parts.push('');
+      parts.push('Discounted Bills');
+      parts.push(toCsv(
+        ['Bill ID', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Created At'],
+        (data.records || []).map(r => [r.billId, r.billAmount, r.discountAmount, r.finalAmount, r.createdAt])
+      ));
+      return parts.join('\n');
+    }
+    case 'khata': {
+      const parts = [];
+      parts.push(section('Khata Summary'));
+      parts.push(toCsv(
+        ['Total Profiles', 'Outstanding Balance', 'Transactions In Range', 'Due In Range', 'Paid In Range'],
+        [[
+          data.summary?.totalProfiles || 0,
+          data.summary?.totalOutstandingBalance || 0,
+          data.summary?.transactionsInRange || 0,
+          data.summary?.totalDueInRange || 0,
+          data.summary?.totalPaidInRange || 0,
+        ]]
+      ));
+      parts.push('');
+      parts.push('Khata Profiles');
+      parts.push(toCsv(
+        ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'],
+        (data.profiles || []).map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance, p.createdAt])
+      ));
+      parts.push('');
+      parts.push('Khata Transactions (Within Selected Range)');
+      parts.push(toCsv(
+        ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'],
+        (data.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note, tx.createdAt])
+      ));
+      return parts.join('\n');
+    }
     default:
       return '';
   }
@@ -194,10 +236,28 @@ async function exportReport(filters = {}) {
       case 'expense': reportData = await reportService.getExpenseReport({ from, to }); break;
       case 'staff': reportData = await reportService.getStaffReport({ from, to }); break;
       case 'pl': reportData = await reportService.getProfitLoss({ from, to }); break;
+      case 'discounted':
+      case 'discounted_bills':
+      case 'discount_bill':
+      case 'discount_bills':
+        reportData = await reportService.getDiscountedBillsReport({ from, to });
+        break;
+      case 'khata':
+      case 'khata_report':
+      case 'khata_reports':
+        reportData = await reportService.getKhataReport({ from, to });
+        break;
       default: return { success: false, error: 'Invalid report type.' };
     }
 
-    const csv = buildExportCsv(normalizedType === 'all_reports' || normalizedType === 'all_report' ? 'all' : normalizedType, reportData, { from, to });
+    const mappedType = normalizedType === 'all_reports' || normalizedType === 'all_report'
+      ? 'all'
+      : normalizedType.includes('discount')
+        ? 'discounted'
+        : normalizedType.includes('khata')
+          ? 'khata'
+          : normalizedType;
+    const csv = buildExportCsv(mappedType, reportData, { from, to });
     const fromLabel = (from || '').split('T')[0] || 'start';
     const toLabel = (to || '').split('T')[0] || 'end';
     const defaultName = `report_${type}_${fromLabel}_to_${toLabel}.csv`;

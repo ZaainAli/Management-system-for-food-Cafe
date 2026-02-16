@@ -2,6 +2,7 @@ const billModel = require('../models/bill.model');
 const expenseModel = require('../models/expense.model');
 const employeeModel = require('../models/employee.model');
 const salesModel = require('../models/sales.model');
+const khataModel = require('../models/khata.model');
 
 function getDateRange(period = 'today') {
   const now = new Date();
@@ -28,6 +29,14 @@ function getDateRange(period = 'today') {
     default:
       return { from: startOfDay(now).toISOString(), to: now.toISOString() };
   }
+}
+
+function toIsoStartOfDay(dateStr) {
+  return `${dateStr}T00:00:00.000Z`;
+}
+
+function toIsoEndOfDay(dateStr) {
+  return `${dateStr}T23:59:59.999Z`;
 }
 
 async function getDashboardStats(filters = {}) {
@@ -155,4 +164,83 @@ async function getProfitLoss(filters = {}) {
   };
 }
 
-module.exports = { getDashboardStats, getSalesReport, getExpenseReport, getStaffReport, getProfitLoss };
+async function getDiscountedBillsReport(filters = {}) {
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
+
+  const discountedBills = await billModel.getDiscountedBills({ from, to });
+  const totals = discountedBills.reduce((acc, row) => {
+    acc.totalBillAmount += Number(row.billAmount) || 0;
+    acc.totalDiscount += Number(row.discountAmount) || 0;
+    acc.totalFinalAmount += Number(row.finalAmount) || 0;
+    return acc;
+  }, { totalBillAmount: 0, totalDiscount: 0, totalFinalAmount: 0 });
+
+  return {
+    records: discountedBills,
+    totalRecords: discountedBills.length,
+    totalBillAmount: parseFloat(totals.totalBillAmount.toFixed(2)),
+    totalDiscount: parseFloat(totals.totalDiscount.toFixed(2)),
+    totalFinalAmount: parseFloat(totals.totalFinalAmount.toFixed(2)),
+    period: filters.period || 'month',
+  };
+}
+
+async function getKhataReport(filters = {}) {
+  const { from, to } = (filters.from && filters.to)
+    ? { from: filters.from, to: filters.to }
+    : getDateRange(filters.period || 'month');
+
+  const fromDate = from.split('T')[0];
+  const toDate = to.split('T')[0];
+  const txFrom = toIsoStartOfDay(fromDate);
+  const txTo = toIsoEndOfDay(toDate);
+
+  const profiles = await khataModel.getAllProfiles();
+  const transactions = [];
+
+  for (const profile of profiles) {
+    const profileTx = await khataModel.getTransactionsByKhataId(profile.id);
+    for (const tx of profileTx) {
+      const txDateIso = toIsoStartOfDay(tx.date);
+      if (txDateIso >= txFrom && txDateIso <= txTo) {
+        transactions.push({
+          ...tx,
+          khataName: profile.name,
+          khataPhone: profile.phone,
+        });
+      }
+    }
+  }
+
+  const dueTotal = transactions
+    .filter(tx => tx.type === 'due')
+    .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const paidTotal = transactions
+    .filter(tx => tx.type === 'payment')
+    .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+  return {
+    profiles,
+    transactions: transactions.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || '')),
+    summary: {
+      totalProfiles: profiles.length,
+      totalOutstandingBalance: parseFloat(profiles.reduce((sum, p) => sum + (Number(p.balance) || 0), 0).toFixed(2)),
+      transactionsInRange: transactions.length,
+      totalDueInRange: parseFloat(dueTotal.toFixed(2)),
+      totalPaidInRange: parseFloat(paidTotal.toFixed(2)),
+    },
+    period: filters.period || 'month',
+  };
+}
+
+module.exports = {
+  getDashboardStats,
+  getSalesReport,
+  getExpenseReport,
+  getStaffReport,
+  getProfitLoss,
+  getDiscountedBillsReport,
+  getKhataReport,
+};

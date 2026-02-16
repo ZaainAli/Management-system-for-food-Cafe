@@ -39,6 +39,12 @@ function registerKhataRoutes() {
       });
     });
   });
+
+  ipcMain.handle('khata:exportProfile', async (_event, payload) => {
+    return requireAuth(async () => {
+      return khataController.exportProfile(payload);
+    });
+  });
 }
 
 module.exports = { registerKhataRoutes };

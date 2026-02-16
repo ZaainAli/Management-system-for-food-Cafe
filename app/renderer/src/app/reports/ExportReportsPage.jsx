@@ -6,6 +6,8 @@ const reportTypes = [
   { id: 'expense', label: 'Expenses' },
   { id: 'staff', label: 'Staff' },
   { id: 'pl', label: 'Profit & Loss' },
+  { id: 'discounted', label: 'Discounted Bills' },
+  { id: 'khata', label: 'Khata' },
 ];
 
 function toIsoStart(dateStr) {

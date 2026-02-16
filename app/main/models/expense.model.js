@@ -35,18 +35,49 @@ function findById(id) {
 function insert(expense) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO expenses (id, description, amount, category, date, notes, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(expense.id, expense.description, expense.amount, expense.category, expense.date, expense.notes, expense.createdAt);
+    INSERT INTO expenses (
+      id, description, amount, category, date,
+      sourceType, sourceEntityId, sourceEntityName, sourceRecordId,
+      notes, createdAt
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    expense.id,
+    expense.description,
+    expense.amount,
+    expense.category,
+    expense.date,
+    expense.sourceType,
+    expense.sourceEntityId,
+    expense.sourceEntityName,
+    expense.sourceRecordId,
+    expense.notes,
+    expense.createdAt
+  );
   return expense;
 }
 
 function update(expense) {
   const db = getDb();
   db.prepare(`
-    UPDATE expenses SET description = ?, amount = ?, category = ?, date = ?, notes = ?, updatedAt = ?
+    UPDATE expenses
+    SET description = ?, amount = ?, category = ?, date = ?,
+        sourceType = ?, sourceEntityId = ?, sourceEntityName = ?, sourceRecordId = ?,
+        notes = ?, updatedAt = ?
     WHERE id = ?
-  `).run(expense.description, expense.amount, expense.category, expense.date, expense.notes, expense.updatedAt, expense.id);
+  `).run(
+    expense.description,
+    expense.amount,
+    expense.category,
+    expense.date,
+    expense.sourceType || 'manual',
+    expense.sourceEntityId || null,
+    expense.sourceEntityName || '',
+    expense.sourceRecordId || null,
+    expense.notes || '',
+    expense.updatedAt,
+    expense.id
+  );
   return expense;
 }
 

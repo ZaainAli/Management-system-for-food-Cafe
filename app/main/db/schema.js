@@ -104,6 +104,10 @@ function runMigrations(db) {
       amount REAL NOT NULL,
       category TEXT NOT NULL,
       date TEXT NOT NULL,
+      sourceType TEXT NOT NULL DEFAULT 'manual', -- manual | khata | salary
+      sourceEntityId TEXT DEFAULT NULL, -- khata profile id | employee id
+      sourceEntityName TEXT DEFAULT '',
+      sourceRecordId TEXT DEFAULT NULL, -- khata transaction id | salary record id
       notes TEXT DEFAULT '',
       createdAt TEXT NOT NULL,
       updatedAt TEXT
@@ -208,6 +212,24 @@ function runMigrations(db) {
   const menuCols = db.prepare("PRAGMA table_info(menu_items)").all().map(c => c.name);
   if (!menuCols.includes('halfPrice')) {
     db.prepare('ALTER TABLE menu_items ADD COLUMN halfPrice REAL').run();
+  }
+
+  const expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+  if (!expenseCols.includes('sourceType')) {
+    db.prepare("ALTER TABLE expenses ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'manual'").run();
+    logger.info('Migration: Added sourceType column to expenses table');
+  }
+  if (!expenseCols.includes('sourceEntityId')) {
+    db.prepare('ALTER TABLE expenses ADD COLUMN sourceEntityId TEXT DEFAULT NULL').run();
+    logger.info('Migration: Added sourceEntityId column to expenses table');
+  }
+  if (!expenseCols.includes('sourceEntityName')) {
+    db.prepare("ALTER TABLE expenses ADD COLUMN sourceEntityName TEXT DEFAULT ''").run();
+    logger.info('Migration: Added sourceEntityName column to expenses table');
+  }
+  if (!expenseCols.includes('sourceRecordId')) {
+    db.prepare('ALTER TABLE expenses ADD COLUMN sourceRecordId TEXT DEFAULT NULL').run();
+    logger.info('Migration: Added sourceRecordId column to expenses table');
   }
 
   // Backfill daily_sales once (if empty)

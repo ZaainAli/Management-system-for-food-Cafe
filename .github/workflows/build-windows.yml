@@ -20,9 +20,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Rebuild native modules for Electron
-        run: npm run rebuild
-
       - name: Build Windows installer
         run: npm run build:win
 

@@ -20,6 +20,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Rebuild better-sqlite3 for Electron
+        run: npx prebuild-install -r electron -t 28.3.3 --arch x64
+        working-directory: node_modules/better-sqlite3
+
       - name: Build Windows installer
         run: npm run build:win
 

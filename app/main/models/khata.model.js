@@ -72,6 +72,26 @@ function insertTransaction(tx) {
   return tx;
 }
 
+function getTransactionById(id) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM khata_transactions WHERE id = ?').get(id) || null;
+}
+
+function updateTransaction(tx) {
+  const db = getDb();
+  db.prepare(`
+    UPDATE khata_transactions
+    SET khataId = ?, type = ?, amount = ?, paymentSource = ?, note = ?, date = ?
+    WHERE id = ?
+  `).run(tx.khataId, tx.type, tx.amount, tx.paymentSource, tx.note || '', tx.date, tx.id);
+  return tx;
+}
+
+function removeTransaction(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM khata_transactions WHERE id = ?').run(id);
+}
+
 module.exports = {
   getAllProfiles,
   getProfileById,
@@ -80,4 +100,7 @@ module.exports = {
   updateProfile,
   getTransactionsByKhataId,
   insertTransaction,
+  getTransactionById,
+  updateTransaction,
+  removeTransaction,
 };

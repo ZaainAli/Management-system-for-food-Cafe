@@ -16,6 +16,8 @@ export default function KhataPage() {
   const [dueForm, setDueForm] = useState(emptyDueForm);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const fetchProfiles = async () => {
     const res = await window.api.khata.getAll();
@@ -46,6 +48,7 @@ export default function KhataPage() {
 
   const handleAddProfile = async () => {
     setError('');
+    setMessage('');
     const res = await window.api.khata.addProfile(profileForm);
     if (res.success) {
       setShowProfileModal(false);
@@ -58,6 +61,7 @@ export default function KhataPage() {
 
   const handleAddDue = async () => {
     setError('');
+    setMessage('');
     const res = await window.api.khata.addDue({ ...dueForm, khataId: activeId });
     if (res.success) {
       setDueForm(emptyDueForm);
@@ -70,6 +74,7 @@ export default function KhataPage() {
 
   const handleAddPayment = async () => {
     setError('');
+    setMessage('');
     const res = await window.api.khata.addPayment({ ...paymentForm, khataId: activeId });
     if (res.success) {
       setPaymentForm(emptyPaymentForm);
@@ -82,6 +87,27 @@ export default function KhataPage() {
 
   const handlePayFull = () => {
     if (balance > 0) setPaymentForm({ ...paymentForm, amount: balance });
+  };
+
+  const handleExportProfile = async () => {
+    if (!activeId || exporting) return;
+    setError('');
+    setMessage('');
+    setExporting(true);
+    try {
+      const res = await window.api.khata.exportProfile({ id: activeId });
+      if (res?.canceled) {
+        setMessage('Export canceled.');
+      } else if (res?.success) {
+        setMessage(`Khata exported to ${res.path}`);
+      } else {
+        setError(res?.error || 'Failed to export khata.');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to export khata.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) return <div className="text-slate-400">Loading khata...</div>;
@@ -142,11 +168,19 @@ export default function KhataPage() {
                   <div className={`text-xl font-bold ${balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     PKR {Number(balance || 0).toLocaleString()}
                   </div>
+                  <button
+                    onClick={handleExportProfile}
+                    disabled={exporting}
+                    className={`btn-secondary mt-3 text-xs ${exporting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {exporting ? 'Exporting...' : 'Export Khata CSV'}
+                  </button>
                 </div>
               </div>
             </div>
 
             {error && <div className="card border-red-600 text-red-300 text-sm">{error}</div>}
+            {message && <div className="card border-emerald-600 text-emerald-300 text-sm">{message}</div>}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="card">

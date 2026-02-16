@@ -83,15 +83,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        <div className="card">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3">Tips</h2>
-          <ul className="text-xs text-slate-500 space-y-2">
-            <li>• Use the POS module to create new bills quickly.</li>
-            <li>• Track stock levels to avoid running out of ingredients.</li>
-            <li>• Log expenses consistently for accurate P&L reports.</li>
-            <li>• Check the Reports tab for detailed analytics.</li>
-          </ul>
-        </div>
+
       </div>
     </div>
   );

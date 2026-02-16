@@ -88,6 +88,7 @@ const khataAPI = {
   addProfile: (payload) => ipcRenderer.invoke('khata:addProfile', payload),
   addDue: (payload) => ipcRenderer.invoke('khata:addDue', payload),
   addPayment: (payload) => ipcRenderer.invoke('khata:addPayment', payload),
+  exportProfile: (payload) => ipcRenderer.invoke('khata:exportProfile', payload),
 };
 
 // ─── Window API ─────────────────────────────────────────────

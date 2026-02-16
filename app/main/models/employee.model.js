@@ -118,6 +118,26 @@ function getAllSalaryRecords(filters = {}) {
   return db.prepare(query).all(...params);
 }
 
+function getSalaryRecordById(id) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM salary_records WHERE id = ?').get(id) || null;
+}
+
+function updateSalaryRecord(record) {
+  const db = getDb();
+  db.prepare(`
+    UPDATE salary_records
+    SET amount = ?, payDate = ?, notes = ?, employeeName = ?
+    WHERE id = ?
+  `).run(record.amount, record.payDate, record.notes || '', record.employeeName, record.id);
+  return record;
+}
+
+function removeSalaryRecord(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM salary_records WHERE id = ?').run(id);
+}
+
 // ─── Attendance ─────────────────────────────────────────────
 
 function markAttendance({ id, employeeId, date, status, notes }) {
@@ -163,5 +183,6 @@ function getAttendance(filters = {}) {
 module.exports = {
   findAll, findById, create, update, remove,
   insertSalaryRecord, getSalaryRecords, getAllSalaryRecords,
+  getSalaryRecordById, updateSalaryRecord, removeSalaryRecord,
   markAttendance, getAttendance,
 };

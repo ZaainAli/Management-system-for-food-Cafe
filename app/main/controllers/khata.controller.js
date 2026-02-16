@@ -1,5 +1,33 @@
+const fs = require('fs');
+const path = require('path');
+const { app, dialog } = require('electron');
 const khataService = require('../services/khata.service');
 const logger = require('../utils/logger');
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function toCsv(headers, rows) {
+  const lines = [];
+  lines.push(headers.map(csvEscape).join(','));
+  for (const row of rows) {
+    lines.push(row.map(csvEscape).join(','));
+  }
+  return lines.join('\n');
+}
+
+function sanitizeFilename(value) {
+  return String(value || 'khata_profile')
+    .trim()
+    .replace(/[^a-zA-Z0-9-_ ]/g, '')
+    .replace(/\s+/g, '_');
+}
 
 async function getAllProfiles() {
   try {
@@ -52,4 +80,63 @@ async function addPayment(payload) {
   }
 }
 
-module.exports = { getAllProfiles, getById, addProfile, addDue, addPayment };
+async function exportProfile(payload = {}) {
+  try {
+    const { id } = payload;
+    if (!id) return { success: false, error: 'Khata profile id is required' };
+
+    const data = await khataService.getById(id);
+    if (!data) return { success: false, error: 'Khata profile not found' };
+
+    const { profile, transactions } = data;
+    const profileName = sanitizeFilename(profile.name);
+    const today = new Date().toISOString().split('T')[0];
+    const defaultPath = path.join(app.getPath('documents'), `khata_${profileName}_${today}.csv`);
+
+    const parts = [];
+    parts.push('Khata Profile');
+    parts.push(toCsv(
+      ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'],
+      [[
+        profile.name,
+        profile.phone,
+        profile.businessDetails,
+        profile.totalDue,
+        profile.totalPaid,
+        profile.balance,
+        profile.createdAt,
+      ]]
+    ));
+    parts.push('');
+    parts.push('Transactions');
+    parts.push(toCsv(
+      ['Date', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'],
+      (transactions || []).map((tx) => [
+        tx.date,
+        tx.type,
+        tx.amount,
+        tx.paymentSource,
+        tx.note,
+        tx.createdAt,
+      ])
+    ));
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'Export Khata Profile',
+      defaultPath,
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    const finalPath = filePath.toLowerCase().endsWith('.csv') ? filePath : `${filePath}.csv`;
+    fs.writeFileSync(finalPath, parts.join('\n'), 'utf8');
+
+    return { success: true, path: finalPath };
+  } catch (err) {
+    logger.error('khata:exportProfile failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+module.exports = { getAllProfiles, getById, addProfile, addDue, addPayment, exportProfile };

@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
-const emptyForm = { description: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], notes: '' };
+const emptyForm = {
+  description: '',
+  amount: '',
+  category: '',
+  date: new Date().toISOString().split('T')[0],
+  notes: '',
+  sourceType: 'manual',
+  sourceEntityId: '',
+};
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState([]);
@@ -10,32 +18,76 @@ export default function ExpensesPage() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [khataProfiles, setKhataProfiles] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [formError, setFormError] = useState('');
 
   const fetchData = async () => {
     const filters = activeCategory !== 'All' ? { category: activeCategory } : {};
-    const [expRes, catRes] = await Promise.all([
+    const [expRes, catRes, khataRes, staffRes] = await Promise.all([
       window.api.expense.getAll(filters),
       window.api.expense.getCategories(),
+      window.api.khata.getAll(),
+      window.api.staff.getAll({ isActive: true }),
     ]);
     if (expRes.success) setExpenses(expRes.data);
     if (catRes.success) setCategories(catRes.data);
+    if (khataRes.success) setKhataProfiles(khataRes.data || []);
+    if (staffRes.success) setEmployees(staffRes.data || []);
     setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [activeCategory]);
 
-  const openAdd = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
+  const openAdd = () => {
+    setFormError('');
+    setForm(emptyForm);
+    setEditId(null);
+    setShowModal(true);
+  };
   const openEdit = (exp) => {
-    setForm({ description: exp.description, amount: exp.amount, category: exp.category, date: exp.date, notes: exp.notes || '' });
+    setFormError('');
+    setForm({
+      description: exp.description,
+      amount: exp.amount,
+      category: exp.category,
+      date: exp.date,
+      notes: exp.notes || '',
+      sourceType: exp.sourceType || 'manual',
+      sourceEntityId: exp.sourceEntityId || '',
+    });
     setEditId(exp.id);
     setShowModal(true);
   };
 
   const handleSave = async () => {
+    setFormError('');
+    if (!form.description?.trim()) {
+      setFormError('Description is required.');
+      return;
+    }
+    if (!form.amount || Number(form.amount) <= 0) {
+      setFormError('Amount must be greater than 0.');
+      return;
+    }
+    if (!form.category?.trim()) {
+      setFormError('Category is required.');
+      return;
+    }
+    if (form.sourceType !== 'manual' && !form.sourceEntityId) {
+      setFormError(form.sourceType === 'khata' ? 'Select a khata profile.' : 'Select an employee.');
+      return;
+    }
+
     let res;
     if (editId) res = await window.api.expense.update({ id: editId, ...form });
     else res = await window.api.expense.add(form);
-    if (res.success) { setShowModal(false); await fetchData(); }
+    if (res.success) {
+      setShowModal(false);
+      await fetchData();
+    } else {
+      setFormError(res?.error || 'Failed to save expense.');
+    }
   };
 
   const handleDelete = async (id) => {
@@ -80,6 +132,7 @@ export default function ExpensesPage() {
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Date</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Description</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Category</th>
+              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Source</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Amount</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -90,6 +143,9 @@ export default function ExpensesPage() {
                 <td className="px-4 py-3 text-slate-400 text-xs">{exp.date}</td>
                 <td className="px-4 py-3 text-white">{exp.description}</td>
                 <td className="px-4 py-3"><span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded-full">{exp.category}</span></td>
+                <td className="px-4 py-3 text-slate-400 text-xs">
+                  {exp.sourceType === 'khata' ? `Khata: ${exp.sourceEntityName || '-'}` : exp.sourceType === 'salary' ? `Salary: ${exp.sourceEntityName || '-'}` : 'Manual'}
+                </td>
                 <td className="px-4 py-3 text-red-400 font-medium">PKR {exp.amount.toLocaleString()}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
@@ -99,7 +155,7 @@ export default function ExpensesPage() {
                 </td>
               </tr>
             ))}
-            {expenses.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-600 text-sm">No expenses found</td></tr>}
+            {expenses.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-600 text-sm">No expenses found</td></tr>}
           </tbody>
         </table>
       </div>
@@ -112,8 +168,58 @@ export default function ExpensesPage() {
               <h2 className="text-white font-semibold">{editId ? 'Edit Expense' : 'Add Expense'}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white">✕</button>
             </div>
+            {formError && <div className="mb-3 text-red-300 text-sm">{formError}</div>}
             <div className="space-y-3">
               <div><label className="label">Description</label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="input-field" /></div>
+              <div>
+                <label className="label">Expense On Behalf Of</label>
+                <select
+                  value={form.sourceType}
+                  onChange={(e) => {
+                    const sourceType = e.target.value;
+                    const next = { ...form, sourceType, sourceEntityId: '' };
+                    if (sourceType === 'khata' && (!form.category || form.category === 'Salary')) next.category = 'Khata Payment';
+                    if (sourceType === 'salary' && (!form.category || form.category === 'Khata Payment')) next.category = 'Salary';
+                    if (sourceType === 'manual' && (form.category === 'Khata Payment' || form.category === 'Salary')) next.category = '';
+                    setForm(next);
+                  }}
+                  className="input-field"
+                >
+                  <option value="manual">Manual Expense</option>
+                  <option value="khata">Khata</option>
+                  <option value="salary">Salary</option>
+                </select>
+              </div>
+              {form.sourceType === 'khata' && (
+                <div>
+                  <label className="label">Khata Profile</label>
+                  <select
+                    value={form.sourceEntityId}
+                    onChange={e => setForm({ ...form, sourceEntityId: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">Select khata profile</option>
+                    {khataProfiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {form.sourceType === 'salary' && (
+                <div>
+                  <label className="label">Employee</label>
+                  <select
+                    value={form.sourceEntityId}
+                    onChange={e => setForm({ ...form, sourceEntityId: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">Select employee</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Amount (PKR)</label><input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className="input-field" /></div>
                 <div><label className="label">Date</label><input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="input-field" /></div>

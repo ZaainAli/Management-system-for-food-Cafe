@@ -88,7 +88,11 @@ export default function MenuPage() {
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this menu item?')) return;
-    await window.api.pos.deleteMenuItem({ id });
+    const res = await window.api.pos.deleteMenuItem({ id });
+    if (!res?.success) {
+      alert(res?.error || 'Failed to delete menu item');
+      return;
+    }
     await fetchData();
   };
 

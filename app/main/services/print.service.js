@@ -1,4 +1,7 @@
 const { execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const logger = require('../utils/logger');
 
 const RECEIPT_WIDTH = 42; // characters for 80mm thermal printer
@@ -97,8 +100,15 @@ async function printBillReceipt(bill, options = {}) {
   const text = renderReceiptText(bill, options);
   const printerName = options.deviceName || 'TM-T88V';
 
-  logger.info(`Printing receipt for bill #${bill.id} on printer: ${printerName}`);
+  logger.info(`Printing receipt for bill #${bill.id} on printer: ${printerName} (platform: ${process.platform})`);
 
+  if (process.platform === 'win32') {
+    return printWindows(text, printerName);
+  }
+  return printUnix(text, printerName);
+}
+
+function printUnix(text, printerName) {
   return new Promise((resolve, reject) => {
     const lp = execFile('lp', ['-d', printerName, '-o', 'raw'], (err, stdout, stderr) => {
       if (err) {
@@ -112,8 +122,128 @@ async function printBillReceipt(bill, options = {}) {
       return resolve({ skipped: false });
     });
 
-    lp.stdin.write(text);
+    lp.stdin.write(text, 'binary');
     lp.stdin.end();
+  });
+}
+
+function printWindows(text, printerName) {
+  return new Promise((resolve, reject) => {
+    const tmpFile = path.join(os.tmpdir(), `receipt_${Date.now()}.bin`);
+
+    try {
+      fs.writeFileSync(tmpFile, Buffer.from(text, 'binary'));
+    } catch (writeErr) {
+      return reject(new Error(`Failed to write temp receipt file: ${writeErr.message}`));
+    }
+
+    // Escape values for safe PowerShell string interpolation
+    const psFile = tmpFile.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const psPrinter = printerName.replace(/"/g, '\\"');
+
+    // Use Win32 WritePrinter API via PowerShell to send raw ESC/POS bytes.
+    // This is the only reliable way to send raw bytes to a Windows printer
+    // without the spooler re-processing them.
+    const psScript = `
+$printerName = "${psPrinter}"
+$tempFile    = "${psFile}"
+$bytes       = [System.IO.File]::ReadAllBytes($tempFile)
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class RawPrinterHelper {
+    [DllImport("winspool.Drv", EntryPoint="OpenPrinterA", SetLastError=true,
+        CharSet=CharSet.Ansi, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+
+    [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true,
+        ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool ClosePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint="StartDocPrinterA", SetLastError=true,
+        CharSet=CharSet.Ansi, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern Int32 StartDocPrinter(IntPtr hPrinter, Int32 level,
+        [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+
+    [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true,
+        ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true,
+        ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint="EndPagePrinter", SetLastError=true,
+        ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true,
+        ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes,
+        Int32 dwCount, out Int32 dwWritten);
+
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
+    public class DOCINFOA {
+        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    }
+}
+"@
+
+$di            = New-Object RawPrinterHelper+DOCINFOA
+$di.pDocName   = "Receipt"
+$di.pOutputFile = $null
+$di.pDataType  = "RAW"
+
+$hPrinter = [IntPtr]::Zero
+if (-not [RawPrinterHelper]::OpenPrinter($printerName, [ref]$hPrinter, [IntPtr]::Zero)) {
+    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+    throw "Cannot open printer '$printerName'. Verify the name in Windows Devices and Printers."
+}
+
+try {
+    if ([RawPrinterHelper]::StartDocPrinter($hPrinter, 1, $di) -le 0) {
+        throw "StartDocPrinter failed"
+    }
+    [RawPrinterHelper]::StartPagePrinter($hPrinter) | Out-Null
+
+    $ptr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
+    try {
+        [System.Runtime.InteropServices.Marshal]::Copy($bytes, 0, $ptr, $bytes.Length)
+        $written = 0
+        if (-not [RawPrinterHelper]::WritePrinter($hPrinter, $ptr, $bytes.Length, [ref]$written)) {
+            throw "WritePrinter failed (wrote $written of $($bytes.Length) bytes)"
+        }
+    } finally {
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
+    }
+
+    [RawPrinterHelper]::EndPagePrinter($hPrinter) | Out-Null
+    [RawPrinterHelper]::EndDocPrinter($hPrinter) | Out-Null
+} finally {
+    [RawPrinterHelper]::ClosePrinter($hPrinter) | Out-Null
+    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+}
+
+Write-Output "OK"
+`;
+
+    execFile(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command', psScript],
+      (err, stdout, stderr) => {
+        fs.unlink(tmpFile, () => {}); // best-effort cleanup
+        if (err) {
+          const msg = (stderr && stderr.trim()) || err.message;
+          logger.error(`Windows print error: ${msg}`);
+          return reject(new Error(msg));
+        }
+        logger.info(`Windows print job submitted. Output: ${stdout.trim()}`);
+        return resolve({ skipped: false });
+      }
+    );
   });
 }
 

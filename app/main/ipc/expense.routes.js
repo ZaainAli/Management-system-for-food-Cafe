@@ -18,7 +18,7 @@ function registerExpenseRoutes() {
 
   ipcMain.handle('expense:add', async (_event, expense) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager','cashier'], async () => {
         return expenseController.add(expense);
       });
     });

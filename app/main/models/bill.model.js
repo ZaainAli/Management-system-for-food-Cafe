@@ -88,7 +88,7 @@ function getTodayBillCount(dateStr) {
   return result.count;
 }
 
-function insertBill(bill) {
+function insertBill(bill, stockAdjustments = []) {
   const db = getDb();
 
   // Use a transaction to insert bill + line items atomically
@@ -105,6 +105,36 @@ function insertBill(bill) {
 
     for (const item of bill.items) {
       insertItem.run(item.id, bill.id, item.menuItemId, item.name, item.price, item.quantity, item.lineTotal);
+    }
+
+    if (stockAdjustments.length > 0) {
+      const getStock = db.prepare('SELECT * FROM stock_items WHERE id = ?');
+      const updateStock = db.prepare('UPDATE stock_items SET quantity = ?, updatedAt = ? WHERE id = ?');
+      const insertAdjustment = db.prepare(`
+        INSERT INTO stock_adjustments (id, stockItemId, previousQty, adjustment, newQty, reason, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const adjustment of stockAdjustments) {
+        const stockItem = getStock.get(adjustment.stockItemId);
+        if (!stockItem) throw new Error(`Linked stock item not found: ${adjustment.stockItemId}`);
+        if (stockItem.quantity < adjustment.consumeQty) {
+          throw new Error(`Not enough stock for ${stockItem.name}. Available ${stockItem.quantity}, required ${adjustment.consumeQty}`);
+        }
+        const nextQty = stockItem.quantity - adjustment.consumeQty;
+        const updatedAt = adjustment.createdAt || new Date().toISOString();
+
+        updateStock.run(nextQty, updatedAt, stockItem.id);
+        insertAdjustment.run(
+          adjustment.id,
+          stockItem.id,
+          stockItem.quantity,
+          -adjustment.consumeQty,
+          nextQty,
+          adjustment.reason || '',
+          adjustment.createdAt || new Date().toISOString()
+        );
+      }
     }
   });
 

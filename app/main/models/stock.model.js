@@ -10,6 +10,11 @@ function findById(id) {
   return db.prepare('SELECT * FROM stock_items WHERE id = ?').get(id) || null;
 }
 
+function findByName(name) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM stock_items WHERE lower(trim(name)) = lower(trim(?))').get(name) || null;
+}
+
 function insert(item) {
   const db = getDb();
   db.prepare(`
@@ -52,4 +57,4 @@ function getDistinctCategories() {
   return db.prepare('SELECT DISTINCT category FROM stock_items ORDER BY category ASC').all().map(r => r.category);
 }
 
-module.exports = { findAll, findById, insert, update, remove, insertAdjustmentLog, findBelowThreshold, getDistinctCategories };
+module.exports = { findAll, findById, findByName, insert, update, remove, insertAdjustmentLog, findBelowThreshold, getDistinctCategories };

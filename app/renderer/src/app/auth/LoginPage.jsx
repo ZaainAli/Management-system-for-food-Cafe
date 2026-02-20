@@ -38,7 +38,7 @@ export default function LoginPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">Restaurant Manager</h1>
+          <h1 className="text-2xl font-bold text-white">Hamza & Brother Food Chain</h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to your account</p>
         </div>
 
@@ -57,7 +57,7 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="username"
                 className="input-field"
               />
             </div>

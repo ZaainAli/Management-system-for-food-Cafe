@@ -6,6 +6,7 @@ const GRID_KEYS = 'abcdfghjklmnsvxz'.split(''); // 16 letters excluding quick ke
 
 export default function POSPage() {
   const [menuItems, setMenuItems] = useState([]);
+  const [stockItems, setStockItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tables, setTables] = useState([]);
   const [quickKeys, setQuickKeys] = useState([]);
@@ -16,6 +17,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [loading, setLoading] = useState(true);
   const [billSuccess, setBillSuccess] = useState(null);
+  const [billError, setBillError] = useState(null);
   const [printWarning, setPrintWarning] = useState(null);
   const [fsm, setFsm] = useState('IDLE');           // 'IDLE' | 'PRICE' | 'QTY'
   const [pendingLineId, setPendingLineId] = useState(null);
@@ -24,13 +26,15 @@ export default function POSPage() {
 
   useEffect(() => {
     (async () => {
-      const [itemsRes, catsRes, tablesRes, qkRes] = await Promise.all([
+      const [itemsRes, stockRes, catsRes, tablesRes, qkRes] = await Promise.all([
         window.api.pos.getMenuItems(),
+        window.api.stock.getAll(),
         window.api.pos.getMenuCategories(),
         window.api.pos.getTables(),
         window.api.pos.getQuickKeys(),
       ]);
       if (itemsRes.success) setMenuItems(itemsRes.data);
+      if (stockRes.success) setStockItems(stockRes.data);
       if (catsRes.success) setCategories(catsRes.data);
       if (tablesRes.success) setTables(tablesRes.data);
       if (qkRes.success) setQuickKeys(qkRes.data);
@@ -45,6 +49,14 @@ export default function POSPage() {
       return () => clearTimeout(t);
     }
   }, [billSuccess]);
+
+  // Auto-dismiss error toast
+  useEffect(() => {
+    if (billError) {
+      const t = setTimeout(() => setBillError(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [billError]);
 
   // Auto-dismiss print warning toast
   useEffect(() => {
@@ -75,6 +87,15 @@ export default function POSPage() {
       : menuItems.filter(i => i.categoryName === activeCategory);
     return byCategory.filter(i => i.isAvailable && !quickKeyItemIds.has(i.id));
   }, [menuItems, activeCategory, quickKeyItemIds]);
+
+  const stockByMenuName = useMemo(() => {
+    const map = {};
+    stockItems.forEach(item => {
+      const key = (item.name || '').trim().toLowerCase();
+      if (key) map[key] = item;
+    });
+    return map;
+  }, [stockItems]);
 
   // Grid key map: a,b,c,d,f,g,h,j,k,l,m,n,s,v,x,z → filtered items (changes with category)
   const keyToItem = useMemo(() => {
@@ -122,6 +143,7 @@ export default function POSPage() {
 
   const createBill = async () => {
     if (cart.length === 0) return;
+    setBillError(null);
     const res = await window.api.pos.createBill({
       items: cart.map(i => ({ menuItemId: i.id, quantity: i.quantity, priceOverride: i.price })),
       tableId: selectedTableId || null,
@@ -130,6 +152,8 @@ export default function POSPage() {
     });
     if (res.success) {
       setBillSuccess(res.data);
+      const stockRes = await window.api.stock.getAll();
+      if (stockRes.success) setStockItems(stockRes.data);
       if (res.printError || res.printSkipped) {
         setPrintWarning(res.printError || 'Receipt could not be printed');
       }
@@ -140,7 +164,9 @@ export default function POSPage() {
       setFsm('IDLE');
       setDiscount(0);
       setSelectedTableId('');
+      return;
     }
+    setBillError(res?.error || 'Could not create bill');
   };
 
   // Keyboard state machine for fast billing
@@ -471,7 +497,9 @@ export default function POSPage() {
             {cart.length === 0 ? (
               <p className="text-slate-600 text-xs text-center py-8">No items in order</p>
             ) : (
-              cart.map(item => (
+              cart.map(item => {
+                const linkedStock = stockByMenuName[(item.name || '').trim().toLowerCase()];
+                return (
                 <div
                   key={item.lineId}
                   onClick={() => {
@@ -502,7 +530,9 @@ export default function POSPage() {
                           ? `Typing: ${inputBufferRef.current}`
                           : pendingLineId === item.lineId && fsm === 'QTY' && inputBufferRef.current
                           ? `Qty: ${inputBufferRef.current}`
-                          : 'Unit price'}
+                          : linkedStock
+                          ? `Stock: ${linkedStock.name} (${linkedStock.quantity} ${linkedStock.unit})`
+                          : 'Stock: not linked'}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -533,7 +563,8 @@ export default function POSPage() {
                     </div>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -605,6 +636,17 @@ export default function POSPage() {
         {billSuccess && (
           <div className="mt-3 bg-green-900/30 border border-green-700/50 text-green-300 text-xs rounded-lg px-4 py-3 text-center">
             Bill created successfully!
+            {Array.isArray(billSuccess.stockAdjustments) && billSuccess.stockAdjustments.length > 0 && (
+              <div className="mt-1 text-[11px] text-green-200">
+                {billSuccess.stockAdjustments.map(s => `${s.stockItemName}: -${s.consumedQty} (${s.remainingQty} left)`).join(' | ')}
+              </div>
+            )}
+          </div>
+        )}
+
+        {billError && (
+          <div className="mt-3 bg-red-900/30 border border-red-700/50 text-red-300 text-xs rounded-lg px-4 py-3 text-center">
+            {billError}
           </div>
         )}
 

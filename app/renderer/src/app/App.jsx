@@ -18,8 +18,9 @@ import UsersPage from './users/UsersPage';
 
 function ProtectedRoute({ permission, children }) {
   const { permissions } = useAuth();
+  const fallbackPath = permissions.canAccessDashboard ? '/' : '/pos';
   if (permission && !permissions[permission]) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={fallbackPath} replace />;
   }
   return children;
 }
@@ -39,6 +40,8 @@ export default function App({ isPOSWindow }) {
     return <LoginPage />;
   }
 
+  const defaultPath = user.role === 'cashier' ? '/pos' : '/';
+
   // POS window: render only the POS page with TitleBar, no sidebar
   if (isPOSWindow) {
     return (
@@ -51,12 +54,15 @@ export default function App({ isPOSWindow }) {
         </div>
       </div>
     );
-  }
+  } 
 
   return (
     <SidebarLayout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={user.role === 'cashier'
+          ? <Navigate to="/pos" replace />
+          : <ProtectedRoute permission="canAccessDashboard"><Dashboard /></ProtectedRoute>
+        } />
         <Route path="/pos" element={<POSPage />} />
         <Route path="/menu" element={
           <ProtectedRoute permission="canManageMenu"><MenuPage /></ProtectedRoute>
@@ -77,15 +83,15 @@ export default function App({ isPOSWindow }) {
           <ProtectedRoute permission="canAccessReports"><ReportsPage /></ProtectedRoute>
         } />
         <Route path="/reports/export" element={
-          <ProtectedRoute permission="canAccessReports"><ExportReportsPage /></ProtectedRoute>
+          <ProtectedRoute permission="canAccessExportReports"><ExportReportsPage /></ProtectedRoute>
         } />
         <Route path="/reports/discount" element={
-          <ProtectedRoute permission="canAccessReports"><DiscountReportPage /></ProtectedRoute>
+          <ProtectedRoute permission="canAccessDiscountReports"><DiscountReportPage /></ProtectedRoute>
         } />
         <Route path="/users" element={
           <ProtectedRoute permission="canManageUsers"><UsersPage /></ProtectedRoute>
         } />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </SidebarLayout>
   );

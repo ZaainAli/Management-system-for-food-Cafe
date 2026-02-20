@@ -18,7 +18,7 @@ function registerStockRoutes() {
 
   ipcMain.handle('stock:add', async (_event, item) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return stockController.add(item);
       });
     });
@@ -26,7 +26,7 @@ function registerStockRoutes() {
 
   ipcMain.handle('stock:update', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return stockController.update(payload);
       });
     });
@@ -34,7 +34,7 @@ function registerStockRoutes() {
 
   ipcMain.handle('stock:delete', async (_event, { id }) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return stockController.remove(id);
       });
     });
@@ -42,7 +42,7 @@ function registerStockRoutes() {
 
   ipcMain.handle('stock:adjustQuantity', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return stockController.adjustQuantity(payload);
       });
     });

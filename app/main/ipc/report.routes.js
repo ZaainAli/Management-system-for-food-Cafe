@@ -44,7 +44,7 @@ function registerReportRoutes() {
 
   ipcMain.handle('report:exportReport', async (_event, filters) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return reportController.exportReport(filters);
       });
     });

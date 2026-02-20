@@ -1,4 +1,5 @@
 const billModel = require('../models/bill.model');
+const stockModel = require('../models/stock.model');
 const salesModel = require('../models/sales.model');
 const { v4: uuidv4 } = require('uuid');
 
@@ -73,6 +74,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   // Validate all items exist and calculate subtotal
   let subtotal = 0;
   const lineItems = [];
+  const stockConsumptionById = new Map();
   for (const item of items) {
     const menuItem = await billModel.getMenuItemById(item.menuItemId);
     if (!menuItem) throw new Error(`Menu item not found: ${item.menuItemId}`);
@@ -95,6 +97,29 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
       quantity: qty,
       lineTotal,
     });
+
+    // Link stock by exact item name (case-insensitive).
+    const stockItem = stockModel.findByName(menuItem.name);
+    if (stockItem) {
+      const existing = stockConsumptionById.get(stockItem.id);
+      if (existing) {
+        existing.consumeQty += qty;
+      } else {
+        stockConsumptionById.set(stockItem.id, {
+          stockItemId: stockItem.id,
+          stockItemName: stockItem.name,
+          stockUnit: stockItem.unit,
+          availableQty: stockItem.quantity,
+          consumeQty: qty,
+        });
+      }
+    }
+  }
+
+  for (const linked of stockConsumptionById.values()) {
+    if (linked.availableQty < linked.consumeQty) {
+      throw new Error(`Not enough stock for ${linked.stockItemName}. Available ${linked.availableQty}, required ${linked.consumeQty}`);
+    }
   }
 
   const discountAmount = Math.min(discount, subtotal); // flat discount, capped at subtotal
@@ -119,7 +144,17 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     createdAt: new Date().toISOString(),
   };
 
-  const saved = billModel.insertBill(bill);
+  const stockAdjustments = Array.from(stockConsumptionById.values()).map(linked => ({
+    id: uuidv4(),
+    stockItemId: linked.stockItemId,
+    stockItemName: linked.stockItemName,
+    consumeQty: linked.consumeQty,
+    stockUnit: linked.stockUnit,
+    reason: `Consumed by POS bill ${bill.id}`,
+    createdAt: bill.createdAt,
+  }));
+
+  const saved = billModel.insertBill(bill, stockAdjustments);
 
   // Save discounted bill record if discount was applied
   if (discountAmount > 0) {
@@ -135,6 +170,17 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
 
   const billDate = saved.createdAt.split('T')[0];
   salesModel.addBillToDailySales({ date: billDate, total: saved.total });
+  saved.stockAdjustments = stockAdjustments.map(adj => {
+    const consumed = Math.abs(adj.consumeQty);
+    const linked = stockConsumptionById.get(adj.stockItemId);
+    return {
+      stockItemId: adj.stockItemId,
+      stockItemName: adj.stockItemName,
+      stockUnit: adj.stockUnit,
+      consumedQty: consumed,
+      remainingQty: linked ? linked.availableQty - consumed : null,
+    };
+  });
   return saved;
 }
 

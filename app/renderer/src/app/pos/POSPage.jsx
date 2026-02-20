@@ -73,7 +73,7 @@ export default function POSPage() {
     const byCategory = activeCategory === 'All'
       ? menuItems
       : menuItems.filter(i => i.categoryName === activeCategory);
-    return byCategory.filter(i => !quickKeyItemIds.has(i.id));
+    return byCategory.filter(i => i.isAvailable && !quickKeyItemIds.has(i.id));
   }, [menuItems, activeCategory, quickKeyItemIds]);
 
   // Grid key map: a,b,c,d,f,g,h,j,k,l,m,n,s,v,x,z → filtered items (changes with category)

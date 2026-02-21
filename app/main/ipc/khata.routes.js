@@ -26,7 +26,7 @@ function registerKhataRoutes() {
 
   ipcMain.handle('khata:addDue', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return khataController.addDue(payload);
       });
     });
@@ -34,7 +34,7 @@ function registerKhataRoutes() {
 
   ipcMain.handle('khata:addPayment', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return khataController.addPayment(payload);
       });
     });

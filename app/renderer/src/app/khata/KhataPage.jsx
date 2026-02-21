@@ -5,6 +5,7 @@ const today = () => new Date().toISOString().split('T')[0];
 const emptyProfileForm = { name: '', phone: '', businessDetails: '' };
 const emptyDueForm = { amount: '', date: today(), note: '' };
 const emptyPaymentForm = { amount: '', date: today(), note: '', paymentSource: 'today_sale' };
+const emptyTxForm = { id: '', type: 'due', amount: '', date: today(), note: '', paymentSource: 'today_sale' };
 
 export default function KhataPage() {
   const [profiles, setProfiles] = useState([]);
@@ -18,12 +19,16 @@ export default function KhataPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [showTxModal, setShowTxModal] = useState(false);
+  const [txForm, setTxForm] = useState(emptyTxForm);
 
   const fetchProfiles = async () => {
     const res = await window.api.khata.getAll();
     if (res.success) {
       setProfiles(res.data);
-      if (!activeId && res.data.length > 0) {
+      if (res.data.length === 0) {
+        setActiveId(null);
+      } else if (!activeId || !res.data.some((p) => p.id === activeId)) {
         setActiveId(res.data[0].id);
       }
     }
@@ -87,6 +92,67 @@ export default function KhataPage() {
 
   const handlePayFull = () => {
     if (balance > 0) setPaymentForm({ ...paymentForm, amount: balance });
+  };
+
+  const openEditTransaction = (tx) => {
+    setError('');
+    setMessage('');
+    setTxForm({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      date: tx.date,
+      note: tx.note || '',
+      paymentSource: tx.paymentSource || 'today_sale',
+    });
+    setShowTxModal(true);
+  };
+
+  const handleSaveTransaction = async () => {
+    setError('');
+    setMessage('');
+    const res = await window.api.khata.updateTransaction({
+      id: txForm.id,
+      amount: txForm.amount,
+      date: txForm.date,
+      note: txForm.note,
+      paymentSource: txForm.type === 'payment' ? txForm.paymentSource : null,
+    });
+    if (res.success) {
+      setShowTxModal(false);
+      setTxForm(emptyTxForm);
+      await fetchProfiles();
+      await fetchActive(activeId);
+    } else {
+      setError(res.error || 'Failed to update transaction');
+    }
+  };
+
+  const handleDeleteTransaction = async (txId) => {
+    if (!confirm('Delete this transaction?')) return;
+    setError('');
+    setMessage('');
+    const res = await window.api.khata.deleteTransaction({ id: txId });
+    if (res.success) {
+      await fetchProfiles();
+      await fetchActive(activeId);
+    } else {
+      setError(res.error || 'Failed to delete transaction');
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!activeProfile) return;
+    if (!confirm(`Delete khata profile "${activeProfile.name}" and all its transactions?`)) return;
+    setError('');
+    setMessage('');
+    const res = await window.api.khata.deleteProfile({ id: activeProfile.id });
+    if (res.success) {
+      await fetchProfiles();
+      await fetchActive(activeId);
+    } else {
+      setError(res.error || 'Failed to delete profile');
+    }
   };
 
   const handleExportProfile = async () => {
@@ -168,13 +234,21 @@ export default function KhataPage() {
                   <div className={`text-xl font-bold ${balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     PKR {Number(balance || 0).toLocaleString()}
                   </div>
-                  <button
-                    onClick={handleExportProfile}
-                    disabled={exporting}
-                    className={`btn-secondary mt-3 text-xs ${exporting ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  >
-                    {exporting ? 'Exporting...' : 'Export Khata CSV'}
-                  </button>
+                  <div className="mt-3 flex flex-col gap-2 items-end">
+                    <button
+                      onClick={handleExportProfile}
+                      disabled={exporting}
+                      className={`btn-secondary text-xs ${exporting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      {exporting ? 'Exporting...' : 'Export Khata CSV'}
+                    </button>
+                    <button
+                      onClick={handleDeleteProfile}
+                      className="text-xs px-3 py-1.5 rounded-md bg-red-700/70 hover:bg-red-600 text-white"
+                    >
+                      Delete Profile
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -251,6 +325,7 @@ export default function KhataPage() {
                     <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Note</th>
                     <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Source</th>
                     <th className="text-right px-4 py-3 text-slate-400 font-medium text-xs uppercase">Amount</th>
+                    <th className="text-right px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,10 +340,30 @@ export default function KhataPage() {
                       <td className={`px-4 py-3 text-right font-semibold ${tx.type === 'payment' ? 'text-emerald-400' : 'text-red-400'}`}>
                         {tx.type === 'payment' ? '-' : '+'}PKR {Number(tx.amount).toLocaleString()}
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => openEditTransaction(tx)}
+                            className="text-xs text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={Boolean(tx.linkedExpenseId)}
+                            title={tx.linkedExpenseId ? 'Linked to expense, edit from Expenses tab' : 'Edit transaction'}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTransaction(tx.id)}
+                            className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={Boolean(tx.linkedExpenseId)}
+                            title={tx.linkedExpenseId ? 'Linked to expense, delete from Expenses tab' : 'Delete transaction'}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {transactions.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-600 text-sm">No transactions yet</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-600 text-sm">No transactions yet</td></tr>
                   )}
                 </tbody>
               </table>
@@ -306,6 +401,66 @@ export default function KhataPage() {
             <div className="flex gap-2 mt-5">
               <button onClick={handleAddProfile} className="btn-primary flex-1">Save</button>
               <button onClick={() => setShowProfileModal(false)} className="btn-secondary">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTxModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="card w-96">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-white font-semibold">Edit Transaction</h2>
+              <button onClick={() => setShowTxModal(false)} className="text-slate-500 hover:text-white">✕</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Type</label>
+                <input className="input-field" value={txForm.type} disabled />
+              </div>
+              <div>
+                <label className="label">Amount (PKR)</label>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={txForm.amount}
+                  onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Date</label>
+                <input
+                  type="date"
+                  className="input-field"
+                  value={txForm.date}
+                  onChange={e => setTxForm({ ...txForm, date: e.target.value })}
+                />
+              </div>
+              {txForm.type === 'payment' && (
+                <div>
+                  <label className="label">Payment Source</label>
+                  <select
+                    className="input-field"
+                    value={txForm.paymentSource}
+                    onChange={e => setTxForm({ ...txForm, paymentSource: e.target.value })}
+                  >
+                    <option value="today_sale">Today Sale</option>
+                    <option value="net_profit">Net Profit</option>
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="label">Note</label>
+                <input
+                  className="input-field"
+                  value={txForm.note}
+                  onChange={e => setTxForm({ ...txForm, note: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={handleSaveTransaction} className="btn-primary flex-1">Save</button>
+              <button onClick={() => setShowTxModal(false)} className="btn-secondary">Cancel</button>
             </div>
           </div>
         </div>

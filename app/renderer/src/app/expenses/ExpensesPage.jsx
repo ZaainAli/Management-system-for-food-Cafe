@@ -185,14 +185,17 @@ export default function ExpensesPage() {
           )}
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          {['All', ...categories].map(cat => (
-            <button key={cat} onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
-                ${activeCategory === cat ? 'bg-primary-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-              {cat}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={activeCategory}
+            onChange={(e) => setActiveCategory(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-3 py-1.5 focus:outline-none focus:border-primary-500 min-w-36"
+          >
+            <option value="All">All</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
         </div>
       </div>
 

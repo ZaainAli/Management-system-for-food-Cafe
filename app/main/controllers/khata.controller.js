@@ -80,6 +80,36 @@ async function addPayment(payload) {
   }
 }
 
+async function updateTransaction(payload) {
+  try {
+    const updated = await khataService.updateTransaction(payload);
+    return { success: true, data: updated };
+  } catch (err) {
+    logger.error('khata:updateTransaction failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function deleteTransaction(payload) {
+  try {
+    const removed = await khataService.deleteTransaction(payload);
+    return { success: true, data: removed };
+  } catch (err) {
+    logger.error('khata:deleteTransaction failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function deleteProfile(payload) {
+  try {
+    const removed = await khataService.deleteProfile(payload);
+    return { success: true, data: removed };
+  } catch (err) {
+    logger.error('khata:deleteProfile failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function exportProfile(payload = {}) {
   try {
     const { id } = payload;
@@ -139,4 +169,14 @@ async function exportProfile(payload = {}) {
   }
 }
 
-module.exports = { getAllProfiles, getById, addProfile, addDue, addPayment, exportProfile };
+module.exports = {
+  getAllProfiles,
+  getById,
+  addProfile,
+  addDue,
+  addPayment,
+  updateTransaction,
+  deleteTransaction,
+  deleteProfile,
+  exportProfile,
+};

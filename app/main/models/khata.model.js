@@ -92,6 +92,16 @@ function removeTransaction(id) {
   db.prepare('DELETE FROM khata_transactions WHERE id = ?').run(id);
 }
 
+function removeTransactionsByKhataId(khataId) {
+  const db = getDb();
+  db.prepare('DELETE FROM khata_transactions WHERE khataId = ?').run(khataId);
+}
+
+function removeProfile(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM khata_profiles WHERE id = ?').run(id);
+}
+
 module.exports = {
   getAllProfiles,
   getProfileById,
@@ -103,4 +113,6 @@ module.exports = {
   getTransactionById,
   updateTransaction,
   removeTransaction,
+  removeTransactionsByKhataId,
+  removeProfile,
 };

@@ -86,9 +86,48 @@ function remove(id) {
   db.prepare('DELETE FROM expenses WHERE id = ?').run(id);
 }
 
+function findBySourceRecordId(sourceRecordId, sourceType) {
+  if (!sourceRecordId) return null;
+  const db = getDb();
+  if (sourceType) {
+    return db.prepare('SELECT * FROM expenses WHERE sourceRecordId = ? AND sourceType = ? LIMIT 1').get(sourceRecordId, sourceType) || null;
+  }
+  return db.prepare('SELECT * FROM expenses WHERE sourceRecordId = ? LIMIT 1').get(sourceRecordId) || null;
+}
+
+function findBySourceRecordIds(sourceRecordIds, sourceType) {
+  if (!Array.isArray(sourceRecordIds) || sourceRecordIds.length === 0) return [];
+  const db = getDb();
+  const placeholders = sourceRecordIds.map(() => '?').join(', ');
+  const baseParams = [...sourceRecordIds];
+  if (sourceType) {
+    const query = `SELECT * FROM expenses WHERE sourceRecordId IN (${placeholders}) AND sourceType = ?`;
+    return db.prepare(query).all(...baseParams, sourceType);
+  }
+  const query = `SELECT * FROM expenses WHERE sourceRecordId IN (${placeholders})`;
+  return db.prepare(query).all(...baseParams);
+}
+
+function countBySourceEntity(sourceType, sourceEntityId) {
+  if (!sourceType || !sourceEntityId) return 0;
+  const db = getDb();
+  const row = db.prepare('SELECT COUNT(1) as count FROM expenses WHERE sourceType = ? AND sourceEntityId = ?').get(sourceType, sourceEntityId);
+  return Number(row?.count || 0);
+}
+
 function getDistinctCategories() {
   const db = getDb();
   return db.prepare('SELECT DISTINCT category FROM expenses ORDER BY category ASC').all().map(r => r.category);
 }
 
-module.exports = { findAll, findById, insert, update, remove, getDistinctCategories };
+module.exports = {
+  findAll,
+  findById,
+  insert,
+  update,
+  remove,
+  findBySourceRecordId,
+  findBySourceRecordIds,
+  countBySourceEntity,
+  getDistinctCategories,
+};

@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const khataModel = require('../models/khata.model');
 const expenseService = require('./expense.service');
+const expenseModel = require('../models/expense.model');
 
 async function getAllProfiles() {
   return khataModel.getAllProfiles();
@@ -10,7 +11,13 @@ async function getById(id) {
   const profile = khataModel.getProfileById(id);
   if (!profile) return null;
   const transactions = khataModel.getTransactionsByKhataId(id);
-  return { profile, transactions };
+  const linkedExpenses = expenseModel.findBySourceRecordIds(transactions.map((tx) => tx.id), 'khata');
+  const linkedByRecordId = new Map(linkedExpenses.map((exp) => [exp.sourceRecordId, exp.id]));
+  const enrichedTransactions = transactions.map((tx) => ({
+    ...tx,
+    linkedExpenseId: linkedByRecordId.get(tx.id) || null,
+  }));
+  return { profile, transactions: enrichedTransactions };
 }
 
 async function addProfile(payload) {
@@ -89,10 +96,81 @@ async function addPayment(payload) {
   return created;
 }
 
+async function updateTransaction(payload) {
+  if (!payload?.id) throw new Error('Transaction id is required');
+  const tx = khataModel.getTransactionById(payload.id);
+  if (!tx) throw new Error('Transaction not found');
+
+  const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+  if (linkedExpense) {
+    throw new Error('This transaction is linked to an expense. Edit it from Expenses tab.');
+  }
+
+  const nextAmount = payload.amount !== undefined ? normalizeAmount(payload.amount) : tx.amount;
+  const nextDate = payload.date || tx.date;
+  const nextNote = payload.note !== undefined ? String(payload.note).trim() : tx.note;
+
+  let nextPaymentSource = tx.paymentSource;
+  if (tx.type === 'payment') {
+    if (payload.paymentSource !== undefined) {
+      const source = payload.paymentSource || 'today_sale';
+      if (!['today_sale', 'net_profit'].includes(source)) throw new Error('Invalid payment source');
+      nextPaymentSource = source;
+    } else if (!nextPaymentSource) {
+      nextPaymentSource = 'today_sale';
+    }
+  } else {
+    nextPaymentSource = null;
+  }
+
+  const updated = {
+    ...tx,
+    amount: nextAmount,
+    date: nextDate,
+    note: nextNote,
+    paymentSource: nextPaymentSource,
+  };
+  return khataModel.updateTransaction(updated);
+}
+
+async function deleteTransaction(payload) {
+  const id = payload?.id;
+  if (!id) throw new Error('Transaction id is required');
+  const tx = khataModel.getTransactionById(id);
+  if (!tx) throw new Error('Transaction not found');
+
+  const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+  if (linkedExpense) {
+    throw new Error('This transaction is linked to an expense. Delete it from Expenses tab.');
+  }
+
+  khataModel.removeTransaction(id);
+  return { id };
+}
+
+async function deleteProfile(payload) {
+  const id = payload?.id;
+  if (!id) throw new Error('Khata profile id is required');
+  const profile = khataModel.getProfileById(id);
+  if (!profile) throw new Error('Khata profile not found');
+
+  const linkedExpenseCount = expenseModel.countBySourceEntity('khata', id);
+  if (linkedExpenseCount > 0) {
+    throw new Error('Profile is linked to expenses. Delete linked expenses first.');
+  }
+
+  khataModel.removeTransactionsByKhataId(id);
+  khataModel.removeProfile(id);
+  return { id };
+}
+
 module.exports = {
   getAllProfiles,
   getById,
   addProfile,
   addDue,
   addPayment,
+  updateTransaction,
+  deleteTransaction,
+  deleteProfile,
 };

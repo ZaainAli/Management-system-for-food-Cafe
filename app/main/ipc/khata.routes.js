@@ -40,6 +40,30 @@ function registerKhataRoutes() {
     });
   });
 
+  ipcMain.handle('khata:updateTransaction', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
+        return khataController.updateTransaction(payload);
+      });
+    });
+  });
+
+  ipcMain.handle('khata:deleteTransaction', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
+        return khataController.deleteTransaction(payload);
+      });
+    });
+  });
+
+  ipcMain.handle('khata:deleteProfile', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager'], async () => {
+        return khataController.deleteProfile(payload);
+      });
+    });
+  });
+
   ipcMain.handle('khata:exportProfile', async (_event, payload) => {
     return requireAuth(async () => {
       return khataController.exportProfile(payload);

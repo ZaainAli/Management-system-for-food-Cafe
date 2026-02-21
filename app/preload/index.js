@@ -91,6 +91,9 @@ const khataAPI = {
   addProfile: (payload) => ipcRenderer.invoke('khata:addProfile', payload),
   addDue: (payload) => ipcRenderer.invoke('khata:addDue', payload),
   addPayment: (payload) => ipcRenderer.invoke('khata:addPayment', payload),
+  updateTransaction: (payload) => ipcRenderer.invoke('khata:updateTransaction', payload),
+  deleteTransaction: (payload) => ipcRenderer.invoke('khata:deleteTransaction', payload),
+  deleteProfile: (payload) => ipcRenderer.invoke('khata:deleteProfile', payload),
   exportProfile: (payload) => ipcRenderer.invoke('khata:exportProfile', payload),
 };
 

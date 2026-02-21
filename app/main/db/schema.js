@@ -177,6 +177,7 @@ function runMigrations(db) {
       employeeId TEXT NOT NULL,
       date TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'present',
+      hoursWorked REAL NOT NULL DEFAULT 0,
       notes TEXT DEFAULT '',
       createdAt TEXT NOT NULL,
       FOREIGN KEY (employeeId) REFERENCES employees(id),
@@ -230,6 +231,12 @@ function runMigrations(db) {
   if (!expenseCols.includes('sourceRecordId')) {
     db.prepare('ALTER TABLE expenses ADD COLUMN sourceRecordId TEXT DEFAULT NULL').run();
     logger.info('Migration: Added sourceRecordId column to expenses table');
+  }
+
+  const attendanceCols = db.prepare("PRAGMA table_info(attendance)").all().map(c => c.name);
+  if (!attendanceCols.includes('hoursWorked')) {
+    db.prepare('ALTER TABLE attendance ADD COLUMN hoursWorked REAL NOT NULL DEFAULT 0').run();
+    logger.info('Migration: Added hoursWorked column to attendance table');
   }
 
   // Backfill daily_sales once (if empty)
@@ -304,7 +311,7 @@ function runMigrations(db) {
       { id: 'item-008', name: 'Alu-Anda', desc: 'Battered cod with french fries and tartar sauce', price: 150.00, halfPrice: 100.00, catId: 'cat-01' },
       { id: 'item-009', name: 'Kalaji', desc: 'Grilled vegetable stir-fry with garlic sauce', price: 250.00, halfPrice: 150.00, catId: 'cat-01' },
       { id: 'item-010', name: 'Chicken Kharai', desc: 'Marinated chicken pieces grilled to perfection', price: 300.00, halfPrice: 200.00, catId: 'cat-01' },
-      { id: 'item-011', name: 'Roti', desc: 'Tender mutton pieces grilled to perfection', price: 150.00, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-011', name: 'Roti', desc: 'Tender mutton pieces grilled to perfection', price: 15.00, halfPrice: null, catId: 'cat-01' },
       { id: 'item-012', name: 'Regular', desc: 'Chilled soft drink', price: 70.00, halfPrice: null, catId: 'cat-02' },
       { id: 'item-013', name: 'Drink-1 Liter', desc: '', price: 170.00, halfPrice: null, catId: 'cat-02' },
       { id: 'item-014', name: 'Drink-1.5 Liter', desc: '', price: 200.00, halfPrice: null, catId: 'cat-02' },

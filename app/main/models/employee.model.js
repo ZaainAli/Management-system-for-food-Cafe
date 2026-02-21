@@ -140,13 +140,34 @@ function removeSalaryRecord(id) {
 
 // ─── Attendance ─────────────────────────────────────────────
 
-function markAttendance({ id, employeeId, date, status, notes }) {
+function markAttendance({ id, employeeId, date, status, hoursWorked, notes }) {
   const db = getDb();
+  const normalizedStatus = status || 'present';
+  const normalizedHours = hoursWorked !== undefined
+    ? Number(hoursWorked)
+    : (normalizedStatus === 'present' ? 12 : 0);
+  const recordId = id || uuidv4();
+
   db.prepare(`
-    INSERT OR REPLACE INTO attendance (id, employeeId, date, status, notes, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, employeeId, date, status || 'present', notes || '', new Date().toISOString());
-  return { id, employeeId, date, status, notes };
+    INSERT OR REPLACE INTO attendance (id, employeeId, date, status, hoursWorked, notes, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    recordId,
+    employeeId,
+    date,
+    normalizedStatus,
+    Number.isFinite(normalizedHours) ? Math.max(0, normalizedHours) : 0,
+    notes || '',
+    new Date().toISOString()
+  );
+  return {
+    id: recordId,
+    employeeId,
+    date,
+    status: normalizedStatus,
+    hoursWorked: Number.isFinite(normalizedHours) ? Math.max(0, normalizedHours) : 0,
+    notes: notes || '',
+  };
 }
 
 function getAttendance(filters = {}) {

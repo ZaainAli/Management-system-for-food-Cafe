@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 async function addSalaryRecord({ employeeId, amount, payDate, notes = '' }) {
   const employee = await employeeModel.findById(employeeId);
   if (!employee) throw new Error('Employee not found');
+  if (!employee.isActive) throw new Error('Salary cannot be issued to a non-active employee');
   if (!amount || amount <= 0) throw new Error('Salary amount must be positive');
   if (!payDate) throw new Error('Pay date is required');
 

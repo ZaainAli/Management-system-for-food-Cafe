@@ -10,6 +10,34 @@ const emptyForm = {
   sourceEntityId: '',
 };
 
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+
+function getDateRange(period, customFrom, customTo) {
+  const now = new Date();
+  const today = formatDate(now);
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'week') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 6);
+    return { from: formatDate(start), to: today };
+  }
+  if (period === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: formatDate(start), to: today };
+  }
+  if (period === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1);
+    return { from: formatDate(start), to: today };
+  }
+  if (period === 'custom') {
+    if (!customFrom || !customTo) return {};
+    return { from: customFrom, to: customTo };
+  }
+  return {};
+}
+
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -21,9 +49,16 @@ export default function ExpensesPage() {
   const [khataProfiles, setKhataProfiles] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [formError, setFormError] = useState('');
+  const [period, setPeriod] = useState('today');
+  const [customFrom, setCustomFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [customTo, setCustomTo] = useState(new Date().toISOString().split('T')[0]);
 
   const fetchData = async () => {
-    const filters = activeCategory !== 'All' ? { category: activeCategory } : {};
+    const periodFilters = getDateRange(period, customFrom, customTo);
+    const filters = {
+      ...(activeCategory !== 'All' ? { category: activeCategory } : {}),
+      ...periodFilters,
+    };
     const [expRes, catRes, khataRes, staffRes] = await Promise.all([
       window.api.expense.getAll(filters),
       window.api.expense.getCategories(),
@@ -37,7 +72,7 @@ export default function ExpensesPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [activeCategory]);
+  useEffect(() => { fetchData(); }, [activeCategory, period, customFrom, customTo]);
 
   const openAdd = () => {
     setFormError('');
@@ -114,14 +149,51 @@ export default function ExpensesPage() {
       </div>
 
       {/* Category Filter */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {['All', ...categories].map(cat => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
-              ${activeCategory === cat ? 'bg-primary-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-            {cat}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        {/* Period Selector */}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+            {['today', 'week', 'month', 'year', 'custom'].map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1 text-xs rounded-md transition-colors capitalize ${
+                  period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          {period === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500"
+              />
+              <span className="text-slate-500 text-xs">to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                min={customFrom}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          {['All', ...categories].map(cat => (
+            <button key={cat} onClick={() => setActiveCategory(cat)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
+                ${activeCategory === cat ? 'bg-primary-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}

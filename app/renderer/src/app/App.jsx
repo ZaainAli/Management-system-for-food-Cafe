@@ -11,6 +11,7 @@ import StockPage from './stock/StockPage';
 import ExpensesPage from './expenses/ExpensesPage';
 import KhataPage from './khata/KhataPage';
 import StaffPage from './staff/StaffPage';
+import AttendancePage from './staff/AttendancePage';
 import ReportsPage from './reports/ReportsPage';
 import ExportReportsPage from './reports/ExportReportsPage';
 import DiscountReportPage from './reports/DiscountReportPage';
@@ -78,6 +79,9 @@ export default function App({ isPOSWindow }) {
         } />
         <Route path="/staff" element={
           <ProtectedRoute permission="canAccessStaff"><StaffPage /></ProtectedRoute>
+        } />
+        <Route path="/attendance" element={
+          <ProtectedRoute permission="canAccessStaff"><AttendancePage /></ProtectedRoute>
         } />
         <Route path="/reports" element={
           <ProtectedRoute permission="canAccessReports"><ReportsPage /></ProtectedRoute>

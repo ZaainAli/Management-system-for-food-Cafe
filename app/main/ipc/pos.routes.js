@@ -96,7 +96,7 @@ function registerPosRoutes() {
 
   ipcMain.handle('pos:setQuickKeys', async (_event, assignments) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager','cashier'], async () => {
         return posController.setQuickKeys(assignments);
       });
     });

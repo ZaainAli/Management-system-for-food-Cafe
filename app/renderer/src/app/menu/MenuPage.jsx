@@ -45,6 +45,9 @@ export default function MenuPage() {
   const filtered = activeCategory === 'All'
     ? items
     : items.filter(i => i.categoryId === activeCategory);
+  const totalItems = items.length;
+  const unavailableItems = items.filter(i => !i.isAvailable).length;
+  const availableItems = totalItems - unavailableItems;
 
   const openAdd = () => {
     setForm(emptyForm);
@@ -134,6 +137,18 @@ export default function MenuPage() {
           <button onClick={() => setShowCategoryModal(true)} className="btn-secondary text-sm">+ Add Category</button>
           <button onClick={openAdd} className="btn-primary text-sm">+ Add Item</button>
         </div>
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-700 text-slate-200">
+          Total: {totalItems}
+        </span>
+        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-900/30 text-green-400">
+          Available: {availableItems}
+        </span>
+        <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-900/30 text-red-400">
+          Unavailable: {unavailableItems}
+        </span>
       </div>
 
       {/* Category Filter */}

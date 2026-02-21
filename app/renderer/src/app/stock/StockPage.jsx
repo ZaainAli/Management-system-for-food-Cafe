@@ -10,6 +10,7 @@ export default function StockPage() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [adjustItem, setAdjustItem] = useState(null);
   const [adjustQty, setAdjustQty] = useState(0);
   const [adjustReason, setAdjustReason] = useState('');
@@ -33,25 +34,37 @@ export default function StockPage() {
   const openEdit = (item) => { setForm({ name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, reorderLevel: item.reorderLevel, unitPrice: item.unitPrice }); setEditId(item.id); setShowModal(true); };
 
   const handleSave = async () => {
+    setError('');
     let res;
     if (editId) {
       res = await window.api.stock.update({ id: editId, ...form });
     } else {
       res = await window.api.stock.add(form);
     }
-    if (res.success) { setShowModal(false); await fetchData(); }
+    if (res.success) {
+      setShowModal(false);
+      await fetchData();
+      return;
+    }
+    setError(res?.error || 'Unable to save stock item');
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this stock item?')) return;
-    await window.api.stock.delete({ id });
+    const res = await window.api.stock.delete({ id });
+    if (!res?.success) {
+      setError(res?.error || 'Unable to delete stock item');
+      return;
+    }
     await fetchData();
   };
 
   const handleAdjust = async () => {
     if (!adjustItem) return;
+    setError('');
     const res = await window.api.stock.adjustQuantity({ id: adjustItem.id, adjustment: adjustQty, reason: adjustReason });
-    if (res.success) { setAdjustItem(null); setAdjustQty(0); setAdjustReason(''); await fetchData(); }
+    if (res.success) { setAdjustItem(null); setAdjustQty(0); setAdjustReason(''); await fetchData(); return; }
+    setError(res?.error || 'Unable to adjust quantity');
   };
 
   if (loading) return <div className="text-slate-400">Loading inventory...</div>;
@@ -63,6 +76,12 @@ export default function StockPage() {
         <h1 className="text-xl font-bold text-white">Inventory</h1>
         <button onClick={openAdd} className="btn-primary text-sm">+ Add Item</button>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {/* Low Stock Alert */}
       {lowStock.length > 0 && (

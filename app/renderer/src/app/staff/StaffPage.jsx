@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../../store/AuthContext';
 
-const emptyForm = { name: '', position: 'Staff', phone: '', email: '', monthlySalary: 0, hireDate: new Date().toISOString().split('T')[0] };
+const POSITION_OPTIONS = ['Staff', 'Waiter', 'Cook', 'Manager', 'Cashier'];
+const emptyForm = {
+  name: '',
+  position: POSITION_OPTIONS[0],
+  phone: '',
+  email: '',
+  monthlySalary: 0,
+  hireDate: new Date().toISOString().split('T')[0],
+  isActive: true,
+};
 
 function getMonthRange(monthValue) {
   const [yearStr, monthStr] = (monthValue || '').split('-');
@@ -27,9 +37,13 @@ function isDateInMonth(dateString, monthValue) {
 }
 
 export default function StaffPage() {
+  const { user } = useAuth();
+  const canChangeEmployeeStatus = user?.role === 'admin' || user?.role === 'manager';
   const [employees, setEmployees] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [customPosition, setCustomPosition] = useState('');
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,24 +70,36 @@ export default function StaffPage() {
 
   useEffect(() => { fetchEmployees(); }, []);
 
-  const openAdd = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
+  const openAdd = () => {
+    setForm(emptyForm);
+    setCustomPosition('');
+    setEditId(null);
+    setShowModal(true);
+  };
   const openEdit = (emp) => {
-    setForm({ name: emp.name, position: emp.position, phone: emp.phone, email: emp.email, monthlySalary: emp.monthlySalary, hireDate: emp.hireDate });
+    const isKnownPosition = POSITION_OPTIONS.includes(emp.position);
+    setForm({
+      name: emp.name,
+      position: isKnownPosition ? emp.position : '__custom__',
+      phone: emp.phone,
+      email: emp.email,
+      monthlySalary: emp.monthlySalary,
+      hireDate: emp.hireDate,
+      isActive: !!emp.isActive,
+    });
+    setCustomPosition(isKnownPosition ? '' : emp.position);
     setEditId(emp.id);
     setShowModal(true);
   };
 
   const handleSave = async () => {
+    const finalPosition = form.position === '__custom__' ? customPosition.trim() : form.position;
+    if (!finalPosition) return;
+    const payload = { ...form, position: finalPosition };
     let res;
-    if (editId) res = await window.api.staff.update({ id: editId, ...form });
-    else res = await window.api.staff.add(form);
+    if (editId) res = await window.api.staff.update({ id: editId, ...payload });
+    else res = await window.api.staff.add(payload);
     if (res.success) { setShowModal(false); await fetchEmployees(); }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this employee?')) return;
-    await window.api.staff.delete({ id });
-    await fetchEmployees();
   };
 
   const refreshAttendanceSummary = async (emp, monthValue) => {
@@ -119,6 +145,7 @@ export default function StaffPage() {
 
   const addSalary = async () => {
     if (!salaryForm.amount || !salaryEmp) return;
+    if (!salaryEmp.isActive) return;
     const res = await window.api.staff.addSalaryRecord({ employeeId: salaryEmp.id, ...salaryForm });
     if (res.success) {
       setSalaryForm({ amount: '', payDate: new Date().toISOString().split('T')[0], notes: '' });
@@ -155,6 +182,23 @@ export default function StaffPage() {
     return { monthPaid, advance, remaining };
   }, [salaryHistory, salaryMonth, attendanceSummary.calculatedSalary]);
 
+  const filteredEmployees = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return employees;
+    return employees.filter((emp) => {
+      const name = String(emp.name || '').toLowerCase();
+      const position = String(emp.position || '').toLowerCase();
+      return name.includes(query) || position.includes(query);
+    });
+  }, [employees, searchTerm]);
+
+  const employeeStats = useMemo(() => {
+    const total = employees.length;
+    const active = employees.filter((emp) => !!emp.isActive).length;
+    const inactive = total - active;
+    return { total, active, inactive };
+  }, [employees]);
+
   if (loading) return <div className="text-slate-400">Loading staff...</div>;
 
   return (
@@ -163,10 +207,33 @@ export default function StaffPage() {
       <div className="flex-1">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-white">Staff</h1>
-          <button onClick={openAdd} className="btn-primary text-sm">+ Add Employee</button>
+          <div className="flex items-center gap-2">
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by name or position"
+              className="input-field py-1.5 text-sm w-64"
+            />
+            <button onClick={openAdd} className="btn-primary text-sm">+ Add Employee</button>
+          </div>
         </div>
 
         <div className="card p-0 overflow-hidden">
+          <div className="grid grid-cols-3 gap-2 p-3 border-b border-slate-700 bg-slate-800/40">
+            <div className="bg-slate-700/40 rounded-lg px-3 py-2">
+              <p className="text-slate-500 text-xs">Total Employees</p>
+              <p className="text-white font-semibold text-sm">{employeeStats.total}</p>
+            </div>
+            <div className="bg-slate-700/40 rounded-lg px-3 py-2">
+              <p className="text-slate-500 text-xs">Active Employees</p>
+              <p className="text-green-400 font-semibold text-sm">{employeeStats.active}</p>
+            </div>
+            <div className="bg-slate-700/40 rounded-lg px-3 py-2">
+              <p className="text-slate-500 text-xs">Non Active Employees</p>
+              <p className="text-amber-400 font-semibold text-sm">{employeeStats.inactive}</p>
+            </div>
+          </div>
+
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700">
@@ -179,7 +246,7 @@ export default function StaffPage() {
               </tr>
             </thead>
             <tbody>
-              {employees.map((emp) => (
+              {filteredEmployees.map((emp) => (
                 <tr key={emp.id} className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors ${salaryEmp?.id === emp.id ? 'bg-slate-700/40' : ''}`}>
                   <td className="px-4 py-3 text-white font-medium">{emp.name}</td>
                   <td className="px-4 py-3 text-slate-400">{emp.position}</td>
@@ -188,14 +255,25 @@ export default function StaffPage() {
                   <td className="px-4 py-3 text-slate-500 text-xs">{emp.hireDate}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5">
-                      <button onClick={() => openSalary(emp)} className="text-xs text-blue-400 hover:text-blue-300">Salary</button>
+                      <button
+                        onClick={() => openSalary(emp)}
+                        disabled={!emp.isActive}
+                        className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Salary
+                      </button>
                       <button onClick={() => openEdit(emp)} className="text-xs text-slate-400 hover:text-white">Edit</button>
-                      <button onClick={() => handleDelete(emp.id)} className="text-xs text-red-400 hover:text-red-300">Del</button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {employees.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-600 text-sm">No employees</td></tr>}
+              {filteredEmployees.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-slate-600 text-sm">
+                    {employees.length === 0 ? 'No employees' : 'No employee matches your search'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -264,14 +342,17 @@ export default function StaffPage() {
               <button onClick={useCalculatedMonthSalary} className="btn-secondary w-full text-xs py-1.5">
                 Use Calculated Month Salary
               </button>
+              {!salaryEmp.isActive && (
+                <p className="text-xs text-amber-400">This employee is non-active. Salary cannot be issued.</p>
+              )}
             </div>
 
             {/* Add Salary Form */}
             <div className="bg-slate-700/40 rounded-lg p-3 mb-3 space-y-2">
-              <div><label className="label text-xs">Amount</label><input type="number" value={salaryForm.amount} onChange={(e) => setSalaryForm({ ...salaryForm, amount: e.target.value })} className="input-field py-1.5 text-xs" /></div>
-              <div><label className="label text-xs">Pay Date</label><input type="date" value={salaryForm.payDate} onChange={(e) => setSalaryForm({ ...salaryForm, payDate: e.target.value })} className="input-field py-1.5 text-xs" /></div>
-              <div><label className="label text-xs">Notes</label><input value={salaryForm.notes} onChange={(e) => setSalaryForm({ ...salaryForm, notes: e.target.value })} className="input-field py-1.5 text-xs" /></div>
-              <button onClick={addSalary} className="btn-primary w-full text-xs py-1.5">Record Payment</button>
+              <div><label className="label text-xs">Amount</label><input type="number" disabled={!salaryEmp.isActive} value={salaryForm.amount} onChange={(e) => setSalaryForm({ ...salaryForm, amount: e.target.value })} className="input-field py-1.5 text-xs disabled:opacity-50" /></div>
+              <div><label className="label text-xs">Pay Date</label><input type="date" disabled={!salaryEmp.isActive} value={salaryForm.payDate} onChange={(e) => setSalaryForm({ ...salaryForm, payDate: e.target.value })} className="input-field py-1.5 text-xs disabled:opacity-50" /></div>
+              <div><label className="label text-xs">Notes</label><input disabled={!salaryEmp.isActive} value={salaryForm.notes} onChange={(e) => setSalaryForm({ ...salaryForm, notes: e.target.value })} className="input-field py-1.5 text-xs disabled:opacity-50" /></div>
+              <button onClick={addSalary} disabled={!salaryEmp.isActive} className="btn-primary w-full text-xs py-1.5 disabled:opacity-50">Record Payment</button>
             </div>
 
             {/* History */}
@@ -303,14 +384,32 @@ export default function StaffPage() {
               <div><label className="label">Name</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" /></div>
               <div>
                 <label className="label">Position</label>
-                <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} className="input-field bg-slate-700">
-                  <option value="Staff">Staff</option>
-                  <option value="Waiter">Waiter</option>
-                  <option value="Cook">Cook</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Cashier">Cashier</option>
+                <select
+                  value={form.position}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setForm({ ...form, position: value });
+                    if (value !== '__custom__') setCustomPosition('');
+                  }}
+                  className="input-field bg-slate-700"
+                >
+                  {POSITION_OPTIONS.map((pos) => (
+                    <option key={pos} value={pos}>{pos}</option>
+                  ))}
+                  <option value="__custom__">Custom Position</option>
                 </select>
               </div>
+              {form.position === '__custom__' && (
+                <div>
+                  <label className="label">New Position Name</label>
+                  <input
+                    value={customPosition}
+                    onChange={(e) => setCustomPosition(e.target.value)}
+                    placeholder="Enter position name"
+                    className="input-field"
+                  />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Phone</label><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input-field" /></div>
                 <div><label className="label">Email</label><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field" /></div>
@@ -319,6 +418,20 @@ export default function StaffPage() {
                 <div><label className="label">Monthly Salary (PKR)</label><input type="number" value={form.monthlySalary} onChange={(e) => setForm({ ...form, monthlySalary: Number(e.target.value) })} className="input-field" /></div>
                 <div><label className="label">Hire Date</label><input type="date" value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} className="input-field" /></div>
               </div>
+              {editId && (
+                <div>
+                  <label className="label">Employee Status</label>
+                  <select
+                    value={form.isActive ? 'active' : 'inactive'}
+                    onChange={(e) => setForm({ ...form, isActive: e.target.value === 'active' })}
+                    disabled={!canChangeEmployeeStatus}
+                    className="input-field bg-slate-700 disabled:opacity-50"
+                  >
+                    <option value="active">Active Employee</option>
+                    <option value="inactive">Non Active Employee</option>
+                  </select>
+                </div>
+              )}
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={handleSave} className="btn-primary flex-1">Save</button>

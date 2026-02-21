@@ -55,7 +55,6 @@ const staffAPI = {
   getById: (payload) => ipcRenderer.invoke('staff:getById', payload),
   add: (employee) => ipcRenderer.invoke('staff:add', employee),
   update: (payload) => ipcRenderer.invoke('staff:update', payload),
-  delete: (payload) => ipcRenderer.invoke('staff:delete', payload),
   addSalaryRecord: (salary) => ipcRenderer.invoke('staff:addSalaryRecord', salary),
   getSalaryHistory: (payload) => ipcRenderer.invoke('staff:getSalaryHistory', payload),
   markAttendance: (attendance) => ipcRenderer.invoke('staff:markAttendance', attendance),

@@ -32,14 +32,6 @@ function registerStaffRoutes() {
     });
   });
 
-  ipcMain.handle('staff:delete', async (_event, { id }) => {
-    return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
-        return staffController.remove(id);
-      });
-    });
-  });
-
   // Salary
   ipcMain.handle('staff:addSalaryRecord', async (_event, salary) => {
     return requireAuth(async () => {

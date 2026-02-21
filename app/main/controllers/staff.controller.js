@@ -44,17 +44,6 @@ async function update(payload) {
   }
 }
 
-async function remove(id) {
-  try {
-    await employeeModel.remove(id);
-    logger.info(`Employee removed: ID ${id}`);
-    return { success: true };
-  } catch (err) {
-    logger.error('staff:delete failed', err);
-    return { success: false, error: err.message };
-  }
-}
-
 async function addSalaryRecord(salary) {
   try {
     const record = await salaryService.addSalaryRecord(salary);
@@ -97,7 +86,7 @@ async function getAttendance(filters = {}) {
 }
 
 module.exports = {
-  getAll, getById, add, update, remove,
+  getAll, getById, add, update,
   addSalaryRecord, getSalaryHistory,
   markAttendance, getAttendance,
 };

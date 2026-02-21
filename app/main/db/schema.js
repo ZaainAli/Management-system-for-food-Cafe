@@ -59,6 +59,36 @@ function runMigrations(db) {
       FOREIGN KEY (tableId) REFERENCES tables(id)
     );
 
+    -- Held bills (saved POS drafts)
+    CREATE TABLE IF NOT EXISTS held_bills (
+      id TEXT PRIMARY KEY,
+      tableId TEXT,
+      subtotal REAL NOT NULL DEFAULT 0,
+      discount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      paymentMethod TEXT NOT NULL DEFAULT 'cash',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (tableId) REFERENCES tables(id)
+    );
+
+    -- Held bill line items
+    CREATE TABLE IF NOT EXISTS held_bill_items (
+      id TEXT PRIMARY KEY,
+      heldBillId TEXT NOT NULL,
+      menuItemId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      isAvailable INTEGER NOT NULL DEFAULT 1,
+      basePrice REAL NOT NULL DEFAULT 0,
+      halfPrice REAL,
+      price REAL NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (heldBillId) REFERENCES held_bills(id),
+      FOREIGN KEY (menuItemId) REFERENCES menu_items(id)
+    );
+
     -- Bill line items
     CREATE TABLE IF NOT EXISTS bill_items (
       id TEXT PRIMARY KEY,

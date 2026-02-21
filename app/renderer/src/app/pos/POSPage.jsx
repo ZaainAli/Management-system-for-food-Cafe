@@ -19,6 +19,8 @@ export default function POSPage() {
   const [billSuccess, setBillSuccess] = useState(null);
   const [billError, setBillError] = useState(null);
   const [printWarning, setPrintWarning] = useState(null);
+  const [holdNotice, setHoldNotice] = useState(null);
+  const [heldBills, setHeldBills] = useState([]);
   const [fsm, setFsm] = useState('IDLE');           // 'IDLE' | 'PRICE' | 'QTY'
   const [pendingLineId, setPendingLineId] = useState(null);
   const [pendingIsNewLine, setPendingIsNewLine] = useState(false);
@@ -29,18 +31,20 @@ export default function POSPage() {
 
   useEffect(() => {
     (async () => {
-      const [itemsRes, stockRes, catsRes, tablesRes, qkRes] = await Promise.all([
+      const [itemsRes, stockRes, catsRes, tablesRes, qkRes, heldRes] = await Promise.all([
         window.api.pos.getMenuItems(),
         window.api.stock.getAll(),
         window.api.pos.getMenuCategories(),
         window.api.pos.getTables(),
         window.api.pos.getQuickKeys(),
+        window.api.pos.getHeldBills(),
       ]);
       if (itemsRes.success) setMenuItems(itemsRes.data);
       if (stockRes.success) setStockItems(stockRes.data);
       if (catsRes.success) setCategories(catsRes.data);
       if (tablesRes.success) setTables(tablesRes.data);
       if (qkRes.success) setQuickKeys(qkRes.data);
+      if (heldRes.success) setHeldBills(heldRes.data);
       setLoading(false);
     })();
   }, []);
@@ -68,6 +72,14 @@ export default function POSPage() {
       return () => clearTimeout(t);
     }
   }, [printWarning]);
+
+  // Auto-dismiss hold notice
+  useEffect(() => {
+    if (holdNotice) {
+      const t = setTimeout(() => setHoldNotice(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [holdNotice]);
 
   // Quick key map: q/w/e/r/t/y/u/i/o/p → fixed items (ignores category filter)
   const quickKeyToItem = useMemo(() => {
@@ -181,6 +193,87 @@ export default function POSPage() {
     }
   };
 
+  const refreshHeldBills = async () => {
+    const res = await window.api.pos.getHeldBills();
+    if (res.success) setHeldBills(res.data);
+  };
+
+  const holdCurrentOrder = async () => {
+    if (cart.length === 0 || fsm !== 'IDLE') return;
+    setBillError(null);
+    const res = await window.api.pos.holdBill({
+      items: cart.map(i => ({
+        menuItemId: i.id,
+        name: i.name,
+        description: i.description,
+        isAvailable: i.isAvailable,
+        basePrice: i.basePrice,
+        halfPrice: i.halfPrice,
+        price: i.price,
+        quantity: i.quantity,
+      })),
+      tableId: selectedTableId || null,
+      discount,
+      paymentMethod,
+    });
+    if (!res.success) {
+      setBillError(res?.error || 'Could not hold bill');
+      return;
+    }
+    await refreshHeldBills();
+    setHoldNotice('Order held successfully');
+    setCart([]);
+    setPendingLineId(null);
+    setPendingIsNewLine(false);
+    inputBufferRef.current = '';
+    setFsm('IDLE');
+    setDiscount(0);
+    setSelectedTableId('');
+    setPaymentMethod('cash');
+  };
+
+  const recallHeldBill = async (heldBillId) => {
+    if (!heldBillId || fsm !== 'IDLE') return;
+    setBillError(null);
+    const heldRes = await window.api.pos.getHeldBillById({ id: heldBillId });
+    if (!heldRes.success || !heldRes.data) {
+      setBillError(heldRes?.error || 'Held bill not found');
+      await refreshHeldBills();
+      return;
+    }
+    const held = heldRes.data;
+    const recalledItems = (held.items || []).map(item => ({
+      lineId: makeLineId(item.menuItemId),
+      id: item.menuItemId,
+      name: item.name,
+      description: item.description,
+      isAvailable: !!item.isAvailable,
+      basePrice: Number(item.basePrice),
+      halfPrice: item.halfPrice !== null && item.halfPrice !== undefined ? Number(item.halfPrice) : null,
+      price: Number(item.price),
+      quantity: Math.max(1, Number(item.quantity) || 1),
+    }));
+
+    setCart(recalledItems);
+    setDiscount(Math.max(0, Number(held.discount) || 0));
+    setSelectedTableId(held.tableId || '');
+    setPaymentMethod(held.paymentMethod || 'cash');
+    setPendingLineId(null);
+    setPendingIsNewLine(false);
+    inputBufferRef.current = '';
+    setFsm('IDLE');
+
+    await window.api.pos.deleteHeldBill({ id: heldBillId });
+    await refreshHeldBills();
+    setHoldNotice('Held order recalled');
+  };
+
+  const deleteHeldBill = async (heldBillId) => {
+    if (!heldBillId) return;
+    await window.api.pos.deleteHeldBill({ id: heldBillId });
+    await refreshHeldBills();
+  };
+
   // Keyboard state machine for fast billing
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -195,10 +288,26 @@ export default function POSPage() {
           e.key === 'F8' ||
           e.key === 'F9' ||
           e.key === 'F10' ||
+          e.key === 'F6' ||
+          e.key === 'F7' ||
           e.key === 'F12' ||
           e.key === 'ArrowUp' ||
           e.key === 'ArrowDown';
         if (!isAddItemHotkey && !isGlobalIdleHotkey) return;
+      }
+
+      if (key === 'f6' && fsm === 'IDLE' && cart.length > 0) {
+        if (e.repeat) return;
+        e.preventDefault();
+        holdCurrentOrder();
+        return;
+      }
+
+      if (key === 'f7' && fsm === 'IDLE' && heldBills.length > 0) {
+        if (e.repeat) return;
+        e.preventDefault();
+        recallHeldBill(heldBills[0].id);
+        return;
       }
 
       if (key === 'f9' && fsm === 'IDLE') {
@@ -394,7 +503,7 @@ export default function POSPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart, tables]);
+  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart, tables, heldBills]);
 
   if (loading) return <div className="text-slate-400">Loading POS...</div>;
 
@@ -696,6 +805,39 @@ export default function POSPage() {
             <button onClick={createBill} disabled={cart.length === 0 || fsm !== 'IDLE'} className="btn-primary w-full text-sm py-2.5">
               Create Bill — PKR {Math.max(0, total).toLocaleString()}
             </button>
+            <button onClick={holdCurrentOrder} disabled={cart.length === 0 || fsm !== 'IDLE'} className="w-full text-sm py-2 rounded-lg bg-yellow-700/70 hover:bg-yellow-600 text-white disabled:opacity-50 disabled:cursor-not-allowed">
+              Hold Bill (F6)
+            </button>
+            {heldBills.length > 0 && (
+              <div className="mt-2 border border-slate-700 rounded-lg p-2 bg-slate-800/70">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-300">Held Orders ({heldBills.length})</p>
+                  <button onClick={() => recallHeldBill(heldBills[0].id)} disabled={fsm !== 'IDLE'} className="text-[11px] text-primary-300 hover:text-primary-200 disabled:opacity-50">
+                    Recall Latest (F7)
+                  </button>
+                </div>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {heldBills.map(held => (
+                    <div key={held.id} className="bg-slate-700/50 rounded px-2 py-1.5 border border-slate-700 flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-white truncate">
+                          {held.tableNumber ? `Table ${held.tableNumber}` : 'No table'} | {held.itemCount} items
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          PKR {Number(held.total || 0).toLocaleString()} | {new Date(held.updatedAt).toLocaleTimeString()}
+                        </p>
+                      </div>
+                      <button onClick={() => recallHeldBill(held.id)} disabled={fsm !== 'IDLE'} className="text-[11px] px-2 py-0.5 rounded bg-primary-700/70 hover:bg-primary-600 text-white disabled:opacity-50">
+                        Recall
+                      </button>
+                      <button onClick={() => deleteHeldBill(held.id)} disabled={fsm !== 'IDLE'} className="text-[11px] px-2 py-0.5 rounded bg-red-700/70 hover:bg-red-600 text-white disabled:opacity-50">
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -721,6 +863,11 @@ export default function POSPage() {
         {printWarning && (
           <div className="mt-3 bg-yellow-900/30 border border-yellow-700/50 text-yellow-300 text-xs rounded-lg px-4 py-3 text-center">
             Print failed: {printWarning}
+          </div>
+        )}
+        {holdNotice && (
+          <div className="mt-3 bg-blue-900/30 border border-blue-700/50 text-blue-300 text-xs rounded-lg px-4 py-3 text-center">
+            {holdNotice}
           </div>
         )}
       </div>

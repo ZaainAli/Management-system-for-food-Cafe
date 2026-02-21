@@ -142,6 +142,89 @@ function insertBill(bill, stockAdjustments = []) {
   return bill;
 }
 
+function insertHeldBill(heldBill) {
+  const db = getDb();
+  const tx = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO held_bills (id, tableId, subtotal, discount, total, paymentMethod, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      heldBill.id,
+      heldBill.tableId,
+      heldBill.subtotal,
+      heldBill.discount,
+      heldBill.total,
+      heldBill.paymentMethod,
+      heldBill.createdAt,
+      heldBill.updatedAt
+    );
+
+    const insertItem = db.prepare(`
+      INSERT INTO held_bill_items (
+        id, heldBillId, menuItemId, name, description, isAvailable, basePrice, halfPrice, price, quantity, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const item of heldBill.items) {
+      insertItem.run(
+        item.id,
+        heldBill.id,
+        item.menuItemId,
+        item.name,
+        item.description || '',
+        item.isAvailable ? 1 : 0,
+        item.basePrice,
+        item.halfPrice,
+        item.price,
+        item.quantity,
+        item.createdAt
+      );
+    }
+  });
+
+  tx();
+  return heldBill;
+}
+
+function getHeldBills() {
+  const db = getDb();
+  return db.prepare(`
+    SELECT hb.*, t.number as tableNumber, COUNT(hbi.id) as itemCount
+    FROM held_bills hb
+    LEFT JOIN tables t ON t.id = hb.tableId
+    LEFT JOIN held_bill_items hbi ON hbi.heldBillId = hb.id
+    GROUP BY hb.id
+    ORDER BY hb.updatedAt DESC
+  `).all();
+}
+
+function getHeldBillById(id) {
+  const db = getDb();
+  const heldBill = db.prepare(`
+    SELECT hb.*, t.number as tableNumber
+    FROM held_bills hb
+    LEFT JOIN tables t ON t.id = hb.tableId
+    WHERE hb.id = ?
+  `).get(id);
+  if (!heldBill) return null;
+  heldBill.items = db.prepare(`
+    SELECT *
+    FROM held_bill_items
+    WHERE heldBillId = ?
+    ORDER BY createdAt ASC
+  `).all(id);
+  return heldBill;
+}
+
+function deleteHeldBill(id) {
+  const db = getDb();
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM held_bill_items WHERE heldBillId = ?').run(id);
+    db.prepare('DELETE FROM held_bills WHERE id = ?').run(id);
+  });
+  tx();
+}
+
 function getBills(filters = {}) {
   const db = getDb();
   let query = 'SELECT * FROM bills';
@@ -280,6 +363,7 @@ module.exports = {
   getAllCategories, insertCategory,
   getAllTables, updateTableStatus,
   insertBill, getBills, getBillById, getTopItems, getTodayBillCount,
+  insertHeldBill, getHeldBills, getHeldBillById, deleteHeldBill,
   insertDiscountedBill, getDiscountedBills,
   getQuickKeys, setQuickKeys,
 };

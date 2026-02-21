@@ -89,6 +89,48 @@ async function createBill(billData) {
   }
 }
 
+async function holdBill(payload) {
+  try {
+    const heldBill = await billingService.holdBill(payload);
+    logger.info(`Bill held: #${heldBill.id}`);
+    return { success: true, data: heldBill };
+  } catch (err) {
+    logger.error('holdBill failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function getHeldBills() {
+  try {
+    const heldBills = await billingService.getHeldBills();
+    return { success: true, data: heldBills };
+  } catch (err) {
+    logger.error('getHeldBills failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function getHeldBillById(id) {
+  try {
+    const heldBill = await billingService.getHeldBillById(id);
+    if (!heldBill) return { success: false, error: 'Held bill not found' };
+    return { success: true, data: heldBill };
+  } catch (err) {
+    logger.error('getHeldBillById failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function deleteHeldBill(id) {
+  try {
+    await billingService.deleteHeldBill(id);
+    return { success: true };
+  } catch (err) {
+    logger.error('deleteHeldBill failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function getBills(filters = {}) {
   try {
     const bills = await billingService.getBills(filters);
@@ -169,6 +211,10 @@ module.exports = {
   getMenuCategories,
   addMenuCategory,
   createBill,
+  holdBill,
+  getHeldBills,
+  getHeldBillById,
+  deleteHeldBill,
   getBills,
   getBillById,
   getTables,

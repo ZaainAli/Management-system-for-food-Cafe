@@ -56,6 +56,30 @@ function registerPosRoutes() {
     });
   });
 
+  ipcMain.handle('pos:holdBill', async (_event, payload) => {
+    return requireAuth(async () => {
+      return posController.holdBill(payload);
+    });
+  });
+
+  ipcMain.handle('pos:getHeldBills', async () => {
+    return requireAuth(async () => {
+      return posController.getHeldBills();
+    });
+  });
+
+  ipcMain.handle('pos:getHeldBillById', async (_event, { id }) => {
+    return requireAuth(async () => {
+      return posController.getHeldBillById(id);
+    });
+  });
+
+  ipcMain.handle('pos:deleteHeldBill', async (_event, { id }) => {
+    return requireAuth(async () => {
+      return posController.deleteHeldBill(id);
+    });
+  });
+
   ipcMain.handle('pos:getBills', async (_event, filters) => {
     return requireAuth(async () => {
       return posController.getBills(filters);

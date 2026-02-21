@@ -184,6 +184,66 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   return saved;
 }
 
+async function holdBill({ items, tableId, discount = 0, paymentMethod = 'cash' }) {
+  if (!items || items.length === 0) {
+    throw new Error('Cannot hold an empty order');
+  }
+
+  const normalizedItems = [];
+  let subtotal = 0;
+  for (const item of items) {
+    const menuItem = await billModel.getMenuItemById(item.menuItemId);
+    if (!menuItem) throw new Error(`Menu item not found: ${item.menuItemId}`);
+
+    const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+    const price = Number(item.price);
+    if (!Number.isFinite(price) || price < 0) throw new Error('Invalid held item price');
+    subtotal += price * quantity;
+
+    normalizedItems.push({
+      id: uuidv4(),
+      menuItemId: item.menuItemId,
+      name: item.name || menuItem.name,
+      description: item.description || '',
+      isAvailable: item.isAvailable !== undefined ? !!item.isAvailable : !!menuItem.isAvailable,
+      basePrice: Number.isFinite(Number(item.basePrice)) ? Number(item.basePrice) : Number(menuItem.price),
+      halfPrice: item.halfPrice !== undefined && item.halfPrice !== null ? Number(item.halfPrice) : null,
+      price,
+      quantity,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  const discountAmount = Math.max(0, Math.min(Number(discount) || 0, subtotal));
+  const total = subtotal - discountAmount;
+  const now = new Date().toISOString();
+  const heldBill = {
+    id: uuidv4(),
+    tableId: tableId || null,
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    discount: parseFloat(discountAmount.toFixed(2)),
+    total: parseFloat(total.toFixed(2)),
+    paymentMethod: paymentMethod || 'cash',
+    createdAt: now,
+    updatedAt: now,
+    items: normalizedItems,
+  };
+
+  return billModel.insertHeldBill(heldBill);
+}
+
+async function getHeldBills() {
+  return billModel.getHeldBills();
+}
+
+async function getHeldBillById(id) {
+  return billModel.getHeldBillById(id);
+}
+
+async function deleteHeldBill(id) {
+  return billModel.deleteHeldBill(id);
+}
+
 async function getBills(filters = {}) {
   return billModel.getBills(filters);
 }
@@ -227,6 +287,7 @@ async function setQuickKeys(assignments) {
 module.exports = {
   getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem,
   getMenuCategories, addMenuCategory,
+  holdBill, getHeldBills, getHeldBillById, deleteHeldBill,
   createBill, getBills, getBillById,
   getTables, updateTableStatus,
   getDiscountedBills,

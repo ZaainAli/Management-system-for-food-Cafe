@@ -181,10 +181,15 @@ export default function POSPage() {
   // Keyboard state machine for fast billing
   useEffect(() => {
     const onKeyDown = (e) => {
+      const key = e.key.toLowerCase();
       const tag = document.activeElement?.tagName?.toLowerCase();
-      // Keep normal typing behavior in form fields while idle,
-      // but still allow stage controls (Enter/Esc/etc.) during PRICE/QTY flows.
-      if ((tag === 'input' || tag === 'textarea' || tag === 'select') && fsm === 'IDLE') return;
+      const isFormFieldFocused = tag === 'input' || tag === 'textarea' || tag === 'select';
+      // In IDLE, keep most form-field typing untouched, but allow global POS shortcuts.
+      if (isFormFieldFocused && fsm === 'IDLE') {
+        const isAddItemHotkey = key.length === 1 && key >= 'a' && key <= 'z' && !e.repeat;
+        const isGlobalIdleHotkey = e.key === 'Escape' || e.key === 'F8' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
+        if (!isAddItemHotkey && !isGlobalIdleHotkey) return;
+      }
 
       if (e.key === 'F8' && cart.length > 0) {
         e.preventDefault();
@@ -200,7 +205,6 @@ export default function POSPage() {
         return;
       }
 
-      const key = e.key.toLowerCase();
       const pickCartLineByArrow = (arrowKey) => {
         if (cart.length === 0) return false;
         const currentIdx = cart.findIndex(c => c.lineId === pendingLineId);
@@ -613,6 +617,7 @@ export default function POSPage() {
                 type="number"
                 min="0"
                 value={discount}
+                onFocus={(e) => e.target.select()}
                 onChange={e => setDiscount(Math.max(0, Number(e.target.value)))}
                 disabled={fsm !== 'IDLE'}
                 className="input-field py-1.5 text-xs"

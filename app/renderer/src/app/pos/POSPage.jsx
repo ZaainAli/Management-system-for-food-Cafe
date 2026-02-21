@@ -24,6 +24,8 @@ export default function POSPage() {
   const [pendingIsNewLine, setPendingIsNewLine] = useState(false);
   const inputBufferRef = useRef('');
   const creatingBillRef = useRef(false);
+  const discountInputRef = useRef(null);
+  const tableSelectRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -145,7 +147,7 @@ export default function POSPage() {
   const cartTotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const total = cartTotal - discount;
 
-  const createBill = async () => {
+  const createBill = async ({ skipPrint = false } = {}) => {
     if (cart.length === 0 || creatingBillRef.current) return;
     creatingBillRef.current = true;
     setBillError(null);
@@ -155,6 +157,7 @@ export default function POSPage() {
         tableId: selectedTableId || null,
         discount,
         paymentMethod,
+        skipPrint,
       });
       if (res.success) {
         setBillSuccess(res.data);
@@ -187,8 +190,38 @@ export default function POSPage() {
       // In IDLE, keep most form-field typing untouched, but allow global POS shortcuts.
       if (isFormFieldFocused && fsm === 'IDLE') {
         const isAddItemHotkey = key.length === 1 && key >= 'a' && key <= 'z' && !e.repeat;
-        const isGlobalIdleHotkey = e.key === 'Escape' || e.key === 'F8' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
+        const isGlobalIdleHotkey =
+          e.key === 'Escape' ||
+          e.key === 'F8' ||
+          e.key === 'F9' ||
+          e.key === 'F10' ||
+          e.key === 'F12' ||
+          e.key === 'ArrowUp' ||
+          e.key === 'ArrowDown';
         if (!isAddItemHotkey && !isGlobalIdleHotkey) return;
+      }
+
+      if (key === 'f9' && fsm === 'IDLE') {
+        e.preventDefault();
+        discountInputRef.current?.focus();
+        discountInputRef.current?.select?.();
+        return;
+      }
+
+      if (key === 'f10' && fsm === 'IDLE') {
+        e.preventDefault();
+        if (tables.length > 0) {
+          setSelectedTableId(tables[0].id);
+        }
+        tableSelectRef.current?.focus();
+        return;
+      }
+
+      if (key === 'f12' && fsm === 'IDLE' && cart.length > 0) {
+        if (e.repeat) return;
+        e.preventDefault();
+        createBill({ skipPrint: true });
+        return;
       }
 
       if (e.key === 'F8' && cart.length > 0) {
@@ -361,7 +394,7 @@ export default function POSPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart]);
+  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart, tables]);
 
   if (loading) return <div className="text-slate-400">Loading POS...</div>;
 
@@ -614,6 +647,7 @@ export default function POSPage() {
             <div>
               <label className="label text-xs">Discount Amount:</label>
               <input
+                ref={discountInputRef}
                 type="number"
                 min="0"
                 value={discount}
@@ -628,6 +662,7 @@ export default function POSPage() {
             <div>
               <label className="label text-xs">Table</label>
               <select
+                ref={tableSelectRef}
                 value={selectedTableId}
                 onChange={e => setSelectedTableId(e.target.value)}
                 disabled={fsm !== 'IDLE'}

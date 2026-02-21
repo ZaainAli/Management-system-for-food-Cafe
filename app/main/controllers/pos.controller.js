@@ -65,19 +65,22 @@ async function addMenuCategory(category) {
 
 async function createBill(billData) {
   try {
-    const bill = await billingService.createBill(billData);
+    const { skipPrint = false, ...billPayload } = billData || {};
+    const bill = await billingService.createBill(billPayload);
     logger.info(`Bill created: #${bill.id}`);
     let printError = null;
     let printSkipped = false;
-    try {
-      const printResult = await printBillReceipt(bill);
-      if (printResult?.skipped) {
-        printSkipped = true;
-        printError = printResult.reason || 'Receipt print skipped';
+    if (!skipPrint) {
+      try {
+        const printResult = await printBillReceipt(bill);
+        if (printResult?.skipped) {
+          printSkipped = true;
+          printError = printResult.reason || 'Receipt print skipped';
+        }
+      } catch (err) {
+        printError = err.message || 'Receipt print failed';
+        logger.error('Receipt print failed', err);
       }
-    } catch (err) {
-      printError = err.message || 'Receipt print failed';
-      logger.error('Receipt print failed', err);
     }
     return { success: true, data: bill, printError, printSkipped };
   } catch (err) {

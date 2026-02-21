@@ -23,6 +23,7 @@ export default function POSPage() {
   const [pendingLineId, setPendingLineId] = useState(null);
   const [pendingIsNewLine, setPendingIsNewLine] = useState(false);
   const inputBufferRef = useRef('');
+  const creatingBillRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -133,6 +134,9 @@ export default function POSPage() {
       return prev.filter(c => c.lineId !== lineId);
     });
   };
+  const deleteCartLine = (lineId) => {
+    setCart(prev => prev.filter(c => c.lineId !== lineId));
+  };
 
   const updateLine = (lineId, updates) => {
     setCart(prev => prev.map(c => c.lineId === lineId ? { ...c, ...updates } : c));
@@ -142,38 +146,59 @@ export default function POSPage() {
   const total = cartTotal - discount;
 
   const createBill = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || creatingBillRef.current) return;
+    creatingBillRef.current = true;
     setBillError(null);
-    const res = await window.api.pos.createBill({
-      items: cart.map(i => ({ menuItemId: i.id, quantity: i.quantity, priceOverride: i.price })),
-      tableId: selectedTableId || null,
-      discount,
-      paymentMethod,
-    });
-    if (res.success) {
-      setBillSuccess(res.data);
-      const stockRes = await window.api.stock.getAll();
-      if (stockRes.success) setStockItems(stockRes.data);
-      if (res.printError || res.printSkipped) {
-        setPrintWarning(res.printError || 'Receipt could not be printed');
+    try {
+      const res = await window.api.pos.createBill({
+        items: cart.map(i => ({ menuItemId: i.id, quantity: i.quantity, priceOverride: i.price })),
+        tableId: selectedTableId || null,
+        discount,
+        paymentMethod,
+      });
+      if (res.success) {
+        setBillSuccess(res.data);
+        const stockRes = await window.api.stock.getAll();
+        if (stockRes.success) setStockItems(stockRes.data);
+        if (res.printError || res.printSkipped) {
+          setPrintWarning(res.printError || 'Receipt could not be printed');
+        }
+        setCart([]);
+        setPendingLineId(null);
+        setPendingIsNewLine(false);
+        inputBufferRef.current = '';
+        setFsm('IDLE');
+        setDiscount(0);
+        setSelectedTableId('');
+        return;
       }
-      setCart([]);
-      setPendingLineId(null);
-      setPendingIsNewLine(false);
-      inputBufferRef.current = '';
-      setFsm('IDLE');
-      setDiscount(0);
-      setSelectedTableId('');
-      return;
+      setBillError(res?.error || 'Could not create bill');
+    } finally {
+      creatingBillRef.current = false;
     }
-    setBillError(res?.error || 'Could not create bill');
   };
 
   // Keyboard state machine for fast billing
   useEffect(() => {
     const onKeyDown = (e) => {
       const tag = document.activeElement?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      // Keep normal typing behavior in form fields while idle,
+      // but still allow stage controls (Enter/Esc/etc.) during PRICE/QTY flows.
+      if ((tag === 'input' || tag === 'textarea' || tag === 'select') && fsm === 'IDLE') return;
+
+      if (e.key === 'F8' && cart.length > 0) {
+        e.preventDefault();
+        const targetLineId = pendingLineId || cart[cart.length - 1]?.lineId;
+        if (!targetLineId) return;
+        setCart(prev => prev.filter(c => c.lineId !== targetLineId));
+        if (pendingLineId === targetLineId) {
+          setPendingLineId(null);
+          setPendingIsNewLine(false);
+          inputBufferRef.current = '';
+          setFsm('IDLE');
+        }
+        return;
+      }
 
       const key = e.key.toLowerCase();
       const pickCartLineByArrow = (arrowKey) => {
@@ -213,6 +238,7 @@ export default function POSPage() {
           return;
         }
         if (e.key === 'Escape' && cart.length > 0) {
+          if (e.repeat) return;
           e.preventDefault();
           createBill();
           return;
@@ -536,6 +562,7 @@ export default function POSPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); deleteCartLine(item.lineId); }} className="w-5 h-5 rounded bg-red-700/70 hover:bg-red-600 text-white text-xs flex items-center justify-center">×</button>
                       <button onClick={(e) => { e.stopPropagation(); removeFromCart(item.lineId); }} className="w-5 h-5 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs flex items-center justify-center">−</button>
                       <span className="text-white text-xs w-5 text-center">{item.quantity}</span>
                       <button onClick={(e) => { e.stopPropagation(); updateLine(item.lineId, { quantity: item.quantity + 1 }); }} className="w-5 h-5 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs flex items-center justify-center">+</button>

@@ -218,6 +218,7 @@ function runMigrations(db) {
     CREATE TABLE IF NOT EXISTS discounted_bills (
       id TEXT PRIMARY KEY,
       billId TEXT NOT NULL,
+      tableNum INTEGER,
       billAmount REAL NOT NULL,
       discountAmount REAL NOT NULL,
       finalAmount REAL NOT NULL,
@@ -267,6 +268,12 @@ function runMigrations(db) {
   if (!attendanceCols.includes('hoursWorked')) {
     db.prepare('ALTER TABLE attendance ADD COLUMN hoursWorked REAL NOT NULL DEFAULT 0').run();
     logger.info('Migration: Added hoursWorked column to attendance table');
+  }
+
+  const discountedBillCols = db.prepare("PRAGMA table_info(discounted_bills)").all().map(c => c.name);
+  if (!discountedBillCols.includes('tableNum')) {
+    db.prepare('ALTER TABLE discounted_bills ADD COLUMN tableNum INTEGER').run();
+    logger.info('Migration: Added tableNum column to discounted_bills table');
   }
 
   // Backfill daily_sales once (if empty)

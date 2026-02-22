@@ -174,12 +174,16 @@ async function getDiscountedBillsReport(filters = {}) {
     acc.totalBillAmount += Number(row.billAmount) || 0;
     acc.totalDiscount += Number(row.discountAmount) || 0;
     acc.totalFinalAmount += Number(row.finalAmount) || 0;
+    if (row.tableNum !== null && row.tableNum !== undefined && row.tableNum !== '') {
+      acc.totalTableBills += 1;
+    }
     return acc;
-  }, { totalBillAmount: 0, totalDiscount: 0, totalFinalAmount: 0 });
+  }, { totalBillAmount: 0, totalDiscount: 0, totalFinalAmount: 0, totalTableBills: 0 });
 
   return {
     records: discountedBills,
     totalRecords: discountedBills.length,
+    totalTableBills: totals.totalTableBills,
     totalBillAmount: parseFloat(totals.totalBillAmount.toFixed(2)),
     totalDiscount: parseFloat(totals.totalDiscount.toFixed(2)),
     totalFinalAmount: parseFloat(totals.totalFinalAmount.toFixed(2)),

@@ -110,6 +110,16 @@ async function deleteProfile(payload) {
   }
 }
 
+async function clearTransactions(payload) {
+  try {
+    const cleared = await khataService.clearTransactions(payload);
+    return { success: true, data: cleared };
+  } catch (err) {
+    logger.error('khata:clearTransactions failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function exportProfile(payload = {}) {
   try {
     const { id } = payload;
@@ -178,5 +188,6 @@ module.exports = {
   updateTransaction,
   deleteTransaction,
   deleteProfile,
+  clearTransactions,
   exportProfile,
 };

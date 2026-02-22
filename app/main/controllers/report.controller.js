@@ -91,6 +91,48 @@ function buildExportCsv(type, data, range) {
         ['Total Revenue', 'Total Expenses', 'Net Profit', 'Profit Margin %'],
         [[data.pl.totalRevenue, data.pl.totalExpenses, data.pl.netProfit, data.pl.profitMargin]]
       ));
+      parts.push('');
+      parts.push(section('Table & Discount Report Summary'));
+      parts.push(toCsv(
+        ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount'],
+        [[
+          data.discounted.totalRecords,
+          data.discounted.totalTableBills || 0,
+          data.discounted.totalBillAmount,
+          data.discounted.totalDiscount,
+          data.discounted.totalFinalAmount
+        ]]
+      ));
+      parts.push('');
+      parts.push('Table & Discount Report');
+      parts.push(toCsv(
+        ['Bill ID', 'Table No', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Created At'],
+        (data.discounted.records || []).map(r => [r.billId, r.tableNum || '', r.billAmount, r.discountAmount, r.finalAmount, r.createdAt])
+      ));
+      parts.push('');
+      parts.push(section('Khata Summary'));
+      parts.push(toCsv(
+        ['Total Profiles', 'Outstanding Balance', 'Transactions In Range', 'Due In Range', 'Paid In Range'],
+        [[
+          data.khata.summary?.totalProfiles || 0,
+          data.khata.summary?.totalOutstandingBalance || 0,
+          data.khata.summary?.transactionsInRange || 0,
+          data.khata.summary?.totalDueInRange || 0,
+          data.khata.summary?.totalPaidInRange || 0,
+        ]]
+      ));
+      parts.push('');
+      parts.push('Khata Profiles');
+      parts.push(toCsv(
+        ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'],
+        (data.khata.profiles || []).map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance, p.createdAt])
+      ));
+      parts.push('');
+      parts.push('Khata Transactions (Within Selected Range)');
+      parts.push(toCsv(
+        ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'],
+        (data.khata.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note, tx.createdAt])
+      ));
       return parts.join('\n');
     }
     case 'sales': {
@@ -167,16 +209,16 @@ function buildExportCsv(type, data, range) {
     }
     case 'discounted': {
       const parts = [];
-      parts.push(section('Discounted Bills Summary'));
+      parts.push(section('Table & Discount Report Summary'));
       parts.push(toCsv(
-        ['Total Discounted Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount'],
-        [[data.totalRecords, data.totalBillAmount, data.totalDiscount, data.totalFinalAmount]]
+        ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount'],
+        [[data.totalRecords, data.totalTableBills || 0, data.totalBillAmount, data.totalDiscount, data.totalFinalAmount]]
       ));
       parts.push('');
-      parts.push('Discounted Bills');
+      parts.push('Table & Discount Report');
       parts.push(toCsv(
-        ['Bill ID', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Created At'],
-        (data.records || []).map(r => [r.billId, r.billAmount, r.discountAmount, r.finalAmount, r.createdAt])
+        ['Bill ID', 'Table No', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Created At'],
+        (data.records || []).map(r => [r.billId, r.tableNum || '', r.billAmount, r.discountAmount, r.finalAmount, r.createdAt])
       ));
       return parts.join('\n');
     }
@@ -230,6 +272,8 @@ async function exportReport(filters = {}) {
           expense: await reportService.getExpenseReport({ from, to }),
           staff: await reportService.getStaffReport({ from, to }),
           pl: await reportService.getProfitLoss({ from, to }),
+          discounted: await reportService.getDiscountedBillsReport({ from, to }),
+          khata: await reportService.getKhataReport({ from, to }),
         };
         break;
       case 'sales': reportData = await reportService.getSalesReport({ from, to }); break;

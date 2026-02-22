@@ -158,9 +158,11 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
 
   // Save discounted bill record if discount was applied
   if (discountAmount > 0) {
+    const tableNum = billModel.getTableNumberById(saved.tableId);
     billModel.insertDiscountedBill({
       id: uuidv4(),
       billId: saved.id,
+      tableNum,
       billAmount: parseFloat(subtotal.toFixed(2)),
       discountAmount: parseFloat(discountAmount.toFixed(2)),
       finalAmount: parseFloat(total.toFixed(2)),

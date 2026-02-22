@@ -78,6 +78,13 @@ function updateTableStatus(tableId, status) {
   return db.prepare('SELECT * FROM tables WHERE id = ?').get(tableId);
 }
 
+function getTableNumberById(tableId) {
+  if (!tableId) return null;
+  const db = getDb();
+  const table = db.prepare('SELECT number FROM tables WHERE id = ?').get(tableId);
+  return table ? table.number : null;
+}
+
 // ─── Bills ──────────────────────────────────────────────────
 
 function getTodayBillCount(dateStr) {
@@ -305,9 +312,9 @@ function getTopItems(filters = {}) {
 function insertDiscountedBill(record) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO discounted_bills (id, billId, billAmount, discountAmount, finalAmount, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(record.id, record.billId, record.billAmount, record.discountAmount, record.finalAmount, record.createdAt);
+    INSERT INTO discounted_bills (id, billId, tableNum, billAmount, discountAmount, finalAmount, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(record.id, record.billId, record.tableNum, record.billAmount, record.discountAmount, record.finalAmount, record.createdAt);
   return record;
 }
 
@@ -361,7 +368,7 @@ function setQuickKeys(assignments) {
 module.exports = {
   getAllMenuItems, getMenuItemById, insertMenuItem, updateMenuItem, deleteMenuItem,
   getAllCategories, insertCategory,
-  getAllTables, updateTableStatus,
+  getAllTables, updateTableStatus, getTableNumberById,
   insertBill, getBills, getBillById, getTopItems, getTodayBillCount,
   insertHeldBill, getHeldBills, getHeldBillById, deleteHeldBill,
   insertDiscountedBill, getDiscountedBills,

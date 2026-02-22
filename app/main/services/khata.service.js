@@ -164,6 +164,19 @@ async function deleteProfile(payload) {
   return { id };
 }
 
+async function clearTransactions(payload) {
+  const khataId = payload?.khataId;
+  if (!khataId) throw new Error('Khata profile id is required');
+  const profile = khataModel.getProfileById(khataId);
+  if (!profile) throw new Error('Khata profile not found');
+
+  // Keep expense history: convert khata-linked expenses to manual before clearing khata transactions.
+  expenseModel.unlinkKhataBySourceEntity(khataId, new Date().toISOString());
+
+  khataModel.removeTransactionsByKhataId(khataId);
+  return { khataId };
+}
+
 module.exports = {
   getAllProfiles,
   getById,
@@ -173,4 +186,5 @@ module.exports = {
   updateTransaction,
   deleteTransaction,
   deleteProfile,
+  clearTransactions,
 };

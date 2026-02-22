@@ -115,6 +115,26 @@ function countBySourceEntity(sourceType, sourceEntityId) {
   return Number(row?.count || 0);
 }
 
+function findBySourceEntity(sourceType, sourceEntityId) {
+  if (!sourceType || !sourceEntityId) return [];
+  const db = getDb();
+  return db.prepare('SELECT * FROM expenses WHERE sourceType = ? AND sourceEntityId = ? ORDER BY date DESC, createdAt DESC').all(sourceType, sourceEntityId);
+}
+
+function unlinkKhataBySourceEntity(sourceEntityId, updatedAt) {
+  if (!sourceEntityId) return;
+  const db = getDb();
+  db.prepare(`
+    UPDATE expenses
+    SET sourceType = 'manual',
+        sourceEntityId = NULL,
+        sourceEntityName = '',
+        sourceRecordId = NULL,
+        updatedAt = ?
+    WHERE sourceType = 'khata' AND sourceEntityId = ?
+  `).run(updatedAt || new Date().toISOString(), sourceEntityId);
+}
+
 function getDistinctCategories() {
   const db = getDb();
   return db.prepare('SELECT DISTINCT category FROM expenses ORDER BY category ASC').all().map(r => r.category);
@@ -129,5 +149,7 @@ module.exports = {
   findBySourceRecordId,
   findBySourceRecordIds,
   countBySourceEntity,
+  findBySourceEntity,
+  unlinkKhataBySourceEntity,
   getDistinctCategories,
 };

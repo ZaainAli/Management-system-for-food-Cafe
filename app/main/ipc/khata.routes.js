@@ -64,6 +64,14 @@ function registerKhataRoutes() {
     });
   });
 
+  ipcMain.handle('khata:clearTransactions', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
+        return khataController.clearTransactions(payload);
+      });
+    });
+  });
+
   ipcMain.handle('khata:exportProfile', async (_event, payload) => {
     return requireAuth(async () => {
       return khataController.exportProfile(payload);

@@ -155,6 +155,21 @@ export default function KhataPage() {
     }
   };
 
+  const handleClearTransactions = async () => {
+    if (!activeProfile) return;
+    if (!confirm(`Clear all transactions for "${activeProfile.name}"?`)) return;
+    setError('');
+    setMessage('');
+    const res = await window.api.khata.clearTransactions({ khataId: activeProfile.id });
+    if (res.success) {
+      setMessage('All transactions cleared.');
+      await fetchProfiles();
+      await fetchActive(activeId);
+    } else {
+      setError(res.error || 'Failed to clear transactions');
+    }
+  };
+
   const handleExportProfile = async () => {
     if (!activeId || exporting) return;
     setError('');
@@ -241,6 +256,12 @@ export default function KhataPage() {
                       className={`btn-secondary text-xs ${exporting ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       {exporting ? 'Exporting...' : 'Export Khata CSV'}
+                    </button>
+                    <button
+                      onClick={handleClearTransactions}
+                      className="text-xs px-3 py-1.5 rounded-md bg-amber-700/70 hover:bg-amber-600 text-white"
+                    >
+                      Clear Transactions
                     </button>
                     <button
                       onClick={handleDeleteProfile}

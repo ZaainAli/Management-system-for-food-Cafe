@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const khataModel = require('../models/khata.model');
 const expenseService = require('./expense.service');
 const expenseModel = require('../models/expense.model');
+const syncService = require('./sync.service');
 
 async function getAllProfiles() {
   return khataModel.getAllProfiles();
@@ -32,7 +33,9 @@ async function addProfile(payload) {
     businessDetails: payload.businessDetails ? String(payload.businessDetails).trim() : '',
     createdAt: new Date().toISOString(),
   };
-  return khataModel.insertProfile(profile);
+  const created = khataModel.insertProfile(profile);
+  syncService.pushKhataProfile(created).catch(() => {});
+  return created;
 }
 
 function normalizeAmount(amount) {
@@ -56,7 +59,9 @@ async function addDue(payload) {
     date: payload.date || new Date().toISOString().split('T')[0],
     createdAt: new Date().toISOString(),
   };
-  return khataModel.insertTransaction(tx);
+  const created = khataModel.insertTransaction(tx);
+  syncService.pushKhataTransaction(created).catch(() => {});
+  return created;
 }
 
 async function addPayment(payload) {
@@ -82,6 +87,7 @@ async function addPayment(payload) {
     createdAt: new Date().toISOString(),
   };
   const created = khataModel.insertTransaction(tx);
+  syncService.pushKhataTransaction(created).catch(() => {});
 
   if (source === 'today_sale') {
     await expenseService.add({
@@ -130,7 +136,9 @@ async function updateTransaction(payload) {
     note: nextNote,
     paymentSource: nextPaymentSource,
   };
-  return khataModel.updateTransaction(updated);
+  const saved = khataModel.updateTransaction(updated);
+  syncService.pushKhataTransaction(saved).catch(() => {});
+  return saved;
 }
 
 async function deleteTransaction(payload) {
@@ -145,6 +153,7 @@ async function deleteTransaction(payload) {
   }
 
   khataModel.removeTransaction(id);
+  syncService.deleteKhataTransaction(id).catch(() => {});
   return { id };
 }
 
@@ -161,6 +170,7 @@ async function deleteProfile(payload) {
 
   khataModel.removeTransactionsByKhataId(id);
   khataModel.removeProfile(id);
+  syncService.deleteKhataProfile(id).catch(() => {});  // cascade deletes transactions in Supabase
   return { id };
 }
 

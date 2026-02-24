@@ -2,6 +2,7 @@ const expenseModel = require('../models/expense.model');
 const salesModel = require('../models/sales.model');
 const employeeModel = require('../models/employee.model');
 const khataModel = require('../models/khata.model');
+const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
 
 async function getAll(filters = {}) {
@@ -105,6 +106,7 @@ async function add(expense) {
   }
 
   salesModel.addExpenseToDailySales({ date: saved.date, amountDelta: saved.amount });
+  syncService.pushExpense(saved).catch(() => {});
   return saved;
 }
 
@@ -170,6 +172,7 @@ async function update({ id, ...updates }) {
     salesModel.addExpenseToDailySales({ date: saved.date, amountDelta: saved.amount });
   }
 
+  syncService.pushExpense(saved).catch(() => {});
   return saved;
 }
 
@@ -185,6 +188,7 @@ async function remove(id) {
   }
   const removed = expenseModel.remove(id);
   salesModel.addExpenseToDailySales({ date: expense.date, amountDelta: -expense.amount });
+  syncService.deleteExpense(id).catch(() => {});
   return removed;
 }
 

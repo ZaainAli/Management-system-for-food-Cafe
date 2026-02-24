@@ -12,6 +12,8 @@ import {
   ChevronDown,
   LogOut,
   ChefHat,
+  Menu,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 
@@ -29,6 +31,7 @@ const navItems = [
 export default function AppLayout({ children }) {
   const { user, branches, activeBranch, setActiveBranch, logout } = useAuth();
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -40,20 +43,40 @@ export default function AppLayout({ children }) {
 
   return (
     <div className="flex h-screen bg-slate-900 overflow-hidden">
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* ── Sidebar ── */}
-      <aside className="w-64 flex-shrink-0 flex flex-col bg-slate-800 border-r border-slate-700">
+      <aside
+        className={`fixed md:static inset-y-0 left-0 z-40 w-64 flex-shrink-0 flex flex-col
+                    bg-slate-800 border-r border-slate-700 transform transition-transform duration-200
+                    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+      >
 
         {/* Logo */}
         <div className="px-4 py-5 border-b border-slate-700">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <ChefHat className="w-4 h-4 text-white" />
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <ChefHat className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-white font-semibold text-sm leading-tight">
+                Hamza & Brother's<br />
+                <span className="text-primary-400">Food Chain</span>
+              </span>
             </div>
-            <span className="text-white font-semibold text-sm leading-tight">
-              Restaurant<br />
-              <span className="text-primary-400">Admin</span>
-            </span>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden text-slate-300 hover:text-white p-1"
+              aria-label="Close menu"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -80,6 +103,7 @@ export default function AppLayout({ children }) {
                     onClick={() => {
                       setActiveBranch(b);
                       setBranchMenuOpen(false);
+                      setSidebarOpen(false);
                     }}
                     className={`w-full text-left px-3 py-2 text-sm transition-colors
                       ${activeBranch?.id === b.id
@@ -111,6 +135,7 @@ export default function AppLayout({ children }) {
               key={path}
               to={path}
               end={end}
+              onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors duration-150
                  ${isActive
@@ -150,7 +175,20 @@ export default function AppLayout({ children }) {
 
       {/* ── Main Content ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-6">
+        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-800">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-slate-300 hover:text-white p-1"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <span className="text-sm font-medium text-white">Hamza & Brother Food Chain</span>
+          <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center">
+            <span className="text-white text-xs font-bold">{userInitial}</span>
+          </div>
+        </header>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {children}
         </main>
       </div>

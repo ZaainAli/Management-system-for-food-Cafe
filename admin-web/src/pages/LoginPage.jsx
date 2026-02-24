@@ -48,7 +48,7 @@ export default function LoginPage() {
                           bg-primary-500 rounded-2xl mb-4 mx-auto shadow-lg">
             <UtensilsCrossed className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Restaurant Admin</h1>
+          <h1 className="text-2xl font-bold text-white">Hamza & Brother Food Chain</h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to your account</p>
         </div>
 

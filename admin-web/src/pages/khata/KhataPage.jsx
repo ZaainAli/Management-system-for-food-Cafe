@@ -98,10 +98,10 @@ export default function KhataPage() {
     <div>
       <h1 className="text-xl font-bold text-white mb-5">Khata (Ledger)</h1>
 
-      <div className="flex gap-4 h-[calc(100vh-10rem)]">
+      <div className="flex flex-col lg:flex-row gap-4 h-auto lg:h-[calc(100vh-10rem)]">
 
         {/* ── Profiles panel ── */}
-        <div className="w-64 flex-shrink-0 flex flex-col card p-0 overflow-hidden">
+        <div className="w-full lg:w-64 lg:flex-shrink-0 flex flex-col card p-0 overflow-hidden max-h-[40vh] lg:max-h-none">
           <div className="px-3 py-3 border-b border-slate-700 flex items-center justify-between">
             <span className="text-slate-300 text-sm font-medium">Profiles</span>
             <button onClick={() => setAddingProfile(true)} className="text-primary-400 hover:text-primary-300 transition-colors">
@@ -155,7 +155,7 @@ export default function KhataPage() {
         </div>
 
         {/* ── Transactions panel ── */}
-        <div className="flex-1 flex flex-col card p-0 overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col card p-0 overflow-hidden h-[55vh] lg:h-auto">
           {!selected ? (
             <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
               Select a profile to view transactions
@@ -163,8 +163,8 @@ export default function KhataPage() {
           ) : (
             <>
               {/* Panel header */}
-              <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-                <div>
+              <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
                   <h2 className="text-white font-semibold">{selected.name}</h2>
                   <p className={`text-xs mt-0.5 font-medium ${finalBalance > 0 ? 'text-red-400' : finalBalance < 0 ? 'text-green-400' : 'text-slate-500'}`}>
                     {finalBalance > 0
@@ -180,8 +180,8 @@ export default function KhataPage() {
               </div>
 
               {/* Transaction table */}
-              <div className="flex-1 overflow-y-auto">
-                <table className="w-full text-sm">
+              <div className="flex-1 overflow-auto">
+                <table className="w-full min-w-[620px] text-sm">
                   <thead className="sticky top-0 bg-slate-800">
                     <tr className="border-b border-slate-700">
                       <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Date</th>

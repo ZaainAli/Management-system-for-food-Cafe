@@ -54,7 +54,7 @@ function StatCard({ label, value, Icon, colorClass, loading }) {
       </div>
       <div className="min-w-0">
         <p className="text-slate-400 text-xs uppercase tracking-wide truncate">{label}</p>
-        <p className={`text-xl font-bold mt-0.5 ${loading ? 'text-slate-700' : 'text-white'}`}>
+        <p className={`text-lg sm:text-xl font-bold mt-0.5 break-words ${loading ? 'text-slate-700' : 'text-white'}`}>
           {loading ? '—' : fmt(value)}
         </p>
       </div>
@@ -184,7 +184,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
         <StatCard label="Revenue"   value={totalRevenue}  Icon={TrendingUp}   colorClass="bg-green-700"    loading={loading} />
         <StatCard label="Expenses"  value={totalExpenses} Icon={TrendingDown} colorClass="bg-red-700"      loading={loading} />
         <StatCard label="Net Profit" value={netProfit}    Icon={DollarSign}   colorClass="bg-primary-600"  loading={loading} />
@@ -192,9 +192,9 @@ export default function ReportsPage() {
           <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-700">
             <ShoppingBag className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <p className="text-slate-400 text-xs uppercase tracking-wide">Bills</p>
-            <p className={`text-xl font-bold mt-0.5 ${loading ? 'text-slate-700' : 'text-white'}`}>
+          <div className="min-w-0">
+            <p className="text-slate-400 text-xs uppercase tracking-wide truncate">Bills</p>
+            <p className={`text-lg sm:text-xl font-bold mt-0.5 break-words ${loading ? 'text-slate-700' : 'text-white'}`}>
               {loading ? '—' : totalBills.toLocaleString()}
             </p>
           </div>

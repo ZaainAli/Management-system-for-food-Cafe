@@ -24,8 +24,9 @@ function getRange(period) {
   return { from: today, to: today };
 }
 
-const fmt = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
-const PERIODS = ['today', 'week', 'month', 'year'];
+const fmt   = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
+const today = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`; };
+const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 
 // ── Custom tooltip ────────────────────────────────────────────
 
@@ -65,15 +66,18 @@ function StatCard({ label, value, Icon, colorClass, loading }) {
 
 export default function ReportsPage() {
   const { activeBranch, branches } = useAuth();
-  const [period, setPeriod]       = useState('month');
+  const [period, setPeriod]             = useState('month');
+  const [customDate, setCustomDate]     = useState(today());
   const [branchFilter, setBranchFilter] = useState('active'); // 'active' | 'all'
-  const [salesRows, setSalesRows] = useState([]);
-  const [expRows, setExpRows]     = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [salesRows, setSalesRows]       = useState([]);
+  const [expRows, setExpRows]           = useState([]);
+  const [loading, setLoading]           = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { from, to } = getRange(period);
+    const { from, to } = period === 'custom'
+      ? { from: customDate, to: customDate }
+      : getRange(period);
 
     // Build branch filter
     let salesQ = supabase
@@ -98,7 +102,7 @@ export default function ReportsPage() {
     setSalesRows(salesRes.data ?? []);
     setExpRows(expRes.data ?? []);
     setLoading(false);
-  }, [period, branchFilter, activeBranch]);
+  }, [period, customDate, branchFilter, activeBranch]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -161,10 +165,21 @@ export default function ReportsPage() {
                     ? 'bg-primary-500 text-white'
                     : 'text-slate-400 hover:text-white'}`}
               >
-                {p}
+                {p === 'custom' ? 'Custom' : p}
               </button>
             ))}
           </div>
+
+          {/* Date picker — only visible when custom is selected */}
+          {period === 'custom' && (
+            <input
+              type="date"
+              value={customDate}
+              max={today()}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="input-field !w-auto text-xs py-1.5"
+            />
+          )}
         </div>
       </div>
 

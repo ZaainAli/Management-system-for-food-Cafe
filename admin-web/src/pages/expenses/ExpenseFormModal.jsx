@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -11,6 +11,13 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
   const [form, setForm] = useState({ category: '', description: '', amount: '', date: today(), source_type: 'manual' });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [khataProfiles, setKhataProfiles]       = useState([]);
+  const [employees, setEmployees]               = useState([]);
+  const [selectedProfileId, setSelectedProfileId] = useState('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [loadingProfiles, setLoadingProfiles]   = useState(false);
+
   const firstRef = useRef(null);
 
   useEffect(() => {
@@ -19,8 +26,32 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       : { category: CATEGORIES[0], description: '', amount: '', date: today(), source_type: 'manual' }
     );
     setError('');
+    setSelectedProfileId('');
+    setSelectedEmployeeId('');
     setTimeout(() => firstRef.current?.focus(), 50);
   }, [expense]);
+
+  // Fetch khata profiles or employees when source_type changes
+  useEffect(() => {
+    if (form.source_type === 'khata') {
+      setLoadingProfiles(true);
+      supabase
+        .from('khata_profiles')
+        .select('id, name')
+        .eq('branch_id', branchId)
+        .order('name')
+        .then(({ data }) => { setKhataProfiles(data ?? []); setLoadingProfiles(false); });
+    } else if (form.source_type === 'salary') {
+      setLoadingProfiles(true);
+      supabase
+        .from('employees')
+        .select('id, name, role')
+        .eq('branch_id', branchId)
+        .eq('active', true)
+        .order('name')
+        .then(({ data }) => { setEmployees(data ?? []); setLoadingProfiles(false); });
+    }
+  }, [form.source_type, branchId]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -29,6 +60,13 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
     if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) {
       setError('Enter a valid amount.'); return;
     }
+    if (form.source_type === 'khata' && !selectedProfileId) {
+      setError('Select a Khata profile.'); return;
+    }
+    if (form.source_type === 'salary' && !selectedEmployeeId) {
+      setError('Select an employee.'); return;
+    }
+
     setSaving(true); setError('');
 
     const payload = {
@@ -44,8 +82,30 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       ? await supabase.from('expenses').update(payload).eq('id', expense.id)
       : await supabase.from('expenses').insert(payload);
 
-    if (result.error) { setError(result.error.message); }
-    else { onSaved(); onClose(); }
+    if (result.error) { setError(result.error.message); setSaving(false); return; }
+
+    // Side-effects for new expenses only
+    if (!expense?.id) {
+      if (form.source_type === 'khata' && selectedProfileId) {
+        await supabase.from('khata_transactions').insert({
+          profile_id: selectedProfileId,
+          branch_id:  branchId,
+          type:       'payment',
+          amount:     parseFloat(Number(form.amount).toFixed(2)),
+          note:       form.description.trim() || form.category.trim(),
+          date:       form.date,
+        });
+      } else if (form.source_type === 'salary' && selectedEmployeeId) {
+        await supabase.from('salary_records').insert({
+          employee_id: selectedEmployeeId,
+          amount:      parseFloat(Number(form.amount).toFixed(2)),
+          month:       form.date.slice(0, 7),   // YYYY-MM
+          paid_at:     new Date().toISOString(),
+        });
+      }
+    }
+
+    onSaved(); onClose();
     setSaving(false);
   };
 
@@ -93,6 +153,46 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
               {SOURCE_TYPES.map((s) => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
           </div>
+
+          {/* Khata profile selector */}
+          {form.source_type === 'khata' && (
+            <div>
+              <label className="label">Khata Profile <span className="text-red-400">*</span></label>
+              {loadingProfiles ? (
+                <div className="input-field text-slate-500 text-sm">Loading profiles...</div>
+              ) : (
+                <select value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)} className="input-field">
+                  <option value="">Select a profile</option>
+                  {khataProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+              {!loadingProfiles && khataProfiles.length === 0 && (
+                <p className="text-slate-500 text-xs mt-1">No khata profiles found for this branch.</p>
+              )}
+            </div>
+          )}
+
+          {/* Employee selector */}
+          {form.source_type === 'salary' && (
+            <div>
+              <label className="label">Employee <span className="text-red-400">*</span></label>
+              {loadingProfiles ? (
+                <div className="input-field text-slate-500 text-sm">Loading employees...</div>
+              ) : (
+                <select value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="input-field">
+                  <option value="">Select an employee</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}{emp.role ? ` — ${emp.role}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {!loadingProfiles && employees.length === 0 && (
+                <p className="text-slate-500 text-xs mt-1">No active employees found for this branch.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 mt-5">

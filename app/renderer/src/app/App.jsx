@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
 import LoginPage from './auth/LoginPage';
+import SetupPage from './setup/SetupPage';
 import SidebarLayout from '../layouts/SidebarLayout';
 import TitleBar from '../components/TitleBar';
 import Dashboard from './reports/Dashboard';
@@ -16,6 +17,7 @@ import ReportsPage from './reports/ReportsPage';
 import ExportReportsPage from './reports/ExportReportsPage';
 import DiscountReportPage from './reports/DiscountReportPage';
 import UsersPage from './users/UsersPage';
+import BranchPage from './setup/BranchPage';
 
 function ProtectedRoute({ permission, children }) {
   const { permissions } = useAuth();
@@ -28,13 +30,29 @@ function ProtectedRoute({ permission, children }) {
 
 export default function App({ isPOSWindow }) {
   const { user, loading } = useAuth();
+  const [branchConfigured, setBranchConfigured] = useState(null); // null = checking
 
-  if (loading) {
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.api.setup.getBranchId();
+        setBranchConfigured(res.success && !!res.data.branchId);
+      } catch {
+        setBranchConfigured(false);
+      }
+    })();
+  }, []);
+
+  if (loading || branchConfigured === null) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-slate-400 text-lg">Loading...</div>
       </div>
     );
+  }
+
+  if (!branchConfigured) {
+    return <SetupPage onSetupComplete={() => setBranchConfigured(true)} />;
   }
 
   if (!user) {
@@ -94,6 +112,9 @@ export default function App({ isPOSWindow }) {
         } />
         <Route path="/users" element={
           <ProtectedRoute permission="canManageUsers"><UsersPage /></ProtectedRoute>
+        } />
+        <Route path="/branch" element={
+          <ProtectedRoute permission="canAccessDashboard"><BranchPage /></ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>

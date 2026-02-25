@@ -17,7 +17,21 @@ function getClient() {
 }
 
 function getBranchId() {
-  return process.env.SUPABASE_BRANCH_ID || null;
+  if (process.env.SUPABASE_BRANCH_ID) return process.env.SUPABASE_BRANCH_ID;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { app } = require('electron');
+    const configPath = path.join(app.getPath('userData'), 'branch-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.branchId) {
+        process.env.SUPABASE_BRANCH_ID = config.branchId;
+        return config.branchId;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 /** Shared helper — upsert a single row, log on error */

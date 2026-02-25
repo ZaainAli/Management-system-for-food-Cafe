@@ -4,16 +4,21 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import ExpenseFormModal from './ExpenseFormModal';
 
-const PERIODS = ['today', 'week', 'month', 'year'];
+const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 const SOURCE_COLORS = { manual: 'bg-slate-700 text-slate-300', khata: 'bg-blue-900/40 text-blue-400', salary: 'bg-purple-900/40 text-purple-400' };
 
-function getRange(period) {
+function todayStr() {
   const t = new Date(), pad = (n) => String(n).padStart(2, '0');
-  const today = `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
-  if (period === 'today') return { from: today, to: today };
-  if (period === 'week')  { const d = new Date(t); d.setDate(t.getDate()-6); return { from: d.toISOString().split('T')[0], to: today }; }
-  if (period === 'month') return { from: today.slice(0,8)+'01', to: today };
-  if (period === 'year')  return { from: today.slice(0,5)+'01-01', to: today };
+  return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+}
+
+function getRange(period, customDate) {
+  const today = todayStr();
+  if (period === 'today')  return { from: today, to: today };
+  if (period === 'week')   { const d = new Date(); d.setDate(d.getDate()-6); return { from: d.toISOString().split('T')[0], to: today }; }
+  if (period === 'month')  return { from: today.slice(0,8)+'01', to: today };
+  if (period === 'year')   return { from: today.slice(0,5)+'01-01', to: today };
+  if (period === 'custom') return { from: customDate, to: customDate };
   return { from: today, to: today };
 }
 
@@ -21,6 +26,7 @@ export default function ExpensesPage() {
   const { activeBranch } = useAuth();
   const [expenses, setExpenses]   = useState([]);
   const [period, setPeriod]       = useState('month');
+  const [customDate, setCustomDate] = useState(todayStr);
   const [catFilter, setCatFilter] = useState('all');
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -30,8 +36,9 @@ export default function ExpensesPage() {
 
   const fetchExpenses = useCallback(async () => {
     if (!branchId) return;
+    if (period === 'custom' && !customDate) return;
     setLoading(true);
-    const { from, to } = getRange(period);
+    const { from, to } = getRange(period, customDate);
     const { data } = await supabase
       .from('expenses')
       .select('id, category, description, amount, date, source_type')
@@ -40,7 +47,7 @@ export default function ExpensesPage() {
       .order('date', { ascending: false });
     setExpenses(data ?? []);
     setLoading(false);
-  }, [branchId, period]);
+  }, [branchId, period, customDate]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -70,7 +77,7 @@ export default function ExpensesPage() {
           <h1 className="text-xl font-bold text-white">Expenses</h1>
           <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
             {PERIODS.map((p) => (
               <button key={p} onClick={() => setPeriod(p)}
@@ -80,6 +87,15 @@ export default function ExpensesPage() {
               </button>
             ))}
           </div>
+          {period === 'custom' && (
+            <input
+              type="date"
+              value={customDate}
+              max={todayStr()}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="input-field py-1.5 text-xs w-36"
+            />
+          )}
           <button onClick={() => { setEditing(null); setShowModal(true); }} className="btn-primary text-sm">+ Add</button>
         </div>
       </div>

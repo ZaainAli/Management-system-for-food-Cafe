@@ -1,7 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapPin, Phone, Pencil, Trash2 } from 'lucide-react';
+import { MapPin, Phone, Pencil, Trash2, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import BranchFormModal from './BranchFormModal';
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async (e) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy Branch ID"
+      className="ml-1 text-slate-600 hover:text-primary-400 transition-colors flex-shrink-0"
+    >
+      {copied
+        ? <Check className="w-3 h-3 text-green-400" />
+        : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
 
 export default function BranchesPage() {
   const [branches, setBranches]   = useState([]);
@@ -76,6 +97,10 @@ export default function BranchesPage() {
               >
                 <td className="px-4 py-3">
                   <span className="text-white font-medium">{b.name}</span>
+                  <span className="flex items-center gap-0.5 mt-0.5">
+                    <span className="font-mono text-slate-600 text-xs truncate max-w-[180px]">{b.id}</span>
+                    <CopyButton text={b.id} />
+                  </span>
                   {/* Mobile: show address inline */}
                   {b.address && (
                     <span className="flex items-center gap-1 text-slate-500 text-xs mt-0.5 sm:hidden">

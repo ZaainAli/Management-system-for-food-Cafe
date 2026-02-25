@@ -7,8 +7,10 @@ const { registerReportRoutes } = require('./report.routes');
 const { registerWindowRoutes } = require('./window.routes');
 const { registerUserRoutes } = require('./user.routes');
 const { registerKhataRoutes } = require('./khata.routes');
+const { registerSetupRoutes } = require('./setup.routes');
 
 function registerIPCHandlers() {
+  registerSetupRoutes();
   registerAuthRoutes();
   registerPosRoutes();
   registerStockRoutes();

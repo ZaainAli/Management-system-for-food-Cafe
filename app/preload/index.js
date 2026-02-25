@@ -98,6 +98,13 @@ const khataAPI = {
   exportProfile: (payload) => ipcRenderer.invoke('khata:exportProfile', payload),
 };
 
+// ─── Setup API ──────────────────────────────────────────────
+const setupAPI = {
+  getBranchId: () => ipcRenderer.invoke('setup:getBranchId'),
+  saveBranchId: (payload) => ipcRenderer.invoke('setup:saveBranchId', payload),
+  getBranchInfo: () => ipcRenderer.invoke('setup:getBranchInfo'),
+};
+
 // ─── Window API ─────────────────────────────────────────────
 const windowAPI = {
   minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -111,6 +118,7 @@ const windowAPI = {
 
 // ─── Expose to Renderer ─────────────────────────────────────
 contextBridge.exposeInMainWorld('api', {
+  setup: setupAPI,
   auth: authAPI,
   pos: posAPI,
   stock: stockAPI,

@@ -1,4 +1,5 @@
 const employeeModel = require('../models/employee.model');
+const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
 
 async function addSalaryRecord({ employeeId, amount, payDate, notes = '' }) {
@@ -18,7 +19,9 @@ async function addSalaryRecord({ employeeId, amount, payDate, notes = '' }) {
     createdAt: new Date().toISOString(),
   };
 
-  return employeeModel.insertSalaryRecord(record);
+  const created = employeeModel.insertSalaryRecord(record);
+  syncService.pushSalaryRecord(created).catch(() => {});
+  return created;
 }
 
 async function getSalaryHistory(employeeId, filters = {}) {

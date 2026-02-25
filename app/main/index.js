@@ -1,7 +1,9 @@
+require('dotenv').config(); // load .env from project root into process.env
 const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
 const { initializeDatabase } = require('./db/index');
 const { registerIPCHandlers } = require('./ipc/index');
+const { pullAllFromSupabase } = require('./services/pull.service');
 const logger = require('./utils/logger');
 
 let mainWindow;
@@ -26,6 +28,9 @@ function createWindow() {
 
   // Initialize database
   initializeDatabase();
+
+  // Pull latest data from Supabase into SQLite (non-blocking)
+  pullAllFromSupabase().catch(() => {});
 
   // Register all IPC handlers
   registerIPCHandlers();

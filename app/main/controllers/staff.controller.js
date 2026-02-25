@@ -1,5 +1,6 @@
 const salaryService = require('../services/salary.service');
 const employeeModel = require('../models/employee.model');
+const syncService = require('../services/sync.service');
 const logger = require('../utils/logger');
 
 async function getAll(filters = {}) {
@@ -27,6 +28,7 @@ async function add(employee) {
   try {
     const created = await employeeModel.create(employee);
     logger.info(`Employee added: ${created.name}`);
+    syncService.pushEmployee(created).catch(() => {});
     return { success: true, data: created };
   } catch (err) {
     logger.error('staff:add failed', err);
@@ -37,6 +39,7 @@ async function add(employee) {
 async function update(payload) {
   try {
     const updated = await employeeModel.update(payload);
+    syncService.pushEmployee(updated).catch(() => {});
     return { success: true, data: updated };
   } catch (err) {
     logger.error('staff:update failed', err);

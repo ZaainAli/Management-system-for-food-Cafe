@@ -1,6 +1,7 @@
 const billModel = require('../models/bill.model');
 const stockModel = require('../models/stock.model');
 const salesModel = require('../models/sales.model');
+const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
 
 // ─── Menu Items ─────────────────────────────────────────────
@@ -29,7 +30,9 @@ async function addMenuItem(item) {
     isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
     createdAt: new Date().toISOString(),
   };
-  return billModel.insertMenuItem(newItem);
+  const created = billModel.insertMenuItem(newItem);
+  syncService.pushMenuItem(created).catch(() => {});
+  return created;
 }
 
 async function updateMenuItem(id, updates) {
@@ -39,13 +42,17 @@ async function updateMenuItem(id, updates) {
     throw new Error('Half price cannot be negative');
   }
   const updated = { ...item, ...updates, updatedAt: new Date().toISOString() };
-  return billModel.updateMenuItem(updated);
+  const saved = billModel.updateMenuItem(updated);
+  syncService.pushMenuItem(saved).catch(() => {});
+  return saved;
 }
 
 async function deleteMenuItem(id) {
   const item = await billModel.getMenuItemById(id);
   if (!item) throw new Error('Menu item not found');
-  return billModel.deleteMenuItem(id);
+  const result = billModel.deleteMenuItem(id);
+  syncService.deleteMenuItem(id).catch(() => {});
+  return result;
 }
 
 // ─── Menu Categories ────────────────────────────────────────
@@ -61,7 +68,9 @@ async function addMenuCategory(category) {
     name: category.name,
     createdAt: new Date().toISOString(),
   };
-  return billModel.insertCategory(newCategory);
+  const created = billModel.insertCategory(newCategory);
+  syncService.pushMenuCategory(created).catch(() => {});
+  return created;
 }
 
 // ─── Bill Creation ──────────────────────────────────────────

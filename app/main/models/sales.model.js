@@ -1,4 +1,5 @@
 const { getDb } = require('../db/index');
+const syncService = require('../services/sync.service');
 
 function upsertDailySales({ date, revenueDelta = 0, billsDelta = 0, expensesDelta = 0 }) {
   const db = getDb();
@@ -12,6 +13,19 @@ function upsertDailySales({ date, revenueDelta = 0, billsDelta = 0, expensesDelt
       totalExpenses = totalExpenses + excluded.totalExpenses,
       updatedAt = excluded.updatedAt
   `).run(date, revenueDelta, billsDelta, expensesDelta, now);
+
+  // Read back current totals and push to Supabase (non-blocking — never delays billing)
+  const row = db.prepare(
+    'SELECT totalRevenue, totalBills, totalExpenses FROM daily_sales WHERE date = ?'
+  ).get(date);
+  if (row) {
+    syncService.pushDailySales({
+      date,
+      totalRevenue:  row.totalRevenue,
+      totalBills:    row.totalBills,
+      totalExpenses: row.totalExpenses,
+    }).catch(() => {}); // suppress unhandled rejection
+  }
 }
 
 function addBillToDailySales({ date, total }) {

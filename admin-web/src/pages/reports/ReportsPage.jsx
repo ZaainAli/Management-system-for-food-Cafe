@@ -135,6 +135,23 @@ export default function ReportsPage() {
 
   const showAllBranches = branches.length > 1;
 
+  // Per-branch breakdown (used when branchFilter === 'all')
+  const branchSalesMap = {};
+  salesRows.forEach((r) => {
+    if (!branchSalesMap[r.branch_id]) branchSalesMap[r.branch_id] = { revenue: 0, expenses: 0, bills: 0 };
+    branchSalesMap[r.branch_id].revenue  += Number(r.total_revenue);
+    branchSalesMap[r.branch_id].expenses += Number(r.total_expenses);
+    branchSalesMap[r.branch_id].bills    += Number(r.bill_count);
+  });
+  const branchBreakdown = branches.map((b) => ({
+    id:       b.id,
+    name:     b.name,
+    revenue:  branchSalesMap[b.id]?.revenue  ?? 0,
+    expenses: branchSalesMap[b.id]?.expenses ?? 0,
+    bills:    branchSalesMap[b.id]?.bills    ?? 0,
+    profit:   (branchSalesMap[b.id]?.revenue ?? 0) - (branchSalesMap[b.id]?.expenses ?? 0),
+  }));
+
   return (
     <div>
       {/* Header */}
@@ -264,6 +281,57 @@ export default function ReportsPage() {
               <Bar dataKey="amount" name="Amount" fill="#f97316" radius={[0,3,3,0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Per-branch breakdown — only when All Branches is selected */}
+      {branchFilter === 'all' && showAllBranches && (
+        <div className="card mt-4">
+          <h2 className="text-sm font-semibold text-white mb-4">Branch-wise Breakdown</h2>
+          {loading ? (
+            <p className="text-slate-600 text-sm text-center py-8">Loading...</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-slate-700">
+                    <th className="pb-3 pr-4 text-slate-400 font-medium">Branch</th>
+                    <th className="pb-3 px-4 text-slate-400 font-medium text-right">Revenue</th>
+                    <th className="pb-3 px-4 text-slate-400 font-medium text-right">Expenses</th>
+                    <th className="pb-3 px-4 text-slate-400 font-medium text-right">Net Profit</th>
+                    <th className="pb-3 pl-4 text-slate-400 font-medium text-right">Bills</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {branchBreakdown.map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 pr-4 text-white font-medium">{b.name}</td>
+                      <td className="py-3 px-4 text-green-400 text-right">{fmt(b.revenue)}</td>
+                      <td className="py-3 px-4 text-red-400 text-right">{fmt(b.expenses)}</td>
+                      <td className={`py-3 px-4 text-right font-semibold ${b.profit >= 0 ? 'text-primary-400' : 'text-red-400'}`}>
+                        {fmt(b.profit)}
+                      </td>
+                      <td className="py-3 pl-4 text-slate-400 text-right">{b.bills.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-600 font-semibold">
+                    <td className="pt-3 pr-4 text-slate-300">Total</td>
+                    <td className="pt-3 px-4 text-green-400 text-right">{fmt(totalRevenue)}</td>
+                    <td className="pt-3 px-4 text-red-400 text-right">{fmt(totalExpenses)}</td>
+                    <td className={`pt-3 px-4 text-right ${netProfit >= 0 ? 'text-primary-400' : 'text-red-400'}`}>
+                      {fmt(netProfit)}
+                    </td>
+                    <td className="pt-3 pl-4 text-slate-400 text-right">{totalBills.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              {branchBreakdown.every((b) => b.revenue === 0 && b.expenses === 0) && (
+                <p className="text-slate-600 text-sm text-center py-6">No data for selected period.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

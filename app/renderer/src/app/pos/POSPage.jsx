@@ -21,9 +21,10 @@ export default function POSPage() {
   const [printWarning, setPrintWarning] = useState(null);
   const [holdNotice, setHoldNotice] = useState(null);
   const [heldBills, setHeldBills] = useState([]);
-  const [fsm, setFsm] = useState('IDLE');           // 'IDLE' | 'PRICE' | 'QTY'
+  const [fsm, setFsm] = useState('IDLE');           // 'IDLE' | 'PRICE' | 'QTY' | 'TABLE'
   const [pendingLineId, setPendingLineId] = useState(null);
   const [pendingIsNewLine, setPendingIsNewLine] = useState(false);
+  const [tableBuffer, setTableBuffer] = useState('');
   const inputBufferRef = useRef('');
   const creatingBillRef = useRef(false);
   const discountInputRef = useRef(null);
@@ -80,6 +81,11 @@ export default function POSPage() {
       return () => clearTimeout(t);
     }
   }, [holdNotice]);
+
+  // Reset discount when cart becomes empty
+  useEffect(() => {
+    if (cart.length === 0) setDiscount(0);
+  }, [cart.length]);
 
   // Quick key map: q/w/e/r/t/y/u/i/o/p → fixed items (ignores category filter)
   const quickKeyToItem = useMemo(() => {
@@ -319,10 +325,9 @@ export default function POSPage() {
 
       if (key === 'f10' && fsm === 'IDLE') {
         e.preventDefault();
-        if (tables.length > 0) {
-          setSelectedTableId(tables[0].id);
-        }
-        tableSelectRef.current?.focus();
+        inputBufferRef.current = '';
+        setTableBuffer('');
+        setFsm('TABLE');
         return;
       }
 
@@ -499,11 +504,44 @@ export default function POSPage() {
         }
         return;
       }
+
+      // ── TABLE STATE ──
+      if (fsm === 'TABLE') {
+        e.preventDefault();
+        if (e.key === 'Enter') {
+          if (inputBufferRef.current !== '') {
+            const num = parseInt(inputBufferRef.current, 10);
+            const found = tables.find(t => t.number === num);
+            if (found) setSelectedTableId(found.id);
+          }
+          inputBufferRef.current = '';
+          setTableBuffer('');
+          setFsm('IDLE');
+          return;
+        }
+        if (e.key >= '0' && e.key <= '9') {
+          inputBufferRef.current += e.key;
+          setTableBuffer(inputBufferRef.current);
+          return;
+        }
+        if (e.key === 'Backspace') {
+          inputBufferRef.current = inputBufferRef.current.slice(0, -1);
+          setTableBuffer(inputBufferRef.current);
+          return;
+        }
+        if (e.key === 'Escape') {
+          inputBufferRef.current = '';
+          setTableBuffer('');
+          setFsm('IDLE');
+          return;
+        }
+        return;
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart, tables, heldBills]);
+  }, [fsm, pendingLineId, pendingIsNewLine, keyToItem, quickKeyToItem, cart, tables, heldBills, discount, selectedTableId, paymentMethod]);
 
   if (loading) return <div className="text-slate-400">Loading POS...</div>;
 
@@ -568,9 +606,11 @@ export default function POSPage() {
         {fsm !== 'IDLE' && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-primary-900/30 border border-primary-700/50 flex items-center gap-3">
             <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-              fsm === 'PRICE' ? 'bg-yellow-500/20 text-yellow-300' : 'bg-blue-500/20 text-blue-300'
+              fsm === 'PRICE' ? 'bg-yellow-500/20 text-yellow-300'
+              : fsm === 'TABLE' ? 'bg-green-500/20 text-green-300'
+              : 'bg-blue-500/20 text-blue-300'
             }`}>
-              {fsm === 'PRICE' ? 'STEP 2: SET PRICE' : 'STEP 3: SET QTY'}
+              {fsm === 'PRICE' ? 'STEP 2: SET PRICE' : fsm === 'TABLE' ? 'TABLE SELECT' : 'STEP 3: SET QTY'}
             </span>
             <span className="text-xs text-slate-400">
               {fsm === 'PRICE' && (
@@ -596,15 +636,32 @@ export default function POSPage() {
                   {' | '}<kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-200 mx-0.5">Esc</kbd> cancel
                 </>
               )}
+              {fsm === 'TABLE' && (
+                <>
+                  Type table #
+                  {tableBuffer
+                    ? <span className="text-white font-mono mx-1 px-1.5 py-0.5 bg-slate-700 rounded">{tableBuffer}</span>
+                    : <span className="text-slate-600 mx-1">—</span>
+                  }
+                  {' | '}<kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-200 mx-0.5">Enter</kbd> confirm
+                  {' | '}<kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-200 mx-0.5">Esc</kbd> cancel
+                </>
+              )}
             </span>
           </div>
         )}
         {fsm === 'IDLE' && cart.length > 0 && (
-          <div className="mb-3 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center gap-2">
-            <span className="text-xs text-slate-500">
-              <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300 mx-0.5">A-Z</kbd> add item
-              {' | '}<kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300 mx-0.5">Esc</kbd> create bill
-            </span>
+          <div className="mb-3 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700">
+            <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-slate-500">
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">A-Z</kbd> add item</span>
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">Esc</kbd> create bill</span>
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F6</kbd> hold bill</span>
+              <span className={heldBills.length === 0 ? 'opacity-40' : ''}><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F7</kbd> recall held</span>
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F8</kbd> remove item</span>
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F9</kbd> discount</span>
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F10</kbd> table</span>
+              <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F12</kbd> bill (no print)</span>
+            </div>
           </div>
         )}
 
@@ -757,11 +814,14 @@ export default function POSPage() {
               <label className="label text-xs">Discount Amount:</label>
               <input
                 ref={discountInputRef}
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
                 value={discount}
                 onFocus={(e) => e.target.select()}
-                onChange={e => setDiscount(Math.max(0, Number(e.target.value)))}
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  setDiscount(val === '' ? 0 : Math.max(0, Number(val)));
+                }}
                 disabled={fsm !== 'IDLE'}
                 className="input-field py-1.5 text-xs"
               />

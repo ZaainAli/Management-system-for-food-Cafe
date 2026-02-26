@@ -1,9 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+
+function curMonth() {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+}
+function curYear() { return String(new Date().getFullYear()); }
+const YEAR_OPTIONS = Array.from(
+  { length: new Date().getFullYear() - 2019 },
+  (_, i) => String(new Date().getFullYear() - i)
+);
+const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500';
 
 export default function DiscountReportPage() {
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod]       = useState('today');
+  const [selMonth, setSelMonth]   = useState(curMonth());
+  const [selYear, setSelYear]     = useState(curYear());
   const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  const [customTo, setCustomTo]     = useState('');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,27 +35,26 @@ export default function DiscountReportPage() {
         const now = new Date();
         let from, to;
 
+        const pad = n => String(n).padStart(2, '0');
+        const td  = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
         if (period === 'custom') {
-          from = customFrom;
-          to = customTo + 'T23:59:59.999Z';
+          from = customFrom + 'T00:00:00.000Z';
+          to   = customTo   + 'T23:59:59.999Z';
         } else if (period === 'today') {
-          from = now.toISOString().split('T')[0];
-          to = from + 'T23:59:59.999Z';
+          from = `${td}T00:00:00.000Z`;
+          to   = `${td}T23:59:59.999Z`;
         } else if (period === 'week') {
-          const weekAgo = new Date(now);
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          from = weekAgo.toISOString().split('T')[0];
-          to = now.toISOString().split('T')[0] + 'T23:59:59.999Z';
+          const d = new Date(now); d.setDate(now.getDate() - 6);
+          from = `${d.toISOString().split('T')[0]}T00:00:00.000Z`;
+          to   = `${td}T23:59:59.999Z`;
         } else if (period === 'month') {
-          const monthAgo = new Date(now);
-          monthAgo.setMonth(monthAgo.getMonth() - 1);
-          from = monthAgo.toISOString().split('T')[0];
-          to = now.toISOString().split('T')[0] + 'T23:59:59.999Z';
+          const [y, m] = selMonth.split('-').map(Number);
+          const lastDay = pad(new Date(y, m, 0).getDate());
+          from = `${selMonth}-01T00:00:00.000Z`;
+          to   = `${selMonth}-${lastDay}T23:59:59.999Z`;
         } else if (period === 'year') {
-          const yearAgo = new Date(now);
-          yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-          from = yearAgo.toISOString().split('T')[0];
-          to = now.toISOString().split('T')[0] + 'T23:59:59.999Z';
+          from = `${selYear}-01-01T00:00:00.000Z`;
+          to   = `${selYear}-12-31T23:59:59.999Z`;
         }
 
         const res = await window.api.pos.getDiscountedBills({ from, to });
@@ -54,7 +66,7 @@ export default function DiscountReportPage() {
         setLoading(false);
       }
     })();
-  }, [period, customFrom, customTo]);
+  }, [period, selMonth, selYear, customFrom, customTo]);
 
   const totalBillAmount = data.reduce((sum, r) => sum + r.billAmount, 0);
   const totalDiscount = data.reduce((sum, r) => sum + r.discountAmount, 0);
@@ -73,14 +85,20 @@ export default function DiscountReportPage() {
                   ${period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'}`}>{p}</button>
             ))}
           </div>
+          {period === 'month' && (
+            <input type="month" value={selMonth} max={curMonth()}
+              onChange={e => setSelMonth(e.target.value)} className={inputCls} />
+          )}
+          {period === 'year' && (
+            <select value={selYear} onChange={e => setSelYear(e.target.value)} className={inputCls}>
+              {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
           {period === 'custom' && (
             <div className="flex items-center gap-2">
-              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500" />
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
               <span className="text-slate-500 text-xs">to</span>
-              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                min={customFrom}
-                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500" />
+              <input type="date" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
             </div>
           )}
         </div>

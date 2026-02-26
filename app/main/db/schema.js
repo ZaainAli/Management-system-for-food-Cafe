@@ -238,6 +238,15 @@ function runMigrations(db) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- Indexes for report queries (prevent full-table scans on large datasets)
+    CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
+    CREATE INDEX IF NOT EXISTS idx_bill_items_billId ON bill_items(billId);
+    CREATE INDEX IF NOT EXISTS idx_discounted_bills_createdAt ON discounted_bills(createdAt);
+    CREATE INDEX IF NOT EXISTS idx_khata_transactions_khataId ON khata_transactions(khataId);
+    CREATE INDEX IF NOT EXISTS idx_khata_transactions_date ON khata_transactions(date);
+    CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+    CREATE INDEX IF NOT EXISTS idx_salary_records_employeeId ON salary_records(employeeId);
   `);
 
   // Lightweight column migrations

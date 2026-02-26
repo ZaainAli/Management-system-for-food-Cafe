@@ -1,32 +1,80 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+
+// ── Helpers ───────────────────────────────────────────────────
+
+function curMonth() {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+}
+function curYear() { return String(new Date().getFullYear()); }
+function todayStr() {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+}
+const YEAR_OPTIONS = Array.from(
+  { length: new Date().getFullYear() - 2019 },
+  (_, i) => String(new Date().getFullYear() - i)
+);
+
+function rangeForPeriod(period, selMonth, selYear) {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  const td = `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+  if (period === 'today') return { from: td, to: td };
+  if (period === 'week')  { const d = new Date(t); d.setDate(t.getDate()-6); return { from: d.toISOString().split('T')[0], to: td }; }
+  if (period === 'month') { const [y, m] = selMonth.split('-').map(Number); return { from: `${selMonth}-01`, to: `${selMonth}-${p(new Date(y, m, 0).getDate())}` }; }
+  if (period === 'year')  return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
+  return { from: '', to: '' };
+}
+
+function toIsoStart(dateStr) { return dateStr ? `${dateStr}T00:00:00.000Z` : ''; }
+function toIsoEnd(dateStr)   { return dateStr ? `${dateStr}T23:59:59.999Z` : ''; }
 
 const reportTypes = [
-  { id: 'all', label: 'All Reports' },
-  { id: 'sales', label: 'Sales' },
-  { id: 'expense', label: 'Expenses' },
-  { id: 'staff', label: 'Staff' },
-  { id: 'pl', label: 'Profit & Loss' },
-  { id: 'discounted', label: 'Table & Discount Report' },
-  { id: 'khata', label: 'Khata' },
+  { id: 'all',       label: 'All Reports' },
+  { id: 'sales',     label: 'Sales' },
+  { id: 'expense',   label: 'Expenses' },
+  { id: 'staff',     label: 'Staff' },
+  { id: 'pl',        label: 'Profit & Loss' },
+  { id: 'discounted',label: 'Table & Discount Report' },
+  { id: 'khata',     label: 'Khata' },
 ];
-
-function toIsoStart(dateStr) {
-  if (!dateStr) return '';
-  return `${dateStr}T00:00:00.000Z`;
-}
-
-function toIsoEnd(dateStr) {
-  if (!dateStr) return '';
-  return `${dateStr}T23:59:59.999Z`;
-}
 
 export default function ExportReportsPage() {
   const [reportType, setReportType] = useState('sales');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [period, setPeriod]         = useState('custom');
+  const [selMonth, setSelMonth]     = useState(curMonth());
+  const [selYear, setSelYear]       = useState(curYear());
+  const [from, setFrom]             = useState('');
+  const [to, setTo]                 = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [message, setMessage]       = useState('');
+  const [error, setError]           = useState('');
+
+  // When period (other than custom) changes, auto-fill from/to
+  const handlePeriodChange = (p) => {
+    setPeriod(p);
+    if (p !== 'custom') {
+      const { from: f, to: t } = rangeForPeriod(p, selMonth, selYear);
+      setFrom(f);
+      setTo(t);
+    }
+  };
+
+  const handleMonthChange = (val) => {
+    setSelMonth(val);
+    if (period === 'month') {
+      const { from: f, to: t } = rangeForPeriod('month', val, selYear);
+      setFrom(f); setTo(t);
+    }
+  };
+
+  const handleYearChange = (val) => {
+    setSelYear(val);
+    if (period === 'year') {
+      const { from: f, to: t } = rangeForPeriod('year', selMonth, val);
+      setFrom(f); setTo(t);
+    }
+  };
 
   const canExport = useMemo(() => {
     if (!from || !to) return false;
@@ -42,19 +90,11 @@ export default function ExportReportsPage() {
       const res = await window.api.report.exportReport({
         type: reportType,
         from: toIsoStart(from),
-        to: toIsoEnd(to),
+        to:   toIsoEnd(to),
       });
-
-      if (res?.canceled) {
-        setMessage('Export canceled.');
-        return;
-      }
-
-      if (res?.success) {
-        setMessage(`Export saved to ${res.path}`);
-      } else {
-        setError(res?.error || 'Failed to export report.');
-      }
+      if (res?.canceled)  { setMessage('Export canceled.'); return; }
+      if (res?.success)   { setMessage(`Export saved to ${res.path}`); }
+      else                { setError(res?.error || 'Failed to export report.'); }
     } catch (err) {
       setError(err.message || 'Failed to export report.');
     } finally {
@@ -70,52 +110,69 @@ export default function ExportReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
+          {/* Report type */}
           <div className="mb-4">
             <label className="label">Report Type</label>
-            <select
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-              className="input-field"
-            >
-              {reportTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
+            <select value={reportType} onChange={e => setReportType(e.target.value)} className="input-field">
+              {reportTypes.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
 
+          {/* Period buttons */}
+          <div className="mb-4">
+            <label className="label">Period</label>
+            <div className="flex gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700 flex-wrap">
+              {['today','week','month','year','custom'].map(p => (
+                <button key={p} onClick={() => handlePeriodChange(p)}
+                  className={`px-3 py-1 text-xs rounded-md transition-colors capitalize
+                    ${period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Month / Year pickers */}
+          {period === 'month' && (
+            <div className="mb-4">
+              <label className="label">Month</label>
+              <input type="month" value={selMonth} max={curMonth()}
+                onChange={e => handleMonthChange(e.target.value)} className="input-field" />
+            </div>
+          )}
+          {period === 'year' && (
+            <div className="mb-4">
+              <label className="label">Year</label>
+              <select value={selYear} onChange={e => handleYearChange(e.target.value)} className="input-field">
+                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* From / To — always visible, editable in custom mode */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="label">From</label>
-              <input
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="input-field"
-              />
+              <input type="date" value={from} max={to || todayStr()}
+                onChange={e => setFrom(e.target.value)}
+                readOnly={period !== 'custom'}
+                className={`input-field ${period !== 'custom' ? 'opacity-60 cursor-default' : ''}`} />
             </div>
             <div>
               <label className="label">To</label>
-              <input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                min={from || undefined}
-                className="input-field"
-              />
+              <input type="date" value={to} min={from} max={todayStr()}
+                onChange={e => setTo(e.target.value)}
+                readOnly={period !== 'custom'}
+                className={`input-field ${period !== 'custom' ? 'opacity-60 cursor-default' : ''}`} />
             </div>
           </div>
 
           <div className="mt-5 flex items-center gap-3">
-            <button
-              onClick={handleExport}
-              disabled={!canExport || loading}
-              className={`btn-primary ${(!canExport || loading) ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
+            <button onClick={handleExport} disabled={!canExport || loading}
+              className={`btn-primary ${(!canExport || loading) ? 'opacity-60 cursor-not-allowed' : ''}`}>
               {loading ? 'Exporting...' : 'Export CSV'}
             </button>
-            <p className="text-xs text-slate-500">
-              Choose a date range to export a CSV report.
-            </p>
+            <p className="text-xs text-slate-500">Choose a period or date range to export a CSV report.</p>
           </div>
         </div>
 
@@ -130,14 +187,10 @@ export default function ExportReportsPage() {
       </div>
 
       {message && (
-        <div className="card mt-4 border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-sm">
-          {message}
-        </div>
+        <div className="card mt-4 border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-sm">{message}</div>
       )}
       {error && (
-        <div className="card mt-4 border border-red-500/40 bg-red-500/10 text-red-300 text-sm">
-          {error}
-        </div>
+        <div className="card mt-4 border border-red-500/40 bg-red-500/10 text-red-300 text-sm">{error}</div>
       )}
     </div>
   );

@@ -87,28 +87,21 @@ async function getExpenseReport(filters = {}) {
   const { from, to } = (filters.from && filters.to)
     ? { from: filters.from, to: filters.to }
     : getDateRange(filters.period || 'month');
-  const expenses = await expenseModel.findAll({ from, to });
-
-  // Group by category
-  const byCategory = {};
-  for (const exp of expenses) {
-    if (!byCategory[exp.category]) byCategory[exp.category] = { category: exp.category, total: 0, count: 0 };
-    byCategory[exp.category].total += exp.amount;
-    byCategory[exp.category].count += 1;
-  }
-
-  // Group by date
-  const dailyTotals = {};
-  for (const exp of expenses) {
-    const date = exp.date || exp.createdAt.split('T')[0];
-    if (!dailyTotals[date]) dailyTotals[date] = { date, total: 0 };
-    dailyTotals[date].total += exp.amount;
-  }
+  const byCategory = await expenseModel.getCategoryTotals({ from, to });
+  const dailyTotals = await expenseModel.getDailyTotals({ from, to });
+  const totals = await expenseModel.getTotalAmount({ from, to });
 
   return {
-    byCategory: Object.values(byCategory).sort((a, b) => b.total - a.total),
-    dailyTotals: Object.values(dailyTotals).sort((a, b) => a.date.localeCompare(b.date)),
-    totalExpenses: parseFloat(expenses.reduce((s, e) => s + e.amount, 0).toFixed(2)),
+    byCategory: byCategory.map(row => ({
+      category: row.category,
+      total: row.total,
+      count: row.count,
+    })),
+    dailyTotals: dailyTotals.map(row => ({
+      date: row.date,
+      total: row.total,
+    })),
+    totalExpenses: parseFloat((totals.totalExpenses || 0).toFixed(2)),
     period: filters.period || 'month',
   };
 }
@@ -118,14 +111,15 @@ async function getStaffReport(filters = {}) {
     ? { from: filters.from, to: filters.to }
     : getDateRange(filters.period || 'month');
   const employees = await employeeModel.findAll({});
-  const salaryRecords = await employeeModel.getAllSalaryRecords({ from, to });
+  const salaryTotalsByEmployee = await employeeModel.getSalaryTotalsByEmployee({ from, to });
+  const salaryTotals = await employeeModel.getSalaryTotals({ from, to });
 
   // Group salary by employee
   const bySalary = {};
-  for (const rec of salaryRecords) {
+  for (const rec of salaryTotalsByEmployee) {
     if (!bySalary[rec.employeeId]) bySalary[rec.employeeId] = { employeeId: rec.employeeId, employeeName: rec.employeeName, totalPaid: 0, payments: 0 };
-    bySalary[rec.employeeId].totalPaid += rec.amount;
-    bySalary[rec.employeeId].payments += 1;
+    bySalary[rec.employeeId].totalPaid += rec.totalPaid || 0;
+    bySalary[rec.employeeId].payments += rec.payments || 0;
   }
 
   return {
@@ -133,7 +127,7 @@ async function getStaffReport(filters = {}) {
       ...e,
       salaryInfo: bySalary[e.id] || { totalPaid: 0, payments: 0 },
     })),
-    totalSalaryPaid: parseFloat(salaryRecords.reduce((s, r) => s + r.amount, 0).toFixed(2)),
+    totalSalaryPaid: parseFloat((salaryTotals.totalPaid || 0).toFixed(2)),
     period: filters.period || 'month',
   };
 }

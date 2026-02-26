@@ -118,6 +118,58 @@ function getAllSalaryRecords(filters = {}) {
   return db.prepare(query).all(...params);
 }
 
+function getSalaryTotalsByEmployee(filters = {}) {
+  const db = getDb();
+  let query = `
+    SELECT
+      employeeId,
+      employeeName,
+      COALESCE(SUM(amount), 0) as totalPaid,
+      COUNT(1) as payments
+    FROM salary_records
+  `;
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('payDate >= ?');
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    conditions.push('payDate <= ?');
+    params.push(filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' GROUP BY employeeId, employeeName';
+  return db.prepare(query).all(...params);
+}
+
+function getSalaryTotals(filters = {}) {
+  const db = getDb();
+  let query = 'SELECT COALESCE(SUM(amount), 0) as totalPaid, COUNT(1) as payments FROM salary_records';
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('payDate >= ?');
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    conditions.push('payDate <= ?');
+    params.push(filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  return db.prepare(query).get(...params) || { totalPaid: 0, payments: 0 };
+}
+
 function getSalaryRecordById(id) {
   const db = getDb();
   return db.prepare('SELECT * FROM salary_records WHERE id = ?').get(id) || null;
@@ -204,6 +256,7 @@ function getAttendance(filters = {}) {
 module.exports = {
   findAll, findById, create, update, remove,
   insertSalaryRecord, getSalaryRecords, getAllSalaryRecords,
+  getSalaryTotalsByEmployee, getSalaryTotals,
   getSalaryRecordById, updateSalaryRecord, removeSalaryRecord,
   markAttendance, getAttendance,
 };

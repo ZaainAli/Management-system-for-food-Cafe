@@ -26,6 +26,7 @@ export default function Dashboard() {
   const { branches } = useAuth();
   const [rows, setRows]     = useState([]);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
   const now        = new Date();
   const monthName  = now.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -35,6 +36,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!branches.length) return;
     setLoading(true);
+    setFetchError(null);
     const ids = branches.map((b) => b.id);
     supabase
       .from('daily_sales')
@@ -42,8 +44,13 @@ export default function Dashboard() {
       .in('branch_id', ids)
       .gte('date', monthStart)
       .lte('date', today)
-      .then(({ data }) => {
-        setRows(data ?? []);
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[Dashboard] daily_sales fetch error:', error);
+          setFetchError(error.message);
+        } else {
+          setRows(data ?? []);
+        }
         setLoading(false);
       });
   }, [branches]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,6 +130,10 @@ export default function Dashboard() {
 
         {loading ? (
           <p className="text-slate-600 text-sm text-center py-8">Loading...</p>
+        ) : fetchError ? (
+          <p className="text-red-400 text-sm text-center py-8">
+            Failed to load sales data: {fetchError}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

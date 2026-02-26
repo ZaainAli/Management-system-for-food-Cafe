@@ -10,7 +10,9 @@ export function AuthProvider({ children }) {
   const [activeBranch, setActiveBranchState] = useState(null);
   const [loading, setLoading]           = useState(true);
 
-  // Fetch branch_users rows for the signed-in user, joining branches table
+  // Fetch branches for the signed-in user.
+  // If the user has 'admin' role in any branch they are treated as a global
+  // admin and all branches are loaded (so the dashboard shows every branch).
   const loadBranchData = useCallback(async (authUser) => {
     if (!authUser) {
       setBranches([]);
@@ -20,17 +22,41 @@ export function AuthProvider({ children }) {
 
     const { data, error } = await supabase
       .from('branch_users')
-      .select('id, role, can_manage, branches(id, name, address, phone)')
+      .select('id, role, can_manage, branch_id, branches(id, name, address, phone)')
       .eq('user_id', authUser.id);
 
     if (error || !data) return;
 
-    const branchList = data.map((row) => ({
-      branchUserId: row.id,
-      role:         row.role,
-      canManage:    row.can_manage,
-      ...row.branches,
-    }));
+    const isGlobalAdmin = data.some((row) => row.role === 'admin');
+
+    let branchList;
+
+    if (isGlobalAdmin) {
+      // Load every branch so the admin dashboard can see all branches
+      const { data: allBranches, error: branchesError } = await supabase
+        .from('branches')
+        .select('id, name, address, phone')
+        .order('name');
+
+      if (branchesError || !allBranches) return;
+
+      branchList = allBranches.map((branch) => {
+        const userRow = data.find((r) => r.branch_id === branch.id);
+        return {
+          branchUserId: userRow?.id    ?? null,
+          role:         userRow?.role  ?? 'admin',
+          canManage:    userRow?.can_manage ?? true,
+          ...branch,
+        };
+      });
+    } else {
+      branchList = data.map((row) => ({
+        branchUserId: row.id,
+        role:         row.role,
+        canManage:    row.can_manage,
+        ...row.branches,
+      }));
+    }
 
     setBranches(branchList);
 

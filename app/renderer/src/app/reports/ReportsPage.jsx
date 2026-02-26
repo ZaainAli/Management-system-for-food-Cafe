@@ -1,10 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+
+// ── Helpers ───────────────────────────────────────────────────
+
+function curMonth() {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+}
+function curYear() { return String(new Date().getFullYear()); }
+const YEAR_OPTIONS = Array.from(
+  { length: new Date().getFullYear() - 2019 },
+  (_, i) => String(new Date().getFullYear() - i)
+);
+function computeRange(period, selMonth, selYear) {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  const td = `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+  if (period === 'today') return { from: td, to: td };
+  if (period === 'week')  { const d = new Date(t); d.setDate(t.getDate()-6); return { from: d.toISOString().split('T')[0], to: td }; }
+  if (period === 'month') { const [y, m] = selMonth.split('-').map(Number); return { from: `${selMonth}-01`, to: `${selMonth}-${p(new Date(y, m, 0).getDate())}` }; }
+  if (period === 'year')  return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
+  return { from: td, to: td };
+}
+
+const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500';
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('sales');
-  const [period, setPeriod] = useState('month');
+  const [period, setPeriod]       = useState('month');
+  const [selMonth, setSelMonth]   = useState(curMonth());
+  const [selYear, setSelYear]     = useState(curYear());
   const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  const [customTo, setCustomTo]     = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,9 +47,13 @@ export default function ReportsPage() {
       setError('');
       setData(null);
       try {
-        const filters = period === 'custom'
-          ? { from: customFrom, to: customTo + 'T23:59:59.999Z' }
-          : { period };
+        let filters;
+        if (period === 'custom') {
+          filters = { from: customFrom + 'T00:00:00.000Z', to: customTo + 'T23:59:59.999Z' };
+        } else {
+          const { from, to } = computeRange(period, selMonth, selYear);
+          filters = { from: `${from}T00:00:00.000Z`, to: `${to}T23:59:59.999Z` };
+        }
         let res;
         switch (activeTab) {
           case 'sales':   res = await window.api.report.getSalesReport(filters); break;
@@ -42,7 +71,7 @@ export default function ReportsPage() {
         setLoading(false);
       }
     })();
-  }, [activeTab, period, customFrom, customTo]);
+  }, [activeTab, period, selMonth, selYear, customFrom, customTo]);
 
   const fmt = (n) => `PKR ${Number(n).toLocaleString()}`;
 
@@ -66,14 +95,22 @@ export default function ReportsPage() {
                   ${period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'}`}>{p}</button>
             ))}
           </div>
+          {period === 'month' && (
+            <input type="month" value={selMonth} max={curMonth()}
+              onChange={e => setSelMonth(e.target.value)} className={inputCls} />
+          )}
+          {period === 'year' && (
+            <select value={selYear} onChange={e => setSelYear(e.target.value)} className={inputCls}>
+              {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
           {period === 'custom' && (
             <div className="flex items-center gap-2">
               <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500" />
+                className={inputCls} />
               <span className="text-slate-500 text-xs">to</span>
-              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                min={customFrom}
-                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500" />
+              <input type="date" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)}
+                className={inputCls} />
             </div>
           )}
         </div>

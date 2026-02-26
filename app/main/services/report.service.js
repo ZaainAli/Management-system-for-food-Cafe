@@ -31,13 +31,6 @@ function getDateRange(period = 'today') {
   }
 }
 
-function toIsoStartOfDay(dateStr) {
-  return `${dateStr}T00:00:00.000Z`;
-}
-
-function toIsoEndOfDay(dateStr) {
-  return `${dateStr}T23:59:59.999Z`;
-}
 
 async function getDashboardStats(filters = {}) {
   const { from, to } = (filters.from && filters.to)
@@ -198,25 +191,9 @@ async function getKhataReport(filters = {}) {
 
   const fromDate = from.split('T')[0];
   const toDate = to.split('T')[0];
-  const txFrom = toIsoStartOfDay(fromDate);
-  const txTo = toIsoEndOfDay(toDate);
 
-  const profiles = await khataModel.getAllProfiles();
-  const transactions = [];
-
-  for (const profile of profiles) {
-    const profileTx = await khataModel.getTransactionsByKhataId(profile.id);
-    for (const tx of profileTx) {
-      const txDateIso = toIsoStartOfDay(tx.date);
-      if (txDateIso >= txFrom && txDateIso <= txTo) {
-        transactions.push({
-          ...tx,
-          khataName: profile.name,
-          khataPhone: profile.phone,
-        });
-      }
-    }
-  }
+  const profiles = khataModel.getAllProfiles();
+  const transactions = khataModel.getAllTransactionsInRange({ from: fromDate, to: toDate });
 
   const dueTotal = transactions
     .filter(tx => tx.type === 'due')

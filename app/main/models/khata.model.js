@@ -63,6 +63,22 @@ function getTransactionsByKhataId(khataId) {
   `).all(khataId);
 }
 
+function getAllTransactionsInRange(filters = {}) {
+  const db = getDb();
+  let query = `
+    SELECT kt.*, kp.name as khataName, kp.phone as khataPhone
+    FROM khata_transactions kt
+    JOIN khata_profiles kp ON kp.id = kt.khataId
+  `;
+  const params = [];
+  const conditions = [];
+  if (filters.from) { conditions.push('kt.date >= ?'); params.push(filters.from); }
+  if (filters.to)   { conditions.push('kt.date <= ?'); params.push(filters.to); }
+  if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+  query += ' ORDER BY kt.date ASC, kt.createdAt ASC';
+  return db.prepare(query).all(...params);
+}
+
 function insertTransaction(tx) {
   const db = getDb();
   db.prepare(`
@@ -109,6 +125,7 @@ module.exports = {
   insertProfile,
   updateProfile,
   getTransactionsByKhataId,
+  getAllTransactionsInRange,
   insertTransaction,
   getTransactionById,
   updateTransaction,

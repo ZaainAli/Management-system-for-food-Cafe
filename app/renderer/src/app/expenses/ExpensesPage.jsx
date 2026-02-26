@@ -1,35 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+
+function localToday() {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+}
 
 const emptyForm = {
   description: '',
   amount: '',
   category: '',
-  date: new Date().toISOString().split('T')[0],
+  date: localToday(),
   notes: '',
   sourceType: 'manual',
   sourceEntityId: '',
 };
 
 function formatDate(date) {
-  return date.toISOString().split('T')[0];
+  const p = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth()+1)}-${p(date.getDate())}`;
 }
 
-function getDateRange(period, customFrom, customTo) {
+function curMonth() {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+}
+function curYear() { return String(new Date().getFullYear()); }
+const YEAR_OPTIONS = Array.from(
+  { length: new Date().getFullYear() - 2019 },
+  (_, i) => String(new Date().getFullYear() - i)
+);
+const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500';
+
+function getDateRange(period, selMonth, selYear, customFrom, customTo) {
   const now = new Date();
   const today = formatDate(now);
+  const pad = n => String(n).padStart(2, '0');
   if (period === 'today') return { from: today, to: today };
   if (period === 'week') {
-    const start = new Date(now);
-    start.setDate(now.getDate() - 6);
+    const start = new Date(now); start.setDate(now.getDate() - 6);
     return { from: formatDate(start), to: today };
   }
   if (period === 'month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: formatDate(start), to: today };
+    const [y, m] = selMonth.split('-').map(Number);
+    return { from: `${selMonth}-01`, to: `${selMonth}-${pad(new Date(y, m, 0).getDate())}` };
   }
   if (period === 'year') {
-    const start = new Date(now.getFullYear(), 0, 1);
-    return { from: formatDate(start), to: today };
+    return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
   }
   if (period === 'custom') {
     if (!customFrom || !customTo) return {};
@@ -49,12 +65,14 @@ export default function ExpensesPage() {
   const [khataProfiles, setKhataProfiles] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [formError, setFormError] = useState('');
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod]         = useState('today');
+  const [selMonth, setSelMonth]     = useState(curMonth());
+  const [selYear, setSelYear]       = useState(curYear());
   const [customFrom, setCustomFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-  const [customTo, setCustomTo] = useState(new Date().toISOString().split('T')[0]);
+  const [customTo, setCustomTo]     = useState(new Date().toISOString().split('T')[0]);
 
   const fetchData = async () => {
-    const periodFilters = getDateRange(period, customFrom, customTo);
+    const periodFilters = getDateRange(period, selMonth, selYear, customFrom, customTo);
     const filters = {
       ...(activeCategory !== 'All' ? { category: activeCategory } : {}),
       ...periodFilters,
@@ -72,11 +90,11 @@ export default function ExpensesPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [activeCategory, period, customFrom, customTo]);
+  useEffect(() => { fetchData(); }, [activeCategory, period, selMonth, selYear, customFrom, customTo]);
 
   const openAdd = () => {
     setFormError('');
-    setForm(emptyForm);
+    setForm({ ...emptyForm, date: localToday() });
     setEditId(null);
     setShowModal(true);
   };
@@ -165,22 +183,20 @@ export default function ExpensesPage() {
               </button>
             ))}
           </div>
+          {period === 'month' && (
+            <input type="month" value={selMonth} max={curMonth()}
+              onChange={e => setSelMonth(e.target.value)} className={inputCls} />
+          )}
+          {period === 'year' && (
+            <select value={selYear} onChange={e => setSelYear(e.target.value)} className={inputCls}>
+              {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
           {period === 'custom' && (
             <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500"
-              />
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
               <span className="text-slate-500 text-xs">to</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                min={customFrom}
-                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500"
-              />
+              <input type="date" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
             </div>
           )}
         </div>
@@ -297,7 +313,7 @@ export default function ExpensesPage() {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Amount (PKR)</label><input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className="input-field" /></div>
-                <div><label className="label">Date</label><input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="input-field" /></div>
+                <div><label className="label">Date</label><input type="date" value={form.date} max={localToday()} onChange={e => setForm({...form, date: e.target.value})} className="input-field" /></div>
               </div>
               <div>
                 <label className="label">Category</label>

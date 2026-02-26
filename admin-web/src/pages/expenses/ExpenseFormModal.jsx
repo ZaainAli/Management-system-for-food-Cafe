@@ -5,7 +5,10 @@ import { supabase } from '../../lib/supabase';
 const CATEGORIES = ['Other', 'Utilities', 'Rent', 'Raw Material', 'Salary', 'Khata Payment'];
 const SOURCE_TYPES = ['manual', 'khata', 'salary'];
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+};
 
 export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }) {
   const [form, setForm] = useState({ category: '', description: '', amount: '', date: today(), source_type: 'manual' });
@@ -145,7 +148,7 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
           </div>
           <div>
             <label className="label">Date</label>
-            <input type="date" value={form.date} onChange={set('date')} className="input-field" />
+            <input type="date" value={form.date} max={today()} onChange={set('date')} className="input-field" />
           </div>
           <div>
             <label className="label">Source</label>

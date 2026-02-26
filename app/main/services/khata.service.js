@@ -149,7 +149,9 @@ async function deleteTransaction(payload) {
 
   const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
   if (linkedExpense) {
-    throw new Error('This transaction is linked to an expense. Delete it from Expenses tab.');
+    const unlinked = { ...linkedExpense, sourceType: 'manual', sourceEntityId: null, sourceEntityName: '', sourceRecordId: null, updatedAt: new Date().toISOString() };
+    expenseModel.update(unlinked);
+    syncService.pushExpense(unlinked).catch(() => {});
   }
 
   khataModel.removeTransaction(id);
@@ -163,14 +165,11 @@ async function deleteProfile(payload) {
   const profile = khataModel.getProfileById(id);
   if (!profile) throw new Error('Khata profile not found');
 
-  const linkedExpenseCount = expenseModel.countBySourceEntity('khata', id);
-  if (linkedExpenseCount > 0) {
-    throw new Error('Profile is linked to expenses. Delete linked expenses first.');
-  }
+  expenseModel.unlinkKhataBySourceEntity(id, new Date().toISOString());
 
   khataModel.removeTransactionsByKhataId(id);
   khataModel.removeProfile(id);
-  syncService.deleteKhataProfile(id).catch(() => {});  // cascade deletes transactions in Supabase
+  syncService.deleteKhataProfile(id).catch(() => {});
   return { id };
 }
 

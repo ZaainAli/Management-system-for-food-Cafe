@@ -8,7 +8,7 @@ function localToday() {
 const emptyForm = {
   description: '',
   amount: '',
-  category: '',
+  category: 'General',
   date: localToday(),
   notes: '',
   sourceType: 'manual',
@@ -115,10 +115,7 @@ export default function ExpensesPage() {
 
   const handleSave = async () => {
     setFormError('');
-    if (!form.description?.trim()) {
-      setFormError('Description is required.');
-      return;
-    }
+    const description = form.description?.trim() || form.category;
     if (!form.amount || Number(form.amount) <= 0) {
       setFormError('Amount must be greater than 0.');
       return;
@@ -132,9 +129,10 @@ export default function ExpensesPage() {
       return;
     }
 
+    const payload = { ...form, description };
     let res;
-    if (editId) res = await window.api.expense.update({ id: editId, ...form });
-    else res = await window.api.expense.add(form);
+    if (editId) res = await window.api.expense.update({ id: editId, ...payload });
+    else res = await window.api.expense.add(payload);
     if (res.success) {
       setShowModal(false);
       await fetchData();
@@ -268,11 +266,8 @@ export default function ExpensesPage() {
                   value={form.sourceType}
                   onChange={(e) => {
                     const sourceType = e.target.value;
-                    const next = { ...form, sourceType, sourceEntityId: '' };
-                    if (sourceType === 'khata' && (!form.category || form.category === 'Salary')) next.category = 'Khata Payment';
-                    if (sourceType === 'salary' && (!form.category || form.category === 'Khata Payment')) next.category = 'Salary';
-                    if (sourceType === 'manual' && (form.category === 'Khata Payment' || form.category === 'Salary')) next.category = '';
-                    setForm(next);
+                    const categoryMap = { manual: 'General', khata: 'Khata Payment', salary: 'Salary' };
+                    setForm({ ...form, sourceType, sourceEntityId: '', category: categoryMap[sourceType] });
                   }}
                   className="input-field"
                 >
@@ -312,7 +307,7 @@ export default function ExpensesPage() {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Amount (PKR)</label><input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className="input-field" /></div>
+                <div><label className="label">Amount (PKR)</label><input type="number" min={0} value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} onKeyDown={e => ['e','E','+','-'].includes(e.key) && e.preventDefault()} className="input-field" /></div>
                 <div><label className="label">Date</label><input type="date" value={form.date} max={localToday()} onChange={e => setForm({...form, date: e.target.value})} className="input-field" /></div>
               </div>
               <div>

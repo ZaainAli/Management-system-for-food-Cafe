@@ -63,7 +63,7 @@ function renderReceiptText(bill, options = {}) {
   );
   parts.push(line() + '\n');
 
-  // Items
+  // Items have variable length names, so we truncate to 18 chars and pad right. Quantity is 4 chars, price and total are 10 chars each, right-aligned.
   for (const item of (bill.items || [])) {
     const name = String(item.name).substring(0, 18).padEnd(18);
     const qty = String(item.quantity).padStart(4);

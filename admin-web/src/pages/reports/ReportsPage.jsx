@@ -9,24 +9,30 @@ import { useAuth } from '../../store/AuthContext';
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function getRange(period) {
+const fmt     = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
+const today   = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`; };
+const curMonth = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}`; };
+const curYear  = () => String(new Date().getFullYear());
+const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => String(new Date().getFullYear() - i));
+const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
+
+function getRange(period, selMonth, selYear) {
   const t   = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  const today = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
-  if (period === 'today') return { from: today, to: today };
+  const td  = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  if (period === 'today') return { from: td, to: td };
   if (period === 'week') {
-    const d = new Date(t);
-    d.setDate(t.getDate() - 6);
-    return { from: d.toISOString().split('T')[0], to: today };
+    const d = new Date(t); d.setDate(t.getDate() - 6);
+    return { from: d.toISOString().split('T')[0], to: td };
   }
-  if (period === 'month') return { from: today.slice(0, 8) + '01', to: today };
-  if (period === 'year')  return { from: today.slice(0, 5) + '01-01', to: today };
-  return { from: today, to: today };
+  if (period === 'month') {
+    const [y, m] = selMonth.split('-').map(Number);
+    const last   = pad(new Date(y, m, 0).getDate());
+    return { from: `${selMonth}-01`, to: `${selMonth}-${last}` };
+  }
+  if (period === 'year') return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
+  return { from: td, to: td };
 }
-
-const fmt   = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
-const today = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`; };
-const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 
 // ── Custom tooltip ────────────────────────────────────────────
 
@@ -67,8 +73,11 @@ function StatCard({ label, value, Icon, colorClass, loading }) {
 export default function ReportsPage() {
   const { activeBranch, branches } = useAuth();
   const [period, setPeriod]             = useState('month');
-  const [customDate, setCustomDate]     = useState(today());
-  const [branchFilter, setBranchFilter] = useState('active'); // 'active' | 'all'
+  const [selMonth, setSelMonth]         = useState(curMonth());
+  const [selYear, setSelYear]           = useState(curYear());
+  const [customFrom, setCustomFrom]     = useState(today());
+  const [customTo, setCustomTo]         = useState(today());
+  const [branchFilter, setBranchFilter] = useState('all'); // 'all' | branch_id
   const [salesRows, setSalesRows]       = useState([]);
   const [expRows, setExpRows]           = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -76,8 +85,8 @@ export default function ReportsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const { from, to } = period === 'custom'
-      ? { from: customDate, to: customDate }
-      : getRange(period);
+      ? { from: customFrom, to: customTo }
+      : getRange(period, selMonth, selYear);
 
     // Build branch filter
     let salesQ = supabase
@@ -93,16 +102,16 @@ export default function ReportsPage() {
       .gte('date', from)
       .lte('date', to);
 
-    if (branchFilter === 'active' && activeBranch?.id) {
-      salesQ = salesQ.eq('branch_id', activeBranch.id);
-      expQ   = expQ.eq('branch_id', activeBranch.id);
+    if (branchFilter !== 'all') {
+      salesQ = salesQ.eq('branch_id', branchFilter);
+      expQ   = expQ.eq('branch_id', branchFilter);
     }
 
     const [salesRes, expRes] = await Promise.all([salesQ, expQ]);
     setSalesRows(salesRes.data ?? []);
     setExpRows(expRes.data ?? []);
     setLoading(false);
-  }, [period, customDate, branchFilter, activeBranch]);
+  }, [period, selMonth, selYear, customFrom, customTo, branchFilter, activeBranch]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -166,8 +175,10 @@ export default function ReportsPage() {
               onChange={(e) => setBranchFilter(e.target.value)}
               className="input-field !w-auto text-xs py-1.5"
             >
-              <option value="active">{activeBranch?.name ?? 'Active branch'}</option>
               <option value="all">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
             </select>
           )}
 
@@ -187,15 +198,48 @@ export default function ReportsPage() {
             ))}
           </div>
 
-          {/* Date picker — only visible when custom is selected */}
-          {period === 'custom' && (
+          {/* Month picker */}
+          {period === 'month' && (
             <input
-              type="date"
-              value={customDate}
-              max={today()}
-              onChange={(e) => setCustomDate(e.target.value)}
+              type="month"
+              value={selMonth}
+              max={curMonth()}
+              onChange={(e) => setSelMonth(e.target.value)}
               className="input-field !w-auto text-xs py-1.5"
             />
+          )}
+
+          {/* Year picker */}
+          {period === 'year' && (
+            <select
+              value={selYear}
+              onChange={(e) => setSelYear(e.target.value)}
+              className="input-field !w-auto text-xs py-1.5"
+            >
+              {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
+
+          {/* Custom date range */}
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5"
+              />
+              <span className="text-slate-500 text-xs">to</span>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom}
+                max={today()}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5"
+              />
+            </div>
           )}
         </div>
       </div>
@@ -285,7 +329,7 @@ export default function ReportsPage() {
       )}
 
       {/* Per-branch breakdown — only when All Branches is selected */}
-      {branchFilter === 'all' && showAllBranches && (
+      {branchFilter === 'all' && showAllBranches && branches.length > 1 && (
         <div className="card mt-4">
           <h2 className="text-sm font-semibold text-white mb-4">Branch-wise Breakdown</h2>
           {loading ? (

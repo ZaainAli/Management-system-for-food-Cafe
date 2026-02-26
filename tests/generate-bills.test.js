@@ -1,11 +1,8 @@
 /**
  * Bulk Bill Generation Test
  *
- * Generates bills spread across one month (2026-01-08 to 2026-02-07)
- * with three different item combos:
- *   Dataset 1 — 1000+ bills  (Main Course combo)
- *   Dataset 2 — 1599+ bills  (Mixed combo)
- *   Dataset 3 — 2000+ bills  (Drinks-heavy combo)
+ * Generates bills across one month (2026-01-08 to 2026-02-07)
+ * with three different item combos and enforces a fixed daily target.
  *
  * Inserts directly into the project database.
  * Run:  ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron tests/generate-bills.test.js
@@ -14,25 +11,27 @@
 const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fs = require('fs');
+
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const { createClient } = require('@supabase/supabase-js');
 
 // ─── Config ────────────────────────────────────────────────
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-const DATASET_1_COUNT = randomInt(1000, 1400);   // 1000+
-const DATASET_2_COUNT = randomInt(1599, 2100);   // 1599+
-const DATASET_3_COUNT = randomInt(2000, 2500);   // 2000+
-const TAX_RATE = 0.05;          // 5 %
+const TAX_RATE = 0.00;
+const BILLS_PER_DAY = Number(process.env.BILLS_PER_DAY || 1000);
 
 // ─── Date range: one month (2026-01-08 to 2026-02-07) ─────
-const DATE_FROM = '2026-01-08';
-const DATE_TO   = '2026-02-07';
+const DATE_FROM = '2024-01-08';
+const DATE_TO = '2026-02-07';
 
 function getAllDatesInRange(from, to) {
   const dates = [];
   const start = new Date(from + 'T00:00:00Z');
-  const end   = new Date(to + 'T00:00:00Z');
+  const end = new Date(to + 'T00:00:00Z');
   for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     dates.push(d.toISOString().split('T')[0]);
   }
@@ -40,19 +39,24 @@ function getAllDatesInRange(from, to) {
 }
 
 const ALL_DATES = getAllDatesInRange(DATE_FROM, DATE_TO);
+const DATASET_1_PER_DAY = Math.ceil(BILLS_PER_DAY / 3);
+const DATASET_2_PER_DAY = Math.floor(BILLS_PER_DAY / 3);
+const DATASET_3_PER_DAY = BILLS_PER_DAY - DATASET_1_PER_DAY - DATASET_2_PER_DAY;
 
-function pickRandomDate() {
-  return ALL_DATES[randomInt(0, ALL_DATES.length - 1)];
-}
+const DATASET_1_COUNT = DATASET_1_PER_DAY * ALL_DATES.length;
+const DATASET_2_COUNT = DATASET_2_PER_DAY * ALL_DATES.length;
+const DATASET_3_COUNT = DATASET_3_PER_DAY * ALL_DATES.length;
 
 // ─── Connect to project database ──────────────────────────
 const dbPath = path.join(require('os').homedir(), '.config', 'Electron', 'restaurant.db');
 const db = new Database(dbPath);
+
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 console.log(`\n📦  Database: ${dbPath}`);
-console.log(`📅  Bills will be spread across: ${DATE_FROM} to ${DATE_TO} (${ALL_DATES.length} days)\n`);
+console.log(`📅  Bills will be generated across: ${DATE_FROM} to ${DATE_TO} (${ALL_DATES.length} days)`);
+console.log(`🎯  Daily target: ${BILLS_PER_DAY} bills/day\n`);
 
 // ─── Read existing menu items from the DB ──────────────────
 const menuItems = db.prepare('SELECT * FROM menu_items WHERE isAvailable = 1').all();
@@ -78,10 +82,10 @@ const tableIds = db.prepare('SELECT id FROM tables').all().map(t => t.id);
 
 /**
  * Build one bill object ready for insertion.
- * @param {Array} itemPool  – subset of menuItems to pick from
+ * @param {Array} itemPool - subset of menuItems to pick from
+ * @param {string} dateStr - date in YYYY-MM-DD format
  */
-function buildBill(itemPool) {
-  const dateStr = pickRandomDate();
+function buildBill(itemPool, dateStr) {
   const pickedItems = pick(itemPool, randomInt(1, Math.min(5, itemPool.length)));
 
   let subtotal = 0;
@@ -99,7 +103,7 @@ function buildBill(itemPool) {
     };
   });
 
-  const discount = randomInt(0, 10);               // 0-10 %
+  const discount = randomInt(0, 10);
   const tax = parseFloat((subtotal * TAX_RATE).toFixed(2));
   const discountAmt = parseFloat((subtotal * (discount / 100)).toFixed(2));
   const total = parseFloat((subtotal + tax - discountAmt).toFixed(2));
@@ -152,57 +156,56 @@ function insertBill(bill) {
   for (const li of bill.items) {
     stmtItem.run(li.id, bill.id, li.menuItemId, li.name, li.price, li.quantity, li.lineTotal);
   }
-  // Update daily_sales so the app dashboard/reports pick up these bills
   const billDate = bill.createdAt.split('T')[0];
   stmtDailySales.run(billDate, bill.total, new Date().toISOString());
 }
 
 // ─── Define three datasets with different item combos ──────
-// Dataset 1: Main Course items (Dall Mash, Beef Kabab, Qeema, Roti, Chicken Kharai)
 const dataset1Items = menuItems.filter(m =>
   ['item-001', 'item-003', 'item-006', 'item-011', 'item-010'].includes(m.id)
 );
 
-// Dataset 2: Mixed items (S-Beef Kabab, Sabzi, Alu-Anda, Regular drink, Chay)
 const dataset2Items = menuItems.filter(m =>
   ['item-004', 'item-005', 'item-008', 'item-012', 'item-016'].includes(m.id)
 );
 
-// Dataset 3: Drinks + light items (All drinks + Rita + Kalaji)
 const dataset3Items = menuItems.filter(m =>
   ['item-007', 'item-009', 'item-012', 'item-013', 'item-014', 'item-015', 'item-017', 'item-018'].includes(m.id)
 );
 
 console.log('─── Dataset 1 (Main Course combo) ───');
 console.log(`    Items: ${dataset1Items.map(i => i.name).join(', ')}`);
-console.log(`    Target bills: ${DATASET_1_COUNT}\n`);
+console.log(`    Target bills: ${DATASET_1_COUNT} (${DATASET_1_PER_DAY}/day)\n`);
 
 console.log('─── Dataset 2 (Mixed combo) ─────────');
 console.log(`    Items: ${dataset2Items.map(i => i.name).join(', ')}`);
-console.log(`    Target bills: ${DATASET_2_COUNT}\n`);
+console.log(`    Target bills: ${DATASET_2_COUNT} (${DATASET_2_PER_DAY}/day)\n`);
 
 console.log('─── Dataset 3 (Drinks + light combo) ');
 console.log(`    Items: ${dataset3Items.map(i => i.name).join(', ')}`);
-console.log(`    Target bills: ${DATASET_3_COUNT}\n`);
+console.log(`    Target bills: ${DATASET_3_COUNT} (${DATASET_3_PER_DAY}/day)\n`);
 
-// ─── Generate bills in transactions (fast) ─────────────────
-function generateBills(label, itemPool, count) {
+function generateBillsByDay(label, itemPool, perDayCount) {
   const start = Date.now();
   const insertMany = db.transaction(() => {
-    for (let i = 0; i < count; i++) {
-      insertBill(buildBill(itemPool));
+    for (const date of ALL_DATES) {
+      for (let i = 0; i < perDayCount; i++) {
+        const bill = buildBill(itemPool, date);
+        insertBill(bill);
+      }
     }
   });
   insertMany();
   const elapsed = Date.now() - start;
-  console.log(`  ✅  ${label}: ${count} bills inserted in ${elapsed} ms`);
+  const total = perDayCount * ALL_DATES.length;
+  console.log(`  ✅  ${label}: ${total} bills inserted (${perDayCount}/day) in ${elapsed} ms`);
 }
 
 console.log('Generating bills …\n');
 
-generateBills('Dataset 1', dataset1Items, DATASET_1_COUNT);
-generateBills('Dataset 2', dataset2Items, DATASET_2_COUNT);
-generateBills('Dataset 3', dataset3Items, DATASET_3_COUNT);
+generateBillsByDay('Dataset 1', dataset1Items, DATASET_1_PER_DAY);
+generateBillsByDay('Dataset 2', dataset2Items, DATASET_2_PER_DAY);
+generateBillsByDay('Dataset 3', dataset3Items, DATASET_3_PER_DAY);
 
 // ─── Verify ────────────────────────────────────────────────
 const totalBills = db.prepare('SELECT COUNT(*) as count FROM bills').get().count;
@@ -227,7 +230,7 @@ const revenueByDataset = db.prepare(`
       ELSE 'Dataset 3 (Drinks+Light)'
     END as dataset,
     SUM(bi.lineTotal) as revenue,
-    SUM(bi.quantity)  as totalQty
+    SUM(bi.quantity) as totalQty
   FROM bill_items bi
   JOIN bills b ON b.id = bi.billId
   WHERE substr(b.createdAt, 1, 10) BETWEEN ? AND ?
@@ -254,12 +257,17 @@ console.log(`  Bills before test:        ${billsBefore}`);
 console.log(`  New bills inserted:       ${newBills}`);
 console.log(`  Total bills in DB:        ${totalBills}`);
 console.log(`  Total line items in DB:   ${totalLineItems}`);
-console.log(`  Expected new bills:       ${DATASET_1_COUNT + DATASET_2_COUNT + DATASET_3_COUNT}`);
+console.log(`  Expected new bills:       ${BILLS_PER_DAY * ALL_DATES.length}`);
 
 console.log(`\n── Bills by date (${DATE_FROM} to ${DATE_TO}) ──`);
 const totalBillsInRange = billsByDate.reduce((sum, r) => sum + r.count, 0);
 console.log(`    Total bills in range: ${totalBillsInRange} across ${billsByDate.length} days`);
 console.log(`    Avg per day: ${Math.round(totalBillsInRange / billsByDate.length)}`);
+
+const underTargetDays = billsByDate.filter(r => r.count < BILLS_PER_DAY);
+if (underTargetDays.length > 0) {
+  console.log(`    ⚠️  Days below ${BILLS_PER_DAY}: ${underTargetDays.length}`);
+}
 
 console.log('\n── Revenue by Dataset (month) ────────');
 for (const row of revenueByDataset) {
@@ -286,15 +294,70 @@ function assert(label, condition) {
 }
 
 console.log('\n── Assertions ───────────────────────');
-assert(`New bills inserted = ${DATASET_1_COUNT + DATASET_2_COUNT + DATASET_3_COUNT}`, newBills === DATASET_1_COUNT + DATASET_2_COUNT + DATASET_3_COUNT);
-assert(`Dataset 1 bills >= 1000`, DATASET_1_COUNT >= 1000);
-assert(`Dataset 2 bills >= 1599`, DATASET_2_COUNT >= 1599);
-assert(`Dataset 3 bills >= 2000`, DATASET_3_COUNT >= 2000);
-assert(`Bills spread across date range (${DATE_FROM} to ${DATE_TO})`, billsByDate.length > 1 && totalBillsInRange >= DATASET_1_COUNT + DATASET_2_COUNT + DATASET_3_COUNT);
+assert(`New bills inserted = ${BILLS_PER_DAY * ALL_DATES.length}`, newBills === BILLS_PER_DAY * ALL_DATES.length);
+assert(`Dataset 1 bills = ${DATASET_1_COUNT}`, DATASET_1_COUNT === DATASET_1_PER_DAY * ALL_DATES.length);
+assert(`Dataset 2 bills = ${DATASET_2_COUNT}`, DATASET_2_COUNT === DATASET_2_PER_DAY * ALL_DATES.length);
+assert(`Dataset 3 bills = ${DATASET_3_COUNT}`, DATASET_3_COUNT === DATASET_3_PER_DAY * ALL_DATES.length);
+assert(`Bills exist for each day in range (${DATE_FROM} to ${DATE_TO})`, billsByDate.length === ALL_DATES.length);
+assert(`Every day has at least ${BILLS_PER_DAY} bills`, underTargetDays.length === 0);
 assert('Every bill has at least 1 line item', totalLineItems >= totalBills);
 
 console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);
 
-// ─── Close DB ──────────────────────────────────────────────
-db.close();
-process.exit(failed > 0 ? 1 : 0);
+// ─── Push daily_sales to Supabase ──────────────────────────
+function getSupabaseBranchId() {
+  if (process.env.SUPABASE_BRANCH_ID) return process.env.SUPABASE_BRANCH_ID;
+  try {
+    const configPath = path.join(require('os').homedir(), '.config', 'Electron', 'branch-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return config.branchId || null;
+    }
+  } catch {}
+  return null;
+}
+
+async function pushDailySalesToSupabase() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const branchId = getSupabaseBranchId();
+
+  if (!url || !key || !branchId) {
+    console.log('⚠️   Supabase sync skipped - missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_BRANCH_ID\n');
+    return;
+  }
+
+  const supabase = createClient(url, key, { auth: { persistSession: false } });
+
+  const rows = db.prepare(`
+    SELECT date, totalRevenue, totalBills, totalExpenses
+    FROM daily_sales
+    WHERE date BETWEEN ? AND ?
+    ORDER BY date
+  `).all(DATE_FROM, DATE_TO);
+
+  const upsertRows = rows.map(r => ({
+    branch_id: branchId,
+    date: r.date,
+    total_revenue: r.totalRevenue,
+    total_expenses: r.totalExpenses,
+    bill_count: r.totalBills,
+  }));
+
+  console.log(`☁️   Pushing ${upsertRows.length} daily_sales rows to Supabase ...`);
+  const { error } = await supabase
+    .from('daily_sales')
+    .upsert(upsertRows, { onConflict: 'branch_id,date' });
+
+  if (error) {
+    console.error('  ❌  daily_sales push failed:', error.message);
+  } else {
+    console.log(`  ✅  daily_sales pushed (${DATE_FROM} -> ${DATE_TO})\n`);
+  }
+}
+
+(async () => {
+  await pushDailySalesToSupabase();
+  db.close();
+  process.exit(failed > 0 ? 1 : 0);
+})();

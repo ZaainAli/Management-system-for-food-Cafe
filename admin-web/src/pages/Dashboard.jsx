@@ -1,9 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Store } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const fmt = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
+
+// ── Helpers ───────────────────────────────────────────────────
+
+function todayStr() {
+  const t = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+}
+function currentMonth() {
+  const t = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}`;
+}
+function currentYear() { return String(new Date().getFullYear()); }
+
+const YEAR_OPTIONS = Array.from(
+  { length: new Date().getFullYear() - 2019 },
+  (_, i) => String(new Date().getFullYear() - i)
+);
+
+function getRange(period, selMonth, selYear, customFrom, customTo) {
+  const today = todayStr();
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'week') {
+    const d = new Date(); d.setDate(d.getDate() - 6);
+    return { from: d.toISOString().split('T')[0], to: today };
+  }
+  if (period === 'month') {
+    const [y, m] = selMonth.split('-').map(Number);
+    const last   = String(new Date(y, m, 0).getDate()).padStart(2, '0');
+    return { from: `${selMonth}-01`, to: `${selMonth}-${last}` };
+  }
+  if (period === 'year') return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
+  if (period === 'custom') return { from: customFrom, to: customTo };
+  return { from: today, to: today };
+}
+
+function getLabel(period, selMonth, selYear, customFrom, customTo) {
+  if (period === 'today') return 'Today';
+  if (period === 'week')  return 'Last 7 days';
+  if (period === 'month') {
+    const [y, m] = selMonth.split('-');
+    return new Date(Number(y), Number(m) - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+  }
+  if (period === 'year')   return selYear;
+  if (period === 'custom') return customFrom && customTo ? `${customFrom} → ${customTo}` : 'Custom range';
+  return '';
+}
+
+const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
+
+// ── Stat Card ─────────────────────────────────────────────────
 
 function StatCard({ label, value, sub, Icon, colorClass }) {
   return (
@@ -22,19 +72,25 @@ function StatCard({ label, value, sub, Icon, colorClass }) {
   );
 }
 
+// ── Main Component ────────────────────────────────────────────
+
 export default function Dashboard() {
   const { branches } = useAuth();
-  const [rows, setRows]     = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [rows, setRows]           = useState([]);
+  const [loading, setLoading]     = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
-  const now        = new Date();
-  const monthName  = now.toLocaleString('default', { month: 'long', year: 'numeric' });
-  const today      = now.toISOString().split('T')[0];
-  const monthStart = today.slice(0, 8) + '01';
+  const [period, setPeriod]             = useState('month');
+  const [selMonth, setSelMonth]         = useState(currentMonth());
+  const [selYear, setSelYear]           = useState(currentYear());
+  const [customFrom, setCustomFrom]     = useState(todayStr());
+  const [customTo, setCustomTo]         = useState(todayStr());
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     if (!branches.length) return;
+    if (period === 'custom' && (!customFrom || !customTo)) return;
+
+    const { from, to } = getRange(period, selMonth, selYear, customFrom, customTo);
     setLoading(true);
     setFetchError(null);
     const ids = branches.map((b) => b.id);
@@ -42,25 +98,22 @@ export default function Dashboard() {
       .from('daily_sales')
       .select('branch_id, total_revenue, total_expenses, bill_count')
       .in('branch_id', ids)
-      .gte('date', monthStart)
-      .lte('date', today)
+      .gte('date', from)
+      .lte('date', to)
       .then(({ data, error }) => {
-        if (error) {
-          console.error('[Dashboard] daily_sales fetch error:', error);
-          setFetchError(error.message);
-        } else {
-          setRows(data ?? []);
-        }
+        if (error) { setFetchError(error.message); }
+        else        { setRows(data ?? []); }
         setLoading(false);
       });
-  }, [branches]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branches, period, selMonth, selYear, customFrom, customTo]);
 
-  // ── Combined totals ──────────────────────────────────────────
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Aggregations ──────────────────────────────────────────────
   const totalRevenue  = rows.reduce((s, r) => s + Number(r.total_revenue),  0);
   const totalExpenses = rows.reduce((s, r) => s + Number(r.total_expenses), 0);
   const totalBills    = rows.reduce((s, r) => s + Number(r.bill_count),     0);
 
-  // ── Per-branch breakdown ─────────────────────────────────────
   const bmap = {};
   rows.forEach((r) => {
     if (!bmap[r.branch_id]) bmap[r.branch_id] = { revenue: 0, expenses: 0, bills: 0 };
@@ -68,40 +121,104 @@ export default function Dashboard() {
     bmap[r.branch_id].expenses += Number(r.total_expenses);
     bmap[r.branch_id].bills    += Number(r.bill_count);
   });
-
   const branchStats = branches.map((b) => ({
-    id:       b.id,
-    name:     b.name,
+    id: b.id, name: b.name,
     revenue:  bmap[b.id]?.revenue  ?? 0,
     expenses: bmap[b.id]?.expenses ?? 0,
     bills:    bmap[b.id]?.bills    ?? 0,
     profit:   (bmap[b.id]?.revenue ?? 0) - (bmap[b.id]?.expenses ?? 0),
   }));
 
+  const label = getLabel(period, selMonth, selYear, customFrom, customTo);
+
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-0.5">
-          All branches combined —{' '}
-          <span className="text-primary-400 font-medium">{monthName}</span>
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-white">Dashboard</h1>
+          <p className="text-slate-500 text-sm mt-0.5">
+            All branches —{' '}
+            <span className="text-primary-400 font-medium">{label}</span>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Period tabs */}
+          <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+            {PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors
+                  ${period === p ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {p === 'custom' ? 'Custom' : p}
+              </button>
+            ))}
+          </div>
+
+          {/* Month picker */}
+          {period === 'month' && (
+            <input
+              type="month"
+              value={selMonth}
+              max={currentMonth()}
+              onChange={(e) => setSelMonth(e.target.value)}
+              className="input-field !w-auto text-xs py-1.5"
+            />
+          )}
+
+          {/* Year picker */}
+          {period === 'year' && (
+            <select
+              value={selYear}
+              onChange={(e) => setSelYear(e.target.value)}
+              className="input-field !w-auto text-xs py-1.5"
+            >
+              {YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Custom date range */}
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5"
+              />
+              <span className="text-slate-500 text-xs">to</span>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom}
+                max={todayStr()}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ── Combined summary cards ── */}
+      {/* ── Summary cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Total Revenue"
           value={loading ? null : fmt(totalRevenue)}
-          sub="All branches this month"
+          sub="All branches"
           Icon={TrendingUp}
           colorClass="bg-green-700"
         />
         <StatCard
           label="Total Expenses"
           value={loading ? null : fmt(totalExpenses)}
-          sub="All branches this month"
+          sub="All branches"
           Icon={TrendingDown}
           colorClass="bg-red-700"
         />
@@ -125,7 +242,7 @@ export default function Dashboard() {
       <div className="card">
         <h2 className="text-sm font-semibold text-white mb-4">
           Branch-wise Breakdown —{' '}
-          <span className="text-slate-400 font-normal">{monthName}</span>
+          <span className="text-slate-400 font-normal">{label}</span>
         </h2>
 
         {loading ? (
@@ -176,7 +293,7 @@ export default function Dashboard() {
 
             {branchStats.length === 0 && (
               <p className="text-slate-600 text-sm text-center py-8">
-                No sales data for this month yet.
+                No sales data for the selected period.
               </p>
             )}
           </div>

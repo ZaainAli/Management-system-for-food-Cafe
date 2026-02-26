@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const emptyForm = { name: '', category: 'General', quantity: 0, unit: 'pcs', reorderLevel: 5, unitPrice: 0 };
+const emptyForm = { name: '', category: 'General', quantity: '', unit: 'pcs', reorderLevel: '', unitPrice: '' };
 
 export default function StockPage() {
   const [items, setItems] = useState([]);
@@ -12,7 +12,7 @@ export default function StockPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [adjustItem, setAdjustItem] = useState(null);
-  const [adjustQty, setAdjustQty] = useState(0);
+  const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
 
   const fetchData = async () => {
@@ -31,15 +31,16 @@ export default function StockPage() {
   const lowStock = items.filter(i => i.quantity <= i.reorderLevel);
 
   const openAdd = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
-  const openEdit = (item) => { setForm({ name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, reorderLevel: item.reorderLevel, unitPrice: item.unitPrice }); setEditId(item.id); setShowModal(true); };
+  const openEdit = (item) => { setForm({ name: item.name, category: item.category, quantity: String(item.quantity), unit: item.unit, reorderLevel: String(item.reorderLevel), unitPrice: String(item.unitPrice) }); setEditId(item.id); setShowModal(true); };
 
   const handleSave = async () => {
     setError('');
+    const payload = { ...form, quantity: Number(form.quantity), unitPrice: Number(form.unitPrice), reorderLevel: Number(form.reorderLevel) };
     let res;
     if (editId) {
-      res = await window.api.stock.update({ id: editId, ...form });
+      res = await window.api.stock.update({ id: editId, ...payload });
     } else {
-      res = await window.api.stock.add(form);
+      res = await window.api.stock.add(payload);
     }
     if (res.success) {
       setShowModal(false);
@@ -62,8 +63,8 @@ export default function StockPage() {
   const handleAdjust = async () => {
     if (!adjustItem) return;
     setError('');
-    const res = await window.api.stock.adjustQuantity({ id: adjustItem.id, adjustment: adjustQty, reason: adjustReason });
-    if (res.success) { setAdjustItem(null); setAdjustQty(0); setAdjustReason(''); await fetchData(); return; }
+    const res = await window.api.stock.adjustQuantity({ id: adjustItem.id, adjustment: Number(adjustQty), reason: adjustReason });
+    if (res.success) { setAdjustItem(null); setAdjustQty(''); setAdjustReason(''); await fetchData(); return; }
     setError(res?.error || 'Unable to adjust quantity');
   };
 
@@ -155,12 +156,12 @@ export default function StockPage() {
               <div><label className="label">Name</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="input-field" /></div>
               <div><label className="label">Category</label><input value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="input-field" /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Quantity</label><input type="number" value={form.quantity} onChange={e => setForm({...form, quantity: Number(e.target.value)})} className="input-field" /></div>
+                <div><label className="label">Quantity</label><input type="number" min="0" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value < 0 ? '0' : e.target.value})} className="input-field" /></div>
                 <div><label className="label">Unit</label><input value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Unit Price (PKR)</label><input type="number" value={form.unitPrice} onChange={e => setForm({...form, unitPrice: Number(e.target.value)})} className="input-field" /></div>
-                <div><label className="label">Reorder Level</label><input type="number" value={form.reorderLevel} onChange={e => setForm({...form, reorderLevel: Number(e.target.value)})} className="input-field" /></div>
+                <div><label className="label">Unit Price (PKR)</label><input type="number" min="0" value={form.unitPrice} onChange={e => setForm({...form, unitPrice: e.target.value < 0 ? '0' : e.target.value})} className="input-field" /></div>
+                <div><label className="label">Reorder Level</label><input type="number" min="0" value={form.reorderLevel} onChange={e => setForm({...form, reorderLevel: e.target.value < 0 ? '0' : e.target.value})} className="input-field" /></div>
               </div>
             </div>
             <div className="flex gap-2 mt-5">
@@ -180,7 +181,7 @@ export default function StockPage() {
               <button onClick={() => setAdjustItem(null)} className="text-slate-500 hover:text-white">✕</button>
             </div>
             <p className="text-slate-500 text-xs mb-3">Current quantity: <span className="text-white">{adjustItem.quantity}</span></p>
-            <div><label className="label">Adjustment (+/-)</label><input type="number" value={adjustQty} onChange={e => setAdjustQty(Number(e.target.value))} className="input-field" /></div>
+            <div><label className="label">Adjustment (+/-)</label><input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} className="input-field" /></div>
             <div className="mt-2"><label className="label">Reason</label><input value={adjustReason} onChange={e => setAdjustReason(e.target.value)} placeholder="e.g. Used in kitchen" className="input-field" /></div>
             <div className="flex gap-2 mt-4">
               <button onClick={handleAdjust} className="btn-primary flex-1 text-sm">Apply</button>

@@ -27,6 +27,85 @@ function findAll(filters = {}) {
   return db.prepare(query).all(...params);
 }
 
+function getCategoryTotals(filters = {}) {
+  const db = getDb();
+  let query = `
+    SELECT
+      category,
+      COUNT(1) as count,
+      COALESCE(SUM(amount), 0) as total
+    FROM expenses
+  `;
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('(date >= ? OR createdAt >= ?)');
+    params.push(filters.from, filters.from);
+  }
+  if (filters.to) {
+    conditions.push('(date <= ? OR createdAt <= ?)');
+    params.push(filters.to, filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' GROUP BY category ORDER BY total DESC';
+  return db.prepare(query).all(...params);
+}
+
+function getDailyTotals(filters = {}) {
+  const db = getDb();
+  let query = `
+    SELECT
+      COALESCE(NULLIF(date, ''), SUBSTR(createdAt, 1, 10)) as date,
+      COALESCE(SUM(amount), 0) as total
+    FROM expenses
+  `;
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('(date >= ? OR createdAt >= ?)');
+    params.push(filters.from, filters.from);
+  }
+  if (filters.to) {
+    conditions.push('(date <= ? OR createdAt <= ?)');
+    params.push(filters.to, filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' GROUP BY COALESCE(NULLIF(date, \'\'), SUBSTR(createdAt, 1, 10)) ORDER BY date ASC';
+  return db.prepare(query).all(...params);
+}
+
+function getTotalAmount(filters = {}) {
+  const db = getDb();
+  let query = 'SELECT COALESCE(SUM(amount), 0) as totalExpenses FROM expenses';
+  const params = [];
+  const conditions = [];
+
+  if (filters.from) {
+    conditions.push('(date >= ? OR createdAt >= ?)');
+    params.push(filters.from, filters.from);
+  }
+  if (filters.to) {
+    conditions.push('(date <= ? OR createdAt <= ?)');
+    params.push(filters.to, filters.to);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  return db.prepare(query).get(...params) || { totalExpenses: 0 };
+}
+
 function findById(id) {
   const db = getDb();
   return db.prepare('SELECT * FROM expenses WHERE id = ?').get(id) || null;
@@ -142,6 +221,9 @@ function getDistinctCategories() {
 
 module.exports = {
   findAll,
+  getCategoryTotals,
+  getDailyTotals,
+  getTotalAmount,
   findById,
   insert,
   update,

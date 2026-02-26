@@ -5,7 +5,7 @@ const QUICK_KEYS = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
 const emptyForm = {
   name: '',
   description: '',
-  price: 0,
+  price: '',
   halfPrice: '',
   categoryId: '',
   isAvailable: true,
@@ -18,6 +18,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState('');
   const [editId, setEditId] = useState(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -51,6 +52,7 @@ export default function MenuPage() {
 
   const openAdd = () => {
     setForm(emptyForm);
+    setFormError('');
     setEditId(null);
     setShowModal(true);
   };
@@ -59,20 +61,43 @@ export default function MenuPage() {
     setForm({
       name: item.name || '',
       description: item.description || '',
-      price: Number(item.price) || 0,
+      price: item.price !== null && item.price !== undefined ? Number(item.price) : '',
       halfPrice: item.halfPrice !== null && item.halfPrice !== undefined ? Number(item.halfPrice) : '',
       categoryId: item.categoryId || '',
       isAvailable: item.isAvailable !== undefined ? !!item.isAvailable : true,
     });
+    setFormError('');
     setEditId(item.id);
     setShowModal(true);
   };
 
   const handleSave = async () => {
+    if (!form.name.trim()) {
+      setFormError('Item name is required.');
+      return;
+    }
+    if (form.price === '' || form.price === null) {
+      setFormError('Price is required.');
+      return;
+    }
+    const price = Number(form.price);
+    if (isNaN(price) || price < 0) {
+      setFormError('Price must be a non-negative number.');
+      return;
+    }
+    if (form.halfPrice !== '') {
+      const half = Number(form.halfPrice);
+      if (isNaN(half) || half < 0) {
+        setFormError('Half price must be a non-negative number.');
+        return;
+      }
+    }
+    setFormError('');
+
     const payload = {
       ...form,
-      price: Number(form.price) || 0,
-      halfPrice: form.halfPrice === '' ? null : Number(form.halfPrice) || 0,
+      price,
+      halfPrice: form.halfPrice === '' ? null : Number(form.halfPrice),
       categoryId: form.categoryId || null,
       isAvailable: !!form.isAvailable,
     };
@@ -86,6 +111,8 @@ export default function MenuPage() {
     if (res.success) {
       setShowModal(false);
       await fetchData();
+    } else {
+      setFormError(res.error || 'Failed to save item.');
     }
   };
 
@@ -263,11 +290,11 @@ export default function MenuPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Price (PKR)</label>
-                  <input type="number" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} className="input-field" />
+                  <input type="number" min={0} value={form.price} onChange={e => setForm({ ...form, price: e.target.value === '' ? '' : Number(e.target.value) })} className="input-field" />
                 </div>
                 <div>
                   <label className="label">Half Price (PKR)</label>
-                  <input type="number" value={form.halfPrice} onChange={e => setForm({ ...form, halfPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="input-field" />
+                  <input type="number" min={0} value={form.halfPrice} onChange={e => setForm({ ...form, halfPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="input-field" />
                 </div>
               </div>
               <div>
@@ -292,7 +319,10 @@ export default function MenuPage() {
                 Available for sale
               </label>
             </div>
-            <div className="flex gap-2 mt-5">
+            {formError && (
+              <p className="mt-3 text-xs bg-red-900/30 border border-red-700/50 text-red-300 rounded px-3 py-2">{formError}</p>
+            )}
+            <div className="flex gap-2 mt-3">
               <button onClick={handleSave} className="btn-primary flex-1">Save</button>
               <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
             </div>

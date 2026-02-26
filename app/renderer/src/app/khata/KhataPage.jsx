@@ -373,9 +373,7 @@ export default function KhataPage() {
                           </button>
                           <button
                             onClick={() => handleDeleteTransaction(tx.id)}
-                            className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={Boolean(tx.linkedExpenseId)}
-                            title={tx.linkedExpenseId ? 'Linked to expense, delete from Expenses tab' : 'Delete transaction'}
+                            className="text-xs text-red-400 hover:text-red-300"
                           >
                             Delete
                           </button>

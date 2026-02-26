@@ -56,8 +56,8 @@ function renderReceiptText(bill, options = {}) {
 
   // Column header
   parts.push(
-    'Qty' + ' ' +
     'Item'.padEnd(18) +
+    'Qty'.padStart(4) +
     'Price'.padStart(10) +
     'Total'.padStart(10) + '\n'
   );
@@ -65,11 +65,11 @@ function renderReceiptText(bill, options = {}) {
 
   // Items
   for (const item of (bill.items || [])) {
-    const qty = String(item.quantity).padEnd(3);
     const name = String(item.name).substring(0, 18).padEnd(18);
+    const qty = String(item.quantity).padStart(4);
     const price = formatAmount(item.price).padStart(10);
     const total = formatAmount(item.lineTotal).padStart(10);
-    parts.push(`${qty} ${name}${price}${total}\n`);
+    parts.push(`${name}${qty}${price}${total}\n`);
   }
 
   parts.push(line() + '\n');

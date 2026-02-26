@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-const CATEGORIES = ['Salary', 'Utilities', 'Rent', 'Raw Material', 'Maintenance', 'Marketing', 'Other'];
+const CATEGORIES = ['Other', 'Utilities', 'Rent', 'Raw Material', 'Salary', 'Khata Payment'];
 const SOURCE_TYPES = ['manual', 'khata', 'salary'];
 
 const today = () => new Date().toISOString().split('T')[0];

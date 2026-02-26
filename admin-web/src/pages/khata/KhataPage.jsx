@@ -96,7 +96,10 @@ export default function KhataPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-white mb-5">Khata (Ledger)</h1>
+      <div className="mb-5">
+        <h1 className="text-xl font-bold text-white">Khata (Ledger)</h1>
+        <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name}</p>
+      </div>
 
       <div className="flex flex-col lg:flex-row gap-4 h-auto lg:h-[calc(100vh-10rem)]">
 

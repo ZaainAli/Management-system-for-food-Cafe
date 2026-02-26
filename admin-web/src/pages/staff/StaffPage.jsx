@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Pencil, Trash2, ChevronDown, ChevronRight, BadgeDollarSign } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import EmployeeModal from './EmployeeModal';
+import SalaryModal from './SalaryModal';
 
 export default function StaffPage() {
   const { branches } = useAuth();
@@ -10,10 +11,11 @@ export default function StaffPage() {
   const [allBranches, setAllBranches] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [branchFilter, setBranchFilter] = useState('all');
-  const [showModal, setShowModal]   = useState(false);
-  const [editing, setEditing]       = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
-  const [salaryMap, setSalaryMap]   = useState({});
+  const [showModal, setShowModal]         = useState(false);
+  const [editing, setEditing]             = useState(null);
+  const [expandedId, setExpandedId]       = useState(null);
+  const [salaryMap, setSalaryMap]         = useState({});
+  const [salaryEmployee, setSalaryEmployee] = useState(null); // employee to pay salary for
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -136,7 +138,16 @@ export default function StaffPage() {
                 {expandedId === emp.id && (
                   <tr className="bg-slate-900/40">
                     <td colSpan={7} className="px-8 py-3">
-                      <p className="text-slate-400 text-xs font-medium mb-2 uppercase tracking-wide">Salary Records</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Salary Records</p>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSalaryEmployee(emp); }}
+                          className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                        >
+                          <BadgeDollarSign className="w-3.5 h-3.5" />
+                          Pay Salary
+                        </button>
+                      </div>
                       {!salaryMap[emp.id]
                         ? <p className="text-slate-600 text-xs">Loading...</p>
                         : salaryMap[emp.id].length === 0
@@ -174,6 +185,19 @@ export default function StaffPage() {
           branches={branchOptions}
           onClose={() => setShowModal(false)}
           onSaved={fetchData}
+        />
+      )}
+
+      {salaryEmployee && (
+        <SalaryModal
+          employee={salaryEmployee}
+          onClose={() => setSalaryEmployee(null)}
+          onSaved={() => {
+            // Clear cached records so they reload fresh on next expand
+            setSalaryMap((m) => { const n = { ...m }; delete n[salaryEmployee.id]; return n; });
+            loadSalaryRecords(salaryEmployee.id);
+            setSalaryEmployee(null);
+          }}
         />
       )}
     </div>

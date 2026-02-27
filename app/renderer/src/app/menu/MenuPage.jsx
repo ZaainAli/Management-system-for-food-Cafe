@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const QUICK_KEYS = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+const QUICK_KEYS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'];
 
 const emptyForm = {
   name: '',
@@ -24,6 +24,8 @@ export default function MenuPage() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [quickKeys, setQuickKeys] = useState({});
   const [quickKeySaving, setQuickKeySaving] = useState(false);
+  const [showQuickKeysModal, setShowQuickKeysModal] = useState(false);
+  const [quickKeysError, setQuickKeysError] = useState('');
 
   const fetchData = async () => {
     const [itemsRes, catsRes, qkRes] = await Promise.all([
@@ -140,6 +142,17 @@ export default function MenuPage() {
   };
 
   const handleSaveQuickKeys = async () => {
+    const selectedItemIds = QUICK_KEYS.map(k => quickKeys[k]).filter(Boolean);
+    const duplicateItemIds = [...new Set(selectedItemIds.filter((id, idx) => selectedItemIds.indexOf(id) !== idx))];
+    if (duplicateItemIds.length > 0) {
+      const duplicateNames = duplicateItemIds
+        .map(id => items.find(item => item.id === id)?.name || id)
+        .join(', ');
+      setQuickKeysError(`One item can only be set on one key. Duplicate assignments: ${duplicateNames}`);
+      return;
+    }
+
+    setQuickKeysError('');
     setQuickKeySaving(true);
     const assignments = QUICK_KEYS
       .filter(k => quickKeys[k])
@@ -149,8 +162,31 @@ export default function MenuPage() {
       const map = {};
       res.data.forEach(qk => { map[qk.key] = qk.menuItemId; });
       setQuickKeys(map);
+      setShowQuickKeysModal(false);
+      setQuickKeysError('');
+    } else {
+      setQuickKeysError(res.error || 'Failed to save quick keys.');
     }
     setQuickKeySaving(false);
+  };
+
+  const handleQuickKeyChange = (key, menuItemId) => {
+    const selectedId = menuItemId || undefined;
+    if (!selectedId) {
+      setQuickKeysError('');
+      setQuickKeys(prev => ({ ...prev, [key]: undefined }));
+      return;
+    }
+
+    const existingKey = QUICK_KEYS.find(k => k !== key && quickKeys[k] === selectedId);
+    if (existingKey) {
+      const itemName = items.find(item => item.id === selectedId)?.name || 'This item';
+      setQuickKeysError(`${itemName} is already assigned to key "${existingKey.toUpperCase()}". One item can only be on one key.`);
+      return;
+    }
+
+    setQuickKeysError('');
+    setQuickKeys(prev => ({ ...prev, [key]: selectedId }));
   };
 
   if (loading) return <div className="text-slate-400">Loading menu...</div>;
@@ -161,6 +197,15 @@ export default function MenuPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-white">Menu</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setQuickKeysError('');
+              setShowQuickKeysModal(true);
+            }}
+            className="btn-secondary text-sm"
+          >
+            Quick Keys (POS Shortcuts)
+          </button>
           <button onClick={() => setShowCategoryModal(true)} className="btn-secondary text-sm">+ Add Category</button>
           <button onClick={openAdd} className="btn-primary text-sm">+ Add Item</button>
         </div>
@@ -193,34 +238,6 @@ export default function MenuPage() {
             </button>
           );
         })}
-      </div>
-
-      {/* Quick Keys Assignment */}
-      <div className="card mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-slate-300">Quick Keys (POS Shortcuts)</h2>
-          <button onClick={handleSaveQuickKeys} disabled={quickKeySaving} className="btn-primary text-xs px-3 py-1.5">
-            {quickKeySaving ? 'Saving...' : 'Save Quick Keys'}
-          </button>
-        </div>
-        <p className="text-xs text-slate-500 mb-3">Assign menu items to keyboard shortcuts. These keys always work in POS regardless of category filter.</p>
-        <div className="grid grid-cols-5 gap-2">
-          {QUICK_KEYS.map(k => (
-            <div key={k} className="flex flex-col gap-1">
-              <span className="text-xs font-bold text-slate-400 uppercase text-center bg-slate-700 rounded px-2 py-1 w-8 mx-auto">{k}</span>
-              <select
-                value={quickKeys[k] || ''}
-                onChange={e => setQuickKeys(prev => ({ ...prev, [k]: e.target.value || undefined }))}
-                className="input-field text-xs py-1.5 bg-slate-700"
-              >
-                <option value="">-- Empty --</option>
-                {items.map(item => (
-                  <option key={item.id} value={item.id}>{item.name} (PKR {Number(item.price).toLocaleString()})</option>
-                ))}
-              </select>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Table */}
@@ -345,6 +362,68 @@ export default function MenuPage() {
             <div className="flex gap-2 mt-4">
               <button onClick={handleAddCategory} className="btn-primary flex-1 text-sm">Add</button>
               <button onClick={() => setShowCategoryModal(false)} className="btn-secondary text-sm">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Keys Modal */}
+      {showQuickKeysModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
+          <div className="card w-full max-w-5xl max-h-full overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-300">Quick Keys (POS Shortcuts)</h2>
+              <button
+                onClick={() => {
+                  setShowQuickKeysModal(false);
+                  setQuickKeysError('');
+                }}
+                className="text-slate-500 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Assign menu items to keyboard shortcuts. One item can only be assigned to one key.
+            </p>
+            {quickKeysError && (
+              <p className="mb-3 text-xs bg-red-900/30 border border-red-700/50 text-red-300 rounded px-3 py-2">{quickKeysError}</p>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {QUICK_KEYS.map(k => (
+                <div key={k} className="flex flex-col gap-1">
+                  <span className="text-xs font-bold text-slate-400 uppercase text-center bg-slate-700 rounded px-2 py-1 w-8 mx-auto">{k}</span>
+                  <select
+                    value={quickKeys[k] || ''}
+                    onChange={e => handleQuickKeyChange(k, e.target.value)}
+                    className="input-field text-xs py-1.5 bg-slate-700"
+                  >
+                    <option value="">-- Empty --</option>
+                    {items.map(item => {
+                      const alreadyAssignedElsewhere = QUICK_KEYS.some(otherKey => otherKey !== k && quickKeys[otherKey] === item.id);
+                      return (
+                        <option key={item.id} value={item.id} disabled={alreadyAssignedElsewhere}>
+                          {item.name} (PKR {Number(item.price).toLocaleString()})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => {
+                  setShowQuickKeysModal(false);
+                  setQuickKeysError('');
+                }}
+                className="btn-secondary text-xs px-3 py-1.5"
+              >
+                Cancel
+              </button>
+              <button onClick={handleSaveQuickKeys} disabled={quickKeySaving} className="btn-primary text-xs px-3 py-1.5">
+                {quickKeySaving ? 'Saving...' : 'Save Quick Keys'}
+              </button>
             </div>
           </div>
         </div>

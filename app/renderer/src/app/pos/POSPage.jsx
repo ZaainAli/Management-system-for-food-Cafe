@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo, useReducer, useCallback } from 'react';
-import { GRID_KEYS } from './constants.js';
 import { useCart } from './hooks/useCart.jsx';
 import { usePOSKeyboard } from './hooks/usePOSKeyboard.jsx';
 import QuickKeysBar from './components/QuickKeysBar.jsx';
@@ -7,20 +6,22 @@ import KeyboardStatusBar from './components/KeyboardStatusBar.jsx';
 import CartPanel from './components/CartPanel.jsx';
 
 // ── FSM Reducer ──────────────────────────────────────────────────────────────
-const initialFSMState = { fsm: 'IDLE', pendingLineId: null, pendingIsNewLine: false, tableBuffer: '' };
+const initialFSMState = { fsm: 'IDLE', pendingLineId: null, pendingIsNewLine: false, tableBuffer: '', itemBuffer: '' };
 
 function fsmReducer(state, action) {
   switch (action.type) {
     case 'START_ITEM':
-      return { ...state, fsm: action.hasPriceOption ? 'PRICE' : 'QTY', pendingLineId: action.lineId, pendingIsNewLine: true };
+      return { ...state, fsm: action.hasPriceOption ? 'PRICE' : 'QTY', pendingLineId: action.lineId, pendingIsNewLine: true, itemBuffer: '' };
     case 'SELECT_LINE':
-      return { ...state, fsm: action.hasPriceOption ? 'PRICE' : 'QTY', pendingLineId: action.lineId, pendingIsNewLine: false };
+      return { ...state, fsm: action.hasPriceOption ? 'PRICE' : 'QTY', pendingLineId: action.lineId, pendingIsNewLine: false, itemBuffer: '' };
     case 'ADVANCE_TO_QTY':
       return { ...state, fsm: 'QTY' };
     case 'START_TABLE':
       return { ...state, fsm: 'TABLE', tableBuffer: '' };
     case 'UPDATE_TABLE_BUFFER':
       return { ...state, tableBuffer: action.buffer };
+    case 'UPDATE_ITEM_BUFFER':
+      return { ...state, itemBuffer: action.buffer };
     case 'RESET':
       return { ...initialFSMState };
     default:
@@ -58,7 +59,7 @@ export default function POSPage() {
 
   // FSM state
   const [fsmState, dispatch] = useReducer(fsmReducer, initialFSMState);
-  const { fsm, pendingLineId, tableBuffer } = fsmState;
+  const { fsm, pendingLineId, tableBuffer, itemBuffer } = fsmState;
 
   // Refs
   const inputBufferRef = useRef('');
@@ -126,14 +127,6 @@ export default function POSPage() {
       : menuItems.filter(i => i.categoryName === activeCategory);
     return byCategory.filter(i => i.isAvailable && !quickKeyItemIds.has(i.id));
   }, [menuItems, activeCategory, quickKeyItemIds]);
-
-  const keyToItem = useMemo(() => {
-    const map = {};
-    filteredItems.forEach((item, idx) => {
-      if (idx < GRID_KEYS.length) map[GRID_KEYS[idx]] = item;
-    });
-    return map;
-  }, [filteredItems]);
 
   const stockByMenuName = useMemo(() => {
     const map = {};
@@ -252,7 +245,7 @@ export default function POSPage() {
     tables,
     heldBills,
     quickKeyToItem,
-    keyToItem,
+    filteredItems,
     addItem,
     updateLine,
     deleteLine,
@@ -307,16 +300,17 @@ export default function POSPage() {
           heldBills={heldBills}
           pendingLineId={pendingLineId}
           tableBuffer={tableBuffer}
-          inputBufferRef={inputBufferRef}
+          itemBuffer={itemBuffer}
         />
 
         {/* Menu Grid */}
         <div className="grid grid-cols-3 gap-3 flex-1 overflow-y-auto pr-1">
           {filteredItems.map((item, idx) => {
-            const shortcutKey = idx < GRID_KEYS.length ? GRID_KEYS[idx].toUpperCase() : null;
+            const itemNumber = idx + 1;
             const isBeingConfigured =
               pendingLineId && fsm !== 'IDLE' &&
               cart.find(c => c.lineId === pendingLineId)?.id === item.id;
+            const isHighlighted = itemBuffer && parseInt(itemBuffer, 10) === itemNumber;
             return (
               <button
                 key={item.id}
@@ -328,14 +322,16 @@ export default function POSPage() {
                 }}
                 disabled={!item.isAvailable || fsm !== 'IDLE'}
                 className={`card text-left transition-colors p-3 relative ${
-                  isBeingConfigured ? 'border-primary-500 ring-1 ring-primary-500/50' : 'hover:border-primary-500'
+                  isBeingConfigured ? 'border-primary-500 ring-1 ring-primary-500/50'
+                  : isHighlighted ? 'border-yellow-400 ring-1 ring-yellow-400/50'
+                  : 'hover:border-primary-500'
                 } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
-                {shortcutKey && (
-                  <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded bg-slate-600 text-slate-300 text-[10px] font-bold flex items-center justify-center">
-                    {shortcutKey}
-                  </span>
-                )}
+                <span className={`absolute top-1.5 right-1.5 min-w-[20px] h-5 rounded px-1 text-[10px] font-bold flex items-center justify-center ${
+                  isHighlighted ? 'bg-yellow-400 text-slate-900' : 'bg-slate-600 text-slate-300'
+                }`}>
+                  {itemNumber}
+                </span>
                 <div className="flex justify-between items-start pr-6">
                   <span className="text-white text-sm font-medium leading-tight">{item.name}</span>
                   {!item.isAvailable && <span className="text-xs bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded">Out</span>}

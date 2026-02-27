@@ -284,8 +284,17 @@ async function getQuickKeys() {
 }
 
 async function setQuickKeys(assignments) {
-  const validKeys = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+  const validKeys = 'abcdefghijklmnopqrstuvwxyz'.split('');
   const filtered = assignments.filter(a => validKeys.includes(a.key) && a.menuItemId);
+  const usedMenuItemIds = new Set();
+
+  for (const a of filtered) {
+    if (usedMenuItemIds.has(a.menuItemId)) {
+      throw new Error(`One item can only be assigned to one quick key (menuItemId: ${a.menuItemId})`);
+    }
+    usedMenuItemIds.add(a.menuItemId);
+  }
+
   // Validate all menu items exist
   for (const a of filtered) {
     const item = await billModel.getMenuItemById(a.menuItemId);

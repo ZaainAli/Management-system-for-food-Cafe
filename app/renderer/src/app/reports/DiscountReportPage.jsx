@@ -38,23 +38,24 @@ export default function DiscountReportPage() {
         const pad = n => String(n).padStart(2, '0');
         const td  = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
         if (period === 'custom') {
-          from = customFrom + 'T00:00:00.000Z';
-          to   = customTo   + 'T23:59:59.999Z';
+          from = new Date(`${customFrom}T00:00:00`).toISOString();
+          to   = new Date(`${customTo}T23:59:59.999`).toISOString();
         } else if (period === 'today') {
-          from = `${td}T00:00:00.000Z`;
-          to   = `${td}T23:59:59.999Z`;
+          from = new Date(`${td}T00:00:00`).toISOString();
+          to   = new Date(`${td}T23:59:59.999`).toISOString();
         } else if (period === 'week') {
           const d = new Date(now); d.setDate(now.getDate() - 6);
-          from = `${d.toISOString().split('T')[0]}T00:00:00.000Z`;
-          to   = `${td}T23:59:59.999Z`;
+          const weekStart = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+          from = new Date(`${weekStart}T00:00:00`).toISOString();
+          to   = new Date(`${td}T23:59:59.999`).toISOString();
         } else if (period === 'month') {
           const [y, m] = selMonth.split('-').map(Number);
           const lastDay = pad(new Date(y, m, 0).getDate());
-          from = `${selMonth}-01T00:00:00.000Z`;
-          to   = `${selMonth}-${lastDay}T23:59:59.999Z`;
+          from = new Date(`${selMonth}-01T00:00:00`).toISOString();
+          to   = new Date(`${selMonth}-${lastDay}T23:59:59.999`).toISOString();
         } else if (period === 'year') {
-          from = `${selYear}-01-01T00:00:00.000Z`;
-          to   = `${selYear}-12-31T23:59:59.999Z`;
+          from = new Date(`${selYear}-01-01T00:00:00`).toISOString();
+          to   = new Date(`${selYear}-12-31T23:59:59.999`).toISOString();
         }
 
         const res = await window.api.pos.getDiscountedBills({ from, to });

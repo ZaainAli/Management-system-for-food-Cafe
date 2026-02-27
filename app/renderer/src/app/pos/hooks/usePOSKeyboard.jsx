@@ -9,7 +9,7 @@ export function usePOSKeyboard({
   tables,
   heldBills,
   quickKeyToItem,
-  keyToItem,
+  filteredItems,
   addItem,
   updateLine,
   deleteLine,
@@ -19,7 +19,7 @@ export function usePOSKeyboard({
   setSelectedTableId,
   discountInputRef,
 }) {
-  const { fsm, pendingLineId, pendingIsNewLine } = fsmState;
+  const { fsm, pendingLineId, pendingIsNewLine, itemBuffer } = fsmState;
 
   const pickCartLineByArrow = useCallback((arrowKey) => {
     if (cart.length === 0) return;
@@ -41,12 +41,14 @@ export function usePOSKeyboard({
       const isFormFieldFocused = tag === 'input' || tag === 'textarea' || tag === 'select';
 
       if (isFormFieldFocused && fsm === 'IDLE') {
-        const isAddItemHotkey = key.length === 1 && key >= 'a' && key <= 'z' && !e.repeat;
+        // Only quick-key letters are intercepted when a form field is focused.
+        // Digit keys are intentionally passed through so inputs (discount, table) still work.
+        const isQuickKeyHotkey = QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat;
         const isGlobalIdleHotkey =
           e.key === 'Escape' || e.key === 'F8' || e.key === 'F9' ||
           e.key === 'F10' || e.key === 'F6' || e.key === 'F7' ||
           e.key === 'F12' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
-        if (!isAddItemHotkey && !isGlobalIdleHotkey) return;
+        if (!isQuickKeyHotkey && !isGlobalIdleHotkey) return;
       }
 
       if (key === 'f6' && fsm === 'IDLE' && cart.length > 0) {
@@ -98,24 +100,53 @@ export function usePOSKeyboard({
 
       // ── IDLE ──
       if (fsm === 'IDLE') {
-        if (key.length === 1 && key >= 'a' && key <= 'z' && !e.repeat) {
+        // Quick keys (letter-based, always single-press)
+        if (QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat) {
           e.preventDefault();
-          const item = QUICK_KEY_SET.has(key) ? quickKeyToItem[key] : keyToItem[key];
+          const item = quickKeyToItem[key];
           if (!item || !item.isAvailable) return;
           const lineId = addItem(item);
           inputBufferRef.current = '';
           dispatch({ type: 'START_ITEM', lineId, hasPriceOption: item.halfPrice != null });
           return;
         }
+        // Numeric item entry: digits build a buffer, Enter confirms
+        if (key >= '0' && key <= '9' && !e.repeat) {
+          e.preventDefault();
+          dispatch({ type: 'UPDATE_ITEM_BUFFER', buffer: itemBuffer + key });
+          return;
+        }
+        if (e.key === 'Backspace' && itemBuffer) {
+          e.preventDefault();
+          dispatch({ type: 'UPDATE_ITEM_BUFFER', buffer: itemBuffer.slice(0, -1) });
+          return;
+        }
+        if (e.key === 'Enter' && itemBuffer) {
+          e.preventDefault();
+          const idx = parseInt(itemBuffer, 10) - 1;
+          const item = filteredItems[idx];
+          if (item && item.isAvailable) {
+            const lineId = addItem(item);
+            inputBufferRef.current = '';
+            dispatch({ type: 'START_ITEM', lineId, hasPriceOption: item.halfPrice != null });
+          } else {
+            dispatch({ type: 'UPDATE_ITEM_BUFFER', buffer: '' });
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          if (e.repeat) return;
+          e.preventDefault();
+          if (itemBuffer) {
+            dispatch({ type: 'UPDATE_ITEM_BUFFER', buffer: '' });
+          } else if (cart.length > 0) {
+            createBill();
+          }
+          return;
+        }
         if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && cart.length > 0) {
           e.preventDefault();
           pickCartLineByArrow(e.key);
-          return;
-        }
-        if (e.key === 'Escape' && cart.length > 0) {
-          if (e.repeat) return;
-          e.preventDefault();
-          createBill();
           return;
         }
         return;
@@ -254,8 +285,8 @@ export function usePOSKeyboard({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    fsm, pendingLineId, pendingIsNewLine,
-    quickKeyToItem, keyToItem,
+    fsm, pendingLineId, pendingIsNewLine, itemBuffer,
+    quickKeyToItem, filteredItems,
     cart, tables, heldBills,
     addItem, updateLine, deleteLine,
     createBill, holdCurrentOrder, recallHeldBill,

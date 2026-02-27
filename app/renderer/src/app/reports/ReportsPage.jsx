@@ -49,10 +49,10 @@ export default function ReportsPage() {
       try {
         let filters;
         if (period === 'custom') {
-          filters = { from: customFrom + 'T00:00:00.000Z', to: customTo + 'T23:59:59.999Z' };
+          filters = { from: new Date(`${customFrom}T00:00:00`).toISOString(), to: new Date(`${customTo}T23:59:59.999`).toISOString() };
         } else {
           const { from, to } = computeRange(period, selMonth, selYear);
-          filters = { from: `${from}T00:00:00.000Z`, to: `${to}T23:59:59.999Z` };
+          filters = { from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T23:59:59.999`).toISOString() };
         }
         let res;
         switch (activeTab) {

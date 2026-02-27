@@ -50,8 +50,8 @@ export default function Dashboard() {
       setLoading(true);
       const { from, to } = computeRange(period, selMonth, selYear);
       const res = await window.api.report.getDashboardStats({
-        from: `${from}T00:00:00.000Z`,
-        to:   `${to}T23:59:59.999Z`,
+        from: new Date(`${from}T00:00:00`).toISOString(),
+        to:   new Date(`${to}T23:59:59.999`).toISOString(),
       });
       if (res.success) setStats(res.data);
       setLoading(false);

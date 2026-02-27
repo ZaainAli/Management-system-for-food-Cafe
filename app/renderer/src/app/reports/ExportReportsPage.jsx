@@ -26,8 +26,8 @@ function rangeForPeriod(period, selMonth, selYear) {
   return { from: '', to: '' };
 }
 
-function toIsoStart(dateStr) { return dateStr ? `${dateStr}T00:00:00.000Z` : ''; }
-function toIsoEnd(dateStr)   { return dateStr ? `${dateStr}T23:59:59.999Z` : ''; }
+function toIsoStart(dateStr) { return dateStr ? new Date(`${dateStr}T00:00:00`).toISOString() : ''; }
+function toIsoEnd(dateStr)   { return dateStr ? new Date(`${dateStr}T23:59:59.999`).toISOString() : ''; }
 
 const reportTypes = [
   { id: 'all',       label: 'All Reports' },

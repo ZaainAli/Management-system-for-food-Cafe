@@ -4,6 +4,7 @@ const path = require('path');
 const { initializeDatabase } = require('./db/index');
 const { registerIPCHandlers } = require('./ipc/index');
 const { pullAllFromSupabase } = require('./services/pull.service');
+const { startScheduler } = require('./services/scheduler.service');
 const logger = require('./utils/logger');
 
 let mainWindow;
@@ -34,6 +35,9 @@ function createWindow() {
 
   // Register all IPC handlers
   registerIPCHandlers();
+
+  // Start daily email scheduler
+  startScheduler();
 
   // Load renderer
   const isDev = process.env.VITE_DEV_SERVER_URL || !app.isPackaged;

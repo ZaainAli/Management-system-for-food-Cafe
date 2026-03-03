@@ -25,8 +25,8 @@ const TAX_RATE = 0.00;
 const BILLS_PER_DAY = Number(process.env.BILLS_PER_DAY || 1000);
 
 // ─── Date range: one month (2026-01-08 to 2026-02-07) ─────
-const DATE_FROM = '2024-01-08';
-const DATE_TO = '2026-02-07';
+const DATE_FROM = '2023-01-01';
+const DATE_TO = '2026-03-04';
 
 function getAllDatesInRange(from, to) {
   const dates = [];

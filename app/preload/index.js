@@ -98,6 +98,14 @@ const khataAPI = {
   exportProfile: (payload) => ipcRenderer.invoke('khata:exportProfile', payload),
 };
 
+// ─── Email API ──────────────────────────────────────────────
+const emailAPI = {
+  getSettings: () => ipcRenderer.invoke('email:getSettings'),
+  saveSettings: (s) => ipcRenderer.invoke('email:saveSettings', s),
+  sendTestEmail: (s) => ipcRenderer.invoke('email:sendTestEmail', s),
+  sendNow: () => ipcRenderer.invoke('email:sendNow'),
+};
+
 // ─── Setup API ──────────────────────────────────────────────
 const setupAPI = {
   getBranchId: () => ipcRenderer.invoke('setup:getBranchId'),
@@ -120,6 +128,7 @@ const windowAPI = {
 contextBridge.exposeInMainWorld('api', {
   setup: setupAPI,
   auth: authAPI,
+  email: emailAPI,
   pos: posAPI,
   stock: stockAPI,
   expense: expenseAPI,

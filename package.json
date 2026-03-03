@@ -56,16 +56,17 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.45.4",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.0.0",
     "lucide-react": "^0.263.0",
+    "nodemailer": "^8.0.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.30.0",
     "uuid": "^9.0.0",
     "winston": "^3.10.0",
-    "zustand": "^5.0.0",
-    "@supabase/supabase-js": "2.45.4",
-    "dotenv": "^16.0.0"
+    "zustand": "^5.0.0"
   }
 }

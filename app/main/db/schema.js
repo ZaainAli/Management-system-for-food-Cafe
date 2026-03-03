@@ -247,6 +247,25 @@ function runMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_khata_transactions_date ON khata_transactions(date);
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
     CREATE INDEX IF NOT EXISTS idx_salary_records_employeeId ON salary_records(employeeId);
+
+    -- Email reporting settings (single row, id=1)
+    CREATE TABLE IF NOT EXISTS email_settings (
+      id INTEGER PRIMARY KEY,
+      provider TEXT NOT NULL DEFAULT 'gmail',
+      smtp_host TEXT NOT NULL DEFAULT '',
+      smtp_port INTEGER NOT NULL DEFAULT 587,
+      smtp_secure INTEGER NOT NULL DEFAULT 0,
+      smtp_user TEXT NOT NULL DEFAULT '',
+      smtp_pass TEXT NOT NULL DEFAULT '',
+      from_name TEXT NOT NULL DEFAULT 'Restaurant Manager',
+      recipient_email TEXT NOT NULL DEFAULT '',
+      schedule_time TEXT NOT NULL DEFAULT '23:55',
+      is_enabled INTEGER NOT NULL DEFAULT 0,
+      last_sent_date TEXT DEFAULT NULL,
+      updatedAt TEXT
+    );
+
+    INSERT OR IGNORE INTO email_settings (id) VALUES (1);
   `);
 
   // Lightweight column migrations

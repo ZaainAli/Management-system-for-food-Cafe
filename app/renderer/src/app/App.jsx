@@ -18,6 +18,7 @@ import ExportReportsPage from './reports/ExportReportsPage';
 import DiscountReportPage from './reports/DiscountReportPage';
 import UsersPage from './users/UsersPage';
 import BranchPage from './setup/BranchPage';
+import EmailSettingsPage from './settings/EmailSettingsPage';
 
 function ProtectedRoute({ permission, children }) {
   const { permissions } = useAuth();
@@ -115,6 +116,9 @@ export default function App({ isPOSWindow }) {
         } />
         <Route path="/branch" element={
           <ProtectedRoute permission="canAccessDashboard"><BranchPage /></ProtectedRoute>
+        } />
+        <Route path="/settings/email" element={
+          <ProtectedRoute permission="canManageUsers"><EmailSettingsPage /></ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>

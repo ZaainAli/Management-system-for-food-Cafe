@@ -1,6 +1,20 @@
 const billingService = require('../services/billing.service');
 const { printBillReceipt } = require('../services/print.service');
+const { getBranchInfo } = require('./setup.controller');
 const logger = require('../utils/logger');
+
+// Cache branch info so we don't hit Supabase on every bill print
+let _branchInfoCache = null;
+async function getCachedBranchInfo() {
+  if (_branchInfoCache) return _branchInfoCache;
+  try {
+    const res = await getBranchInfo();
+    if (res.success && res.data?.name) {
+      _branchInfoCache = res.data;
+    }
+  } catch {}
+  return _branchInfoCache;
+}
 
 async function getMenuItems() {
   try {
@@ -72,7 +86,11 @@ async function createBill(billData) {
     let printSkipped = false;
     if (!skipPrint) {
       try {
-        const printResult = await printBillReceipt(bill);
+        const branchInfo = await getCachedBranchInfo();
+        const printOptions = branchInfo
+          ? { restaurantName: branchInfo.name, restaurantAddress: branchInfo.address || '' }
+          : {};
+        const printResult = await printBillReceipt(bill, printOptions);
         if (printResult?.skipped) {
           printSkipped = true;
           printError = printResult.reason || 'Receipt print skipped';

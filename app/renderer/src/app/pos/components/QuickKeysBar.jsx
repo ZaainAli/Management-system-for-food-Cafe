@@ -1,7 +1,7 @@
 import React from 'react';
 import { QUICK_KEY_LIST } from '../constants.js';
 
-export default function QuickKeysBar({ quickKeyToItem, fsm, cart, pendingLineId, onAddItem, dispatch, inputBufferRef }) {
+export default function QuickKeysBar({ quickKeyToItem, fsm, cart, pendingLineId, onAddItem, dispatch, inputBufferRef, itemBuffer }) {
   if (!Object.keys(quickKeyToItem).length) return null;
 
   return (
@@ -12,6 +12,7 @@ export default function QuickKeysBar({ quickKeyToItem, fsm, cart, pendingLineId,
         const isBeingConfigured =
           pendingLineId && fsm !== 'IDLE' &&
           cart.find(c => c.lineId === pendingLineId)?.id === item.id;
+        const isHighlighted = fsm === 'IDLE' && itemBuffer === k;
         return (
           <button
             key={k}
@@ -25,10 +26,12 @@ export default function QuickKeysBar({ quickKeyToItem, fsm, cart, pendingLineId,
             className={`flex flex-col items-center px-3 py-2 rounded-lg border text-center min-w-[72px] transition-colors ${
               isBeingConfigured
                 ? 'border-primary-500 bg-primary-900/30 ring-1 ring-primary-500/50'
+                : isHighlighted
+                ? 'border-yellow-400 bg-slate-700 ring-1 ring-yellow-400/50'
                 : 'border-slate-600 bg-slate-800 hover:border-primary-500 hover:bg-slate-700'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
           >
-            <span className="text-[10px] font-bold text-slate-400 bg-slate-700 rounded px-1.5 py-0.5 mb-1 uppercase">{k}</span>
+            <span className={`text-[10px] font-bold rounded px-1.5 py-0.5 mb-1 uppercase ${isHighlighted ? 'bg-yellow-400 text-slate-900' : 'text-slate-400 bg-slate-700'}`}>{k}</span>
             <span className="text-white text-xs font-medium leading-tight truncate max-w-[64px]">{item.name}</span>
             <span className="text-primary-400 text-[10px] mt-0.5">PKR {item.price.toLocaleString()}</span>
           </button>

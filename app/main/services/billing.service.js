@@ -284,7 +284,7 @@ async function getQuickKeys() {
 }
 
 async function setQuickKeys(assignments) {
-  const validKeys = 'abcdefghijklmnopqrstuvwxyz'.split('');
+  const validKeys = '123456789abcdefghijklmnopqrstuvwxyz'.split('');
   const filtered = assignments.filter(a => validKeys.includes(a.key) && a.menuItemId);
   const usedMenuItemIds = new Set();
 

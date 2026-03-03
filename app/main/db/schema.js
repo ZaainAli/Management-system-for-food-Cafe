@@ -350,10 +350,10 @@ function runMigrations(db) {
       { id: 'item-001', name: 'Dall Mash', desc: '', price: 180, halfPrice: 120, catId: 'cat-01' },
       { id: 'item-002', name: 'Dall Chana', desc: '', price: 180, halfPrice: 120, catId: 'cat-01' },
       { id: 'item-003', name: 'Beef Kabab', desc: '', price: 130, halfPrice: null, catId: 'cat-01' },
-      { id: 'item-004', name: 'S-Beef Kabab', desc: '', price: 180, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-004', name: 'S-Beef Kabab', desc: '', price: 180, halfPrice: 150, catId: 'cat-01' },
       { id: 'item-005', name: 'Sabzi', desc: '', price: 180, halfPrice: 120, catId: 'cat-01' },
       { id: 'item-006', name: 'Qeema', desc: '', price: 400, halfPrice: 250, catId: 'cat-01' },
-      { id: 'item-007', name: 'Rita', desc: '', price: 10, halfPrice: null, catId: 'cat-01' },
+      { id: 'item-007', name: 'Rita', desc: '', price: 10, halfPrice: 10, catId: 'cat-01' },
       { id: 'item-008', name: 'Alu-Anda', desc: '', price: 150, halfPrice: 100, catId: 'cat-01' },
       { id: 'item-009', name: 'Kalaji', desc: '', price: 250, halfPrice: 150, catId: 'cat-01' },
       { id: 'item-010', name: 'Chicken Kharai', desc: '', price: 300, halfPrice: 200, catId: 'cat-01' },
@@ -365,6 +365,8 @@ function runMigrations(db) {
       { id: 'item-016', name: 'Chay', desc: '', price: 70, halfPrice: null, catId: 'cat-02' },
       { id: 'item-017', name: 'S-Chay', desc: '', price: 90, halfPrice: null, catId: 'cat-02' },
       { id: 'item-018', name: 'Mineral Water-1.5 Liter', desc: '', price: 120, halfPrice: null, catId: 'cat-02' },
+      { id: 'item-019', name: 'S-Roti', desc: '', price: 20, halfPrice: 15, catId: 'cat-02' },
+      { id: 'item-020', name: 'Custem-Item', desc: '', price: 100, halfPrice: 50, catId: 'cat-01' }
     ];
 
     const seedTx = db.transaction(() => {

@@ -128,6 +128,21 @@ export default function POSPage() {
     return byCategory.filter(i => i.isAvailable && !quickKeyItemIds.has(i.id));
   }, [menuItems, activeCategory, quickKeyItemIds]);
 
+  // Badge numbers for grid items — skip digits 1-9 already used as quick keys
+  const gridItemNumbers = useMemo(() => {
+    const assignedDigitQKs = new Set(
+      Object.keys(quickKeyToItem).filter(k => k >= '1' && k <= '9')
+    );
+    const numbers = [];
+    let d = 1;
+    for (let i = 0; i < filteredItems.length; i++) {
+      while (assignedDigitQKs.has(String(d))) d++;
+      numbers.push(d);
+      d++;
+    }
+    return numbers;
+  }, [filteredItems.length, quickKeyToItem]);
+
   const stockByMenuName = useMemo(() => {
     const map = {};
     stockItems.forEach(item => {
@@ -246,6 +261,7 @@ export default function POSPage() {
     heldBills,
     quickKeyToItem,
     filteredItems,
+    gridItemNumbers,
     addItem,
     updateLine,
     deleteLine,
@@ -275,6 +291,7 @@ export default function POSPage() {
           onAddItem={addItem}
           dispatch={dispatch}
           inputBufferRef={inputBufferRef}
+          itemBuffer={itemBuffer}
         />
 
         {/* Category Filter */}
@@ -306,7 +323,7 @@ export default function POSPage() {
         {/* Menu Grid */}
         <div className="grid grid-cols-3 gap-3 flex-1 overflow-y-auto pr-1">
           {filteredItems.map((item, idx) => {
-            const itemNumber = idx + 1;
+            const itemNumber = gridItemNumbers[idx];
             const isBeingConfigured =
               pendingLineId && fsm !== 'IDLE' &&
               cart.find(c => c.lineId === pendingLineId)?.id === item.id;

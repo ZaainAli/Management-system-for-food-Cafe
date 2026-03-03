@@ -10,6 +10,7 @@ export function usePOSKeyboard({
   heldBills,
   quickKeyToItem,
   filteredItems,
+  gridItemNumbers,
   addItem,
   updateLine,
   deleteLine,
@@ -41,9 +42,10 @@ export function usePOSKeyboard({
       const isFormFieldFocused = tag === 'input' || tag === 'textarea' || tag === 'select';
 
       if (isFormFieldFocused && fsm === 'IDLE') {
-        // Only quick-key letters are intercepted when a form field is focused.
-        // Digit keys are intentionally passed through so inputs (discount, table) still work.
-        const isQuickKeyHotkey = QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat;
+        // Only letter quick-keys are intercepted when a form field is focused.
+        // Digit keys always pass through so inputs (discount, table) still work.
+        const isQuickKeyHotkey = QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat &&
+          !(key >= '0' && key <= '9');
         const isGlobalIdleHotkey =
           e.key === 'Escape' || e.key === 'F8' || e.key === 'F9' ||
           e.key === 'F10' || e.key === 'F6' || e.key === 'F7' ||
@@ -100,17 +102,20 @@ export function usePOSKeyboard({
 
       // ── IDLE ──
       if (fsm === 'IDLE') {
-        // Quick keys (letter-based, always single-press)
-        if (QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat) {
+        // Letter quick keys (a-z): single press fires instantly
+        if (QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat && !(key >= '0' && key <= '9')) {
           e.preventDefault();
           const item = quickKeyToItem[key];
-          if (!item || !item.isAvailable) return;
-          const lineId = addItem(item);
-          inputBufferRef.current = '';
-          dispatch({ type: 'START_ITEM', lineId, hasPriceOption: item.halfPrice != null });
+          if (item && item.isAvailable) {
+            const lineId = addItem(item);
+            inputBufferRef.current = '';
+            dispatch({ type: 'START_ITEM', lineId, hasPriceOption: item.halfPrice != null });
+          }
+          // unassigned letter: swallow keystroke, do nothing
           return;
         }
-        // Numeric item entry: digits build a buffer, Enter confirms
+        // Digit keys: build item buffer, Enter confirms
+        // Digit quick keys (1-9) are confirmed the same way — buffer shows them highlighted
         if (key >= '0' && key <= '9' && !e.repeat) {
           e.preventDefault();
           dispatch({ type: 'UPDATE_ITEM_BUFFER', buffer: itemBuffer + key });
@@ -123,8 +128,18 @@ export function usePOSKeyboard({
         }
         if (e.key === 'Enter' && itemBuffer) {
           e.preventDefault();
-          const idx = parseInt(itemBuffer, 10) - 1;
-          const item = filteredItems[idx];
+          // Single digit assigned as quick key → fire it
+          const qkItem = itemBuffer.length === 1 ? quickKeyToItem[itemBuffer] : null;
+          if (qkItem && qkItem.isAvailable) {
+            const lineId = addItem(qkItem);
+            inputBufferRef.current = '';
+            dispatch({ type: 'START_ITEM', lineId, hasPriceOption: qkItem.halfPrice != null });
+            return;
+          }
+          // Otherwise look up in grid
+          const bufferNum = parseInt(itemBuffer, 10);
+          const gridIdx = gridItemNumbers.indexOf(bufferNum);
+          const item = gridIdx !== -1 ? filteredItems[gridIdx] : null;
           if (item && item.isAvailable) {
             const lineId = addItem(item);
             inputBufferRef.current = '';
@@ -165,6 +180,11 @@ export function usePOSKeyboard({
             const customPrice = Number(inputBufferRef.current);
             if (Number.isFinite(customPrice) && customPrice > 0) {
               updateLine(pendingLineId, { price: customPrice });
+            } else if (customPrice === 0) {
+              deleteLine(pendingLineId);
+              inputBufferRef.current = '';
+              dispatch({ type: 'RESET' });
+              return;
             }
           }
           inputBufferRef.current = '';
@@ -185,7 +205,13 @@ export function usePOSKeyboard({
             inputBufferRef.current += e.key;
             const customPrice = Number(inputBufferRef.current);
             if (Number.isFinite(customPrice)) {
-              updateLine(pendingLineId, { price: customPrice });
+              if (customPrice === 0) {
+                deleteLine(pendingLineId);
+                inputBufferRef.current = '';
+                dispatch({ type: 'RESET' });
+              } else {
+                updateLine(pendingLineId, { price: customPrice });
+              }
             }
           }
           return;
@@ -286,7 +312,7 @@ export function usePOSKeyboard({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     fsm, pendingLineId, pendingIsNewLine, itemBuffer,
-    quickKeyToItem, filteredItems,
+    quickKeyToItem, filteredItems, gridItemNumbers,
     cart, tables, heldBills,
     addItem, updateLine, deleteLine,
     createBill, holdCurrentOrder, recallHeldBill,

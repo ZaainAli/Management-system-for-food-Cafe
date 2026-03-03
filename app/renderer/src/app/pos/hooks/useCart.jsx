@@ -44,7 +44,12 @@ export function useCart() {
   }, []);
 
   const updateLine = useCallback((lineId, updates) => {
-    setCart(prev => prev.map(c => c.lineId === lineId ? { ...c, ...updates } : c));
+    setCart(prev => {
+      if ('price' in updates && Number(updates.price) <= 0) {
+        return prev.filter(c => c.lineId !== lineId);
+      }
+      return prev.map(c => c.lineId === lineId ? { ...c, ...updates } : c);
+    });
   }, []);
 
   const clear = useCallback(() => setCart([]), []);

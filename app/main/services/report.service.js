@@ -4,41 +4,74 @@ const employeeModel = require('../models/employee.model');
 const salesModel = require('../models/sales.model');
 const khataModel = require('../models/khata.model');
 
+function formatDateLocal(date) {
+  const p = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+function extractDate(value) {
+  if (!value) return '';
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return formatDateLocal(parsed);
+}
+
+function getUtcDateBounds(date) {
+  if (!date) return { from: '', to: '' };
+  return {
+    from: `${date}T00:00:00.000Z`,
+    to: `${date}T23:59:59.999Z`,
+  };
+}
+
+function normalizeDateRange(filters = {}, fallbackPeriod = 'today') {
+  if (filters.from && filters.to) {
+    return {
+      fromDate: extractDate(filters.from),
+      toDate: extractDate(filters.to),
+      period: filters.period || fallbackPeriod,
+    };
+  }
+  const fallback = getDateRange(filters.period || fallbackPeriod);
+  return {
+    fromDate: fallback.from,
+    toDate: fallback.to,
+    period: filters.period || fallbackPeriod,
+  };
+}
+
 function getDateRange(period = 'today') {
   const now = new Date();
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
   switch (period) {
     case 'today':
-      return { from: startOfDay(now).toISOString(), to: now.toISOString() };
+      return { from: formatDateLocal(now), to: formatDateLocal(now) };
     case 'week': {
       const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
       const monday = new Date(now);
       const daysBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       monday.setDate(now.getDate() - daysBack);
-      return { from: startOfDay(monday).toISOString(), to: now.toISOString() };
+      return { from: formatDateLocal(monday), to: formatDateLocal(now) };
     }
     case 'month': {
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: startOfDay(firstOfMonth).toISOString(), to: now.toISOString() };
+      return { from: formatDateLocal(firstOfMonth), to: formatDateLocal(now) };
     }
     case 'year': {
       const firstOfYear = new Date(now.getFullYear(), 0, 1);
-      return { from: startOfDay(firstOfYear).toISOString(), to: now.toISOString() };
+      return { from: formatDateLocal(firstOfYear), to: formatDateLocal(now) };
     }
     default:
-      return { from: startOfDay(now).toISOString(), to: now.toISOString() };
+      return { from: formatDateLocal(now), to: formatDateLocal(now) };
   }
 }
 
 
 async function getDashboardStats(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'today');
-
-  const fromDate = from.split('T')[0];
-  const toDate = to.split('T')[0];
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'today');
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
   const employees = await employeeModel.findAll({});
 
@@ -55,20 +88,18 @@ async function getDashboardStats(filters = {}) {
     totalBills,
     totalEmployees,
     averageBill: parseFloat(averageBill.toFixed(2)),
-    period: filters.period || 'today',
+    period,
   };
 }
 
 async function getSalesReport(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'month');
-  const fromDate = from.split('T')[0];
-  const toDate = to.split('T')[0];
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
+  const fromUtc = getUtcDateBounds(fromDate).from;
+  const toUtc = getUtcDateBounds(toDate).to;
 
   const dailyRows = await salesModel.getDailySales({ from: fromDate, to: toDate });
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
-  const topItems = await billModel.getTopItems({ from, to, limit: 10 });
+  const topItems = await billModel.getTopItems({ from: fromUtc, to: toUtc, limit: 10 });
 
   return {
     dailyTotals: dailyRows.map(r => ({
@@ -79,17 +110,15 @@ async function getSalesReport(filters = {}) {
     topItems,
     totalRevenue: parseFloat((totals.totalRevenue || 0).toFixed(2)),
     totalBills: totals.totalBills || 0,
-    period: filters.period || 'month',
+    period,
   };
 }
 
 async function getExpenseReport(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'month');
-  const byCategory = await expenseModel.getCategoryTotals({ from, to });
-  const dailyTotals = await expenseModel.getDailyTotals({ from, to });
-  const totals = await expenseModel.getTotalAmount({ from, to });
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
+  const byCategory = await expenseModel.getCategoryTotals({ from: fromDate, to: toDate });
+  const dailyTotals = await expenseModel.getDailyTotals({ from: fromDate, to: toDate });
+  const totals = await expenseModel.getTotalAmount({ from: fromDate, to: toDate });
 
   return {
     byCategory: byCategory.map(row => ({
@@ -102,17 +131,15 @@ async function getExpenseReport(filters = {}) {
       total: row.total,
     })),
     totalExpenses: parseFloat((totals.totalExpenses || 0).toFixed(2)),
-    period: filters.period || 'month',
+    period,
   };
 }
 
 async function getStaffReport(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'month');
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
   const employees = await employeeModel.findAll({});
-  const salaryTotalsByEmployee = await employeeModel.getSalaryTotalsByEmployee({ from, to });
-  const salaryTotals = await employeeModel.getSalaryTotals({ from, to });
+  const salaryTotalsByEmployee = await employeeModel.getSalaryTotalsByEmployee({ from: fromDate, to: toDate });
+  const salaryTotals = await employeeModel.getSalaryTotals({ from: fromDate, to: toDate });
 
   // Group salary by employee
   const bySalary = {};
@@ -128,16 +155,12 @@ async function getStaffReport(filters = {}) {
       salaryInfo: bySalary[e.id] || { totalPaid: 0, payments: 0 },
     })),
     totalSalaryPaid: parseFloat((salaryTotals.totalPaid || 0).toFixed(2)),
-    period: filters.period || 'month',
+    period,
   };
 }
 
 async function getProfitLoss(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'month');
-  const fromDate = from.split('T')[0];
-  const toDate = to.split('T')[0];
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
   const totalRevenue = totals.totalRevenue || 0;
   const totalExpenses = totals.totalExpenses || 0;
@@ -147,14 +170,14 @@ async function getProfitLoss(filters = {}) {
     totalExpenses: parseFloat(totalExpenses.toFixed(2)),
     netProfit: parseFloat((totalRevenue - totalExpenses).toFixed(2)),
     profitMargin: totalRevenue > 0 ? parseFloat(((totalRevenue - totalExpenses) / totalRevenue * 100).toFixed(2)) : 0,
-    period: filters.period || 'month',
+    period,
   };
 }
 
 async function getDiscountedBillsReport(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'month');
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
+  const from = getUtcDateBounds(fromDate).from;
+  const to = getUtcDateBounds(toDate).to;
 
   const discountedBills = await billModel.getDiscountedBills({ from, to });
   const totals = discountedBills.reduce((acc, row) => {
@@ -174,17 +197,12 @@ async function getDiscountedBillsReport(filters = {}) {
     totalBillAmount: parseFloat(totals.totalBillAmount.toFixed(2)),
     totalDiscount: parseFloat(totals.totalDiscount.toFixed(2)),
     totalFinalAmount: parseFloat(totals.totalFinalAmount.toFixed(2)),
-    period: filters.period || 'month',
+    period,
   };
 }
 
 async function getKhataReport(filters = {}) {
-  const { from, to } = (filters.from && filters.to)
-    ? { from: filters.from, to: filters.to }
-    : getDateRange(filters.period || 'month');
-
-  const fromDate = from.split('T')[0];
-  const toDate = to.split('T')[0];
+  const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
 
   const profiles = khataModel.getAllProfiles();
   const transactions = khataModel.getAllTransactionsInRange({ from: fromDate, to: toDate });
@@ -206,7 +224,7 @@ async function getKhataReport(filters = {}) {
       totalDueInRange: parseFloat(dueTotal.toFixed(2)),
       totalPaidInRange: parseFloat(paidTotal.toFixed(2)),
     },
-    period: filters.period || 'month',
+    period,
   };
 }
 

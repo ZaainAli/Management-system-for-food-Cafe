@@ -7,6 +7,10 @@ function curMonth() {
   return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
 }
 function curYear() { return String(new Date().getFullYear()); }
+function formatDateLocal(date) {
+  const p = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
 const YEAR_OPTIONS = Array.from(
   { length: new Date().getFullYear() - 2019 },
   (_, i) => String(new Date().getFullYear() - i)
@@ -18,7 +22,7 @@ function computeRange(period, selMonth, selYear) {
   if (period === 'today') return { from: td, to: td };
   if (period === 'week') {
     const d = new Date(t); d.setDate(t.getDate() - 6);
-    return { from: d.toISOString().split('T')[0], to: td };
+    return { from: formatDateLocal(d), to: td };
   }
   if (period === 'month') {
     const [y, m] = selMonth.split('-').map(Number);
@@ -49,10 +53,7 @@ export default function Dashboard() {
     (async () => {
       setLoading(true);
       const { from, to } = computeRange(period, selMonth, selYear);
-      const res = await window.api.report.getDashboardStats({
-        from: new Date(`${from}T00:00:00`).toISOString(),
-        to:   new Date(`${to}T23:59:59.999`).toISOString(),
-      });
+      const res = await window.api.report.getDashboardStats({ from, to });
       if (res.success) setStats(res.data);
       setLoading(false);
     })();

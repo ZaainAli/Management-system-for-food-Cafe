@@ -7,6 +7,10 @@ function curMonth() {
   return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
 }
 function curYear() { return String(new Date().getFullYear()); }
+function formatDateLocal(date) {
+  const p = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
 const YEAR_OPTIONS = Array.from(
   { length: new Date().getFullYear() - 2019 },
   (_, i) => String(new Date().getFullYear() - i)
@@ -15,7 +19,7 @@ function computeRange(period, selMonth, selYear) {
   const t = new Date(), p = n => String(n).padStart(2, '0');
   const td = `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
   if (period === 'today') return { from: td, to: td };
-  if (period === 'week')  { const d = new Date(t); d.setDate(t.getDate()-6); return { from: d.toISOString().split('T')[0], to: td }; }
+  if (period === 'week')  { const d = new Date(t); d.setDate(t.getDate()-6); return { from: formatDateLocal(d), to: td }; }
   if (period === 'month') { const [y, m] = selMonth.split('-').map(Number); return { from: `${selMonth}-01`, to: `${selMonth}-${p(new Date(y, m, 0).getDate())}` }; }
   if (period === 'year')  return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
   return { from: td, to: td };
@@ -49,10 +53,10 @@ export default function ReportsPage() {
       try {
         let filters;
         if (period === 'custom') {
-          filters = { from: new Date(`${customFrom}T00:00:00`).toISOString(), to: new Date(`${customTo}T23:59:59.999`).toISOString() };
+          filters = { from: customFrom, to: customTo };
         } else {
           const { from, to } = computeRange(period, selMonth, selYear);
-          filters = { from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T23:59:59.999`).toISOString() };
+          filters = { from, to };
         }
         let res;
         switch (activeTab) {

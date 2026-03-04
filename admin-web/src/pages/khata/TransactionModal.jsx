@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function TransactionModal({ profileId, branchId, onClose, onSaved }) {
+export default function TransactionModal({ profileId, branchId, transaction, onClose, onSaved }) {
   const [type, setType]       = useState('due');
   const [amount, setAmount]   = useState('');
   const [note, setNote]       = useState('');
@@ -12,6 +12,16 @@ export default function TransactionModal({ profileId, branchId, onClose, onSaved
   const [error, setError]     = useState('');
   const [saving, setSaving]   = useState(false);
   const amountRef = useRef(null);
+  const isEdit = Boolean(transaction?.id);
+
+  useEffect(() => {
+    setType(transaction?.type || 'due');
+    setAmount(transaction?.amount !== undefined ? String(transaction.amount) : '');
+    setNote(transaction?.note || '');
+    setDate(transaction?.date || today());
+    setError('');
+    setTimeout(() => amountRef.current?.focus(), 50);
+  }, [transaction]);
 
   const handleSave = async () => {
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -19,14 +29,20 @@ export default function TransactionModal({ profileId, branchId, onClose, onSaved
     }
     setSaving(true); setError('');
 
-    const { error: err } = await supabase.from('khata_transactions').insert({
+    const payload = {
       profile_id: profileId,
       branch_id:  branchId,
       type,
       amount:     parseFloat(Number(amount).toFixed(2)),
       note:       note.trim() || null,
       date,
-    });
+    };
+
+    const result = isEdit
+      ? await supabase.from('khata_transactions').update(payload).eq('id', transaction.id)
+      : await supabase.from('khata_transactions').insert(payload);
+
+    const err = result.error;
 
     if (err) { setError(err.message); }
     else { onSaved(); onClose(); }
@@ -38,7 +54,7 @@ export default function TransactionModal({ profileId, branchId, onClose, onSaved
          onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <div className="card w-full max-w-xs">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-white font-semibold">Add Transaction</h2>
+          <h2 className="text-white font-semibold">{isEdit ? 'Edit Transaction' : 'Add Transaction'}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
         </div>
 
@@ -75,7 +91,7 @@ export default function TransactionModal({ profileId, branchId, onClose, onSaved
 
         <div className="flex gap-2 mt-5">
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
-            {saving ? 'Saving...' : 'Add Transaction'}
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Transaction'}
           </button>
           <button onClick={onClose} className="btn-secondary">Cancel</button>
         </div>

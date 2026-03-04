@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../store/AuthContext';
 
 const inputCls = 'w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 placeholder-slate-500';
 const labelCls = 'block text-xs font-medium text-slate-400 mb-1';
@@ -28,6 +29,9 @@ const GMAIL_HOST = 'smtp.gmail.com';
 const GMAIL_PORT = 587;
 
 export default function EmailSettingsPage() {
+  const { user } = useAuth();
+  const isCashier = user?.role === 'cashier';
+
   const [form, setForm] = useState({
     provider: 'gmail',
     smtp_host: '',
@@ -98,6 +102,7 @@ export default function EmailSettingsPage() {
   }
 
   async function handleResetLastSent() {
+    if (isCashier) return;
     await window.api.email.resetLastSent();
     setLastSent(null);
     await refreshStatus();
@@ -118,6 +123,10 @@ export default function EmailSettingsPage() {
   }
 
   async function handleSave() {
+    if (isCashier) {
+      setSaveMsg({ type: 'error', text: 'Cashier cannot change SMTP or delivery settings.' });
+      return;
+    }
     setSaveBusy(true);
     setSaveMsg(null);
     const res = await window.api.email.saveSettings(form);
@@ -167,6 +176,11 @@ export default function EmailSettingsPage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-white">Email Reports</h1>
         <p className="text-slate-500 text-sm mt-1">Send automated daily performance reports to the owner's email.</p>
+        {isCashier && (
+          <p className="text-amber-400 text-xs mt-2">
+            Cashier access is limited to Actions only. SMTP and delivery settings are read-only.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-6 max-w-2xl">
@@ -179,11 +193,12 @@ export default function EmailSettingsPage() {
               <button
                 key={p}
                 onClick={() => handleProviderChange(p)}
+                disabled={isCashier}
                 className={`px-4 py-2 text-sm rounded-lg border transition-colors capitalize ${
                   form.provider === p
                     ? 'bg-indigo-600 border-indigo-500 text-white'
                     : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-                }`}
+                } ${isCashier ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 {p === 'gmail' ? 'Gmail' : 'Custom SMTP'}
               </button>
@@ -200,6 +215,7 @@ export default function EmailSettingsPage() {
                     onChange={e => set('smtp_user', e.target.value)}
                     placeholder="yourname@gmail.com"
                     className={inputCls}
+                    disabled={isCashier}
                   />
                 </Field>
                 <Field label="App Password (not your regular Gmail password)">
@@ -209,6 +225,7 @@ export default function EmailSettingsPage() {
                     onChange={e => set('smtp_pass', e.target.value)}
                     placeholder="16-character App Password from Google"
                     className={inputCls}
+                    disabled={isCashier}
                   />
                   <p className="text-slate-600 text-xs mt-1">
                     Generate at: Google Account → Security → 2-Step Verification → App Passwords
@@ -225,6 +242,7 @@ export default function EmailSettingsPage() {
                       onChange={e => set('smtp_host', e.target.value)}
                       placeholder="smtp.yourprovider.com"
                       className={inputCls}
+                      disabled={isCashier}
                     />
                   </Field>
                   <Field label="Port">
@@ -234,6 +252,7 @@ export default function EmailSettingsPage() {
                       onChange={e => set('smtp_port', Number(e.target.value))}
                       placeholder="587"
                       className={inputCls}
+                      disabled={isCashier}
                     />
                   </Field>
                 </div>
@@ -243,6 +262,7 @@ export default function EmailSettingsPage() {
                     checked={form.smtp_secure}
                     onChange={e => set('smtp_secure', e.target.checked)}
                     className="w-4 h-4 accent-indigo-500"
+                    disabled={isCashier}
                   />
                   Use SSL (port 465)
                 </label>
@@ -253,6 +273,7 @@ export default function EmailSettingsPage() {
                     onChange={e => set('smtp_user', e.target.value)}
                     placeholder="SMTP username"
                     className={inputCls}
+                    disabled={isCashier}
                   />
                 </Field>
                 <Field label="Password">
@@ -262,6 +283,7 @@ export default function EmailSettingsPage() {
                     onChange={e => set('smtp_pass', e.target.value)}
                     placeholder="SMTP password"
                     className={inputCls}
+                    disabled={isCashier}
                   />
                 </Field>
               </>
@@ -274,6 +296,7 @@ export default function EmailSettingsPage() {
                 onChange={e => set('from_name', e.target.value)}
                 placeholder="Restaurant Manager"
                 className={inputCls}
+                disabled={isCashier}
               />
             </Field>
           </div>
@@ -290,6 +313,7 @@ export default function EmailSettingsPage() {
                 onChange={e => set('recipient_email', e.target.value)}
                 placeholder="owner@example.com"
                 className={inputCls}
+                disabled={isCashier}
               />
             </Field>
 
@@ -300,13 +324,14 @@ export default function EmailSettingsPage() {
                   value={form.schedule_time}
                   onChange={e => set('schedule_time', e.target.value)}
                   className={inputCls}
+                  disabled={isCashier}
                 />
               </Field>
               <div className="flex items-end pb-0.5">
-                <label className="flex items-center gap-3 text-sm text-slate-400 cursor-pointer">
+                <label className={`flex items-center gap-3 text-sm text-slate-400 ${isCashier ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                   <div
-                    onClick={() => set('is_enabled', !form.is_enabled)}
-                    className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${
+                    onClick={() => !isCashier && set('is_enabled', !form.is_enabled)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${isCashier ? 'cursor-not-allowed' : 'cursor-pointer'} ${
                       form.is_enabled ? 'bg-indigo-600' : 'bg-slate-700'
                     }`}
                   >
@@ -345,7 +370,7 @@ export default function EmailSettingsPage() {
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handleSave}
-              disabled={saveBusy}
+              disabled={saveBusy || isCashier}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saveBusy ? 'Saving…' : 'Save Settings'}
@@ -437,7 +462,8 @@ export default function EmailSettingsPage() {
                 <span className="text-xs text-slate-500">Already sent today? Clear it to allow re-firing.</span>
                 <button
                   onClick={handleResetLastSent}
-                  className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                  disabled={isCashier}
+                  className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Reset Last Sent
                 </button>

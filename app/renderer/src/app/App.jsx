@@ -118,7 +118,7 @@ export default function App({ isPOSWindow }) {
           <ProtectedRoute permission="canAccessDashboard"><BranchPage /></ProtectedRoute>
         } />
         <Route path="/settings/email" element={
-          <ProtectedRoute permission="canManageUsers"><EmailSettingsPage /></ProtectedRoute>
+          <ProtectedRoute permission="canAccessEmailReports"><EmailSettingsPage /></ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>

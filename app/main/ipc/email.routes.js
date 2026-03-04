@@ -6,7 +6,7 @@ const { requireRole } = require('../middlewares/role.middleware');
 function registerEmailRoutes() {
   ipcMain.handle('email:getSettings', async () => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return emailController.getSettings();
       });
     });
@@ -14,7 +14,7 @@ function registerEmailRoutes() {
 
   ipcMain.handle('email:saveSettings', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager'], async () => {
         return emailController.saveSettings(payload);
       });
     });
@@ -22,7 +22,7 @@ function registerEmailRoutes() {
 
   ipcMain.handle('email:sendTestEmail', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return emailController.sendTestEmail(payload);
       });
     });
@@ -30,7 +30,7 @@ function registerEmailRoutes() {
 
   ipcMain.handle('email:sendNow', async () => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return emailController.sendNow();
       });
     });
@@ -38,7 +38,7 @@ function registerEmailRoutes() {
 
   ipcMain.handle('email:schedulerStatus', async () => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return emailController.schedulerStatus();
       });
     });
@@ -46,7 +46,7 @@ function registerEmailRoutes() {
 
   ipcMain.handle('email:getLogs', async () => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return emailController.getLogs();
       });
     });
@@ -54,7 +54,7 @@ function registerEmailRoutes() {
 
   ipcMain.handle('email:resetLastSent', async () => {
     return requireAuth(async () => {
-      return requireRole(['admin'], async () => {
+      return requireRole(['admin', 'manager'], async () => {
         return emailController.resetLastSent();
       });
     });

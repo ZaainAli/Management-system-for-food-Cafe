@@ -69,6 +69,7 @@ export function AuthProvider({ children }) {
       canAccessDiscountReports: hasRole(user, 'admin', 'manager'),
       canAccessDashboard: hasRole(user, 'admin', 'manager'),
       canManageUsers: hasRole(user, 'admin'),
+      canAccessEmailReports: hasRole(user, 'admin', 'manager', 'cashier'),
       isAdmin: hasRole(user, 'admin'),
     };
   }, [user]);

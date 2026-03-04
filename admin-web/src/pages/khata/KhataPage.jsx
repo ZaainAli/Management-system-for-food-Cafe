@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import TransactionModal from './TransactionModal';
@@ -12,6 +12,7 @@ export default function KhataPage() {
   const [loading, setLoading]               = useState(true);
   const [txLoading, setTxLoading]           = useState(false);
   const [showTxModal, setShowTxModal]       = useState(false);
+  const [editingTx, setEditingTx]           = useState(null);
   const [newProfileName, setNewProfileName] = useState('');
   const [addingProfile, setAddingProfile]   = useState(false);
 
@@ -177,7 +178,7 @@ export default function KhataPage() {
                       : 'Settled'}
                   </p>
                 </div>
-                <button onClick={() => setShowTxModal(true)} className="btn-primary text-xs py-1.5 px-3">
+                <button onClick={() => { setEditingTx(null); setShowTxModal(true); }} className="btn-primary text-xs py-1.5 px-3">
                   + Transaction
                 </button>
               </div>
@@ -213,9 +214,18 @@ export default function KhataPage() {
                               {t.runningBalance > 0 ? ' DR' : t.runningBalance < 0 ? ' CR' : ''}
                             </td>
                             <td className="px-4 py-2.5">
-                              <button onClick={() => handleDeleteTx(t.id)} className="text-slate-600 hover:text-red-400 transition-colors">
-                                <Trash2 className="w-3 h-3" />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => { setEditingTx(t); setShowTxModal(true); }}
+                                  className="text-slate-600 hover:text-primary-400 transition-colors"
+                                  title="Edit transaction"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                                <button onClick={() => handleDeleteTx(t.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -237,7 +247,8 @@ export default function KhataPage() {
         <TransactionModal
           profileId={selected.id}
           branchId={branchId}
-          onClose={() => setShowTxModal(false)}
+          transaction={editingTx}
+          onClose={() => { setShowTxModal(false); setEditingTx(null); }}
           onSaved={() => fetchTransactions(selected.id)}
         />
       )}

@@ -35,6 +35,30 @@ function registerEmailRoutes() {
       });
     });
   });
+
+  ipcMain.handle('email:schedulerStatus', async () => {
+    return requireAuth(async () => {
+      return requireRole(['admin'], async () => {
+        return emailController.schedulerStatus();
+      });
+    });
+  });
+
+  ipcMain.handle('email:getLogs', async () => {
+    return requireAuth(async () => {
+      return requireRole(['admin'], async () => {
+        return emailController.getLogs();
+      });
+    });
+  });
+
+  ipcMain.handle('email:resetLastSent', async () => {
+    return requireAuth(async () => {
+      return requireRole(['admin'], async () => {
+        return emailController.resetLastSent();
+      });
+    });
+  });
 }
 
 module.exports = { registerEmailRoutes };

@@ -104,6 +104,9 @@ const emailAPI = {
   saveSettings: (s) => ipcRenderer.invoke('email:saveSettings', s),
   sendTestEmail: (s) => ipcRenderer.invoke('email:sendTestEmail', s),
   sendNow: () => ipcRenderer.invoke('email:sendNow'),
+  schedulerStatus: () => ipcRenderer.invoke('email:schedulerStatus'),
+  getLogs: () => ipcRenderer.invoke('email:getLogs'),
+  resetLastSent: () => ipcRenderer.invoke('email:resetLastSent'),
 };
 
 // ─── Setup API ──────────────────────────────────────────────

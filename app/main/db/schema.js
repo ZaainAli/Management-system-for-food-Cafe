@@ -262,6 +262,7 @@ function runMigrations(db) {
       schedule_time TEXT NOT NULL DEFAULT '23:55',
       is_enabled INTEGER NOT NULL DEFAULT 0,
       last_sent_date TEXT DEFAULT NULL,
+      last_sent_at TEXT DEFAULT NULL,
       updatedAt TEXT
     );
 
@@ -298,10 +299,22 @@ function runMigrations(db) {
     logger.info('Migration: Added hoursWorked column to attendance table');
   }
 
+  const emailCols = db.prepare("PRAGMA table_info(email_settings)").all().map(c => c.name);
+  if (!emailCols.includes('last_sent_at')) {
+    db.prepare('ALTER TABLE email_settings ADD COLUMN last_sent_at TEXT DEFAULT NULL').run();
+    logger.info('Migration: Added last_sent_at column to email_settings table');
+  }
+
   const discountedBillCols = db.prepare("PRAGMA table_info(discounted_bills)").all().map(c => c.name);
   if (!discountedBillCols.includes('tableNum')) {
     db.prepare('ALTER TABLE discounted_bills ADD COLUMN tableNum INTEGER').run();
     logger.info('Migration: Added tableNum column to discounted_bills table');
+  }
+
+  const emailSettingsCols = db.prepare("PRAGMA table_info(email_settings)").all().map(c => c.name);
+  if (emailSettingsCols.length > 0 && !emailSettingsCols.includes('last_sent_at')) {
+    db.prepare('ALTER TABLE email_settings ADD COLUMN last_sent_at TEXT DEFAULT NULL').run();
+    logger.info('Migration: Added last_sent_at column to email_settings table');
   }
 
   // Backfill daily_sales once (if empty)

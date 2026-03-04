@@ -42,6 +42,7 @@ export default function EmailSettingsPage() {
   });
   const [lastSent, setLastSent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState(null);
 
   const [saveMsg, setSaveMsg] = useState(null);
   const [testMsg, setTestMsg] = useState(null);
@@ -49,12 +50,22 @@ export default function EmailSettingsPage() {
   const [testBusy, setTestBusy] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [logs, setLogs] = useState(null);
+  const [logsBusy, setLogsBusy] = useState(false);
+
+  async function refreshStatus() {
+    const res = await window.api.email.schedulerStatus();
+    if (res.success) setStatus(res.data);
+  }
 
   useEffect(() => {
     (async () => {
-      const res = await window.api.email.getSettings();
-      if (res.success && res.data) {
-        const d = res.data;
+      const [settingsRes] = await Promise.all([
+        window.api.email.getSettings(),
+        refreshStatus(),
+      ]);
+      if (settingsRes.success && settingsRes.data) {
+        const d = settingsRes.data;
         setForm({
           provider: d.provider || 'gmail',
           smtp_host: d.smtp_host || '',
@@ -67,11 +78,30 @@ export default function EmailSettingsPage() {
           schedule_time: d.schedule_time || '23:55',
           is_enabled: !!d.is_enabled,
         });
-        setLastSent(d.last_sent_date || null);
+        setLastSent(d.last_sent_at || d.last_sent_date || null);
       }
       setLoading(false);
     })();
   }, []);
+
+  // Auto-refresh diagnostics every 30 seconds
+  useEffect(() => {
+    const id = setInterval(refreshStatus, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  async function handleLoadLogs() {
+    setLogsBusy(true);
+    const res = await window.api.email.getLogs();
+    setLogsBusy(false);
+    if (res.success) setLogs(res.data);
+  }
+
+  async function handleResetLastSent() {
+    await window.api.email.resetLastSent();
+    setLastSent(null);
+    await refreshStatus();
+  }
 
   function set(key, val) {
     setForm(prev => ({ ...prev, [key]: val }));
@@ -95,6 +125,7 @@ export default function EmailSettingsPage() {
     setSaveMsg(res.success
       ? { type: 'success', text: 'Settings saved successfully.' }
       : { type: 'error', text: res.error || 'Failed to save settings.' });
+    if (res.success) refreshStatus();
   }
 
   async function handleTest() {
@@ -291,7 +322,18 @@ export default function EmailSettingsPage() {
             {lastSent && (
               <div className="flex justify-between text-sm py-2 border-t border-slate-700">
                 <span className="text-slate-500">Last report sent</span>
-                <span className="text-slate-300 font-medium">{lastSent}</span>
+                <span className="text-slate-300 font-medium">
+                  {(() => {
+                    const d = new Date(lastSent);
+                    return isNaN(d)
+                      ? lastSent
+                      : d.toLocaleString('en-PK', {
+                          year: 'numeric', month: '2-digit', day: '2-digit',
+                          hour: '2-digit', minute: '2-digit', second: '2-digit',
+                          hour12: false,
+                        });
+                  })()}
+                </span>
               </div>
             )}
           </div>
@@ -330,6 +372,112 @@ export default function EmailSettingsPage() {
           <StatusMsg msg={testMsg} />
           <StatusMsg msg={sendMsg} />
         </div>
+
+        {/* Scheduler Status */}
+        {status && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-300">Scheduler Diagnostics</h2>
+              <button onClick={refreshStatus} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">Refresh</button>
+            </div>
+
+            {/* Issues */}
+            {status.issues?.length > 0 && (
+              <div className="mb-4 space-y-1.5">
+                {status.issues.map(issue => (
+                  <div key={issue} className="flex items-start gap-2 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-xs text-red-300">
+                    <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    {issue}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Current status banner */}
+            {status.issues?.length === 0 && (
+              <div className={`mb-4 px-3 py-2 rounded-lg text-xs border ${
+                status.willFireToday
+                  ? 'bg-green-900/30 border-green-700/50 text-green-300'
+                  : 'bg-yellow-900/30 border-yellow-700/50 text-yellow-300'
+              }`}>
+                {status.willFireToday
+                  ? 'Ready — will send at the next scheduler check (every 60s).'
+                  : (status.reasonNotFiring || 'Waiting…')}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                { label: 'Scheduler running', value: status.schedulerRunning ? 'Yes' : 'No', ok: status.schedulerRunning },
+                { label: 'Enabled in settings', value: status.isEnabled ? 'Yes' : 'No', ok: status.isEnabled },
+                { label: 'Configured time', value: status.scheduleTime || '—', ok: !!status.scheduleTime },
+                { label: 'Current time', value: status.currentTime, ok: true },
+                { label: 'Today fires at', value: status.scheduledAt ? new Date(status.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—', ok: !!status.scheduledAt },
+                { label: 'Last sent', value: status.lastSentDate || 'Never', ok: true },
+                {
+                  label: 'Will fire today?',
+                  value: status.willFireToday
+                    ? 'Yes — waiting for next tick'
+                    : (status.reasonNotFiring || 'No'),
+                  ok: status.willFireToday,
+                },
+              ].map(({ label, value, ok }) => (
+                <div key={label} className="flex justify-between items-center py-1.5 border-b border-slate-700/50 col-span-2">
+                  <span className="text-slate-500 shrink-0">{label}</span>
+                  <span className={`text-right ml-4 ${ok === false ? 'text-red-400 font-medium' : ok === true && value.startsWith('Yes') ? 'text-green-400 font-medium' : 'text-slate-300'}`}>{value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Reset last sent */}
+            {status.lastSentDate && (
+              <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center justify-between">
+                <span className="text-xs text-slate-500">Already sent today? Clear it to allow re-firing.</span>
+                <button
+                  onClick={handleResetLastSent}
+                  className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Reset Last Sent
+                </button>
+              </div>
+            )}
+
+            {/* Log viewer */}
+            <div className="mt-4 pt-4 border-t border-slate-700/50">
+              <button
+                onClick={handleLoadLogs}
+                disabled={logsBusy}
+                className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
+              >
+                {logsBusy ? 'Loading…' : logs ? 'Reload Scheduler Logs' : 'Show Scheduler Logs'}
+              </button>
+              {logs !== null && (
+                <div className="mt-2 bg-slate-950 rounded-lg p-3 max-h-64 overflow-y-auto">
+                  {logs.length === 0 ? (
+                    <p className="text-slate-500 text-xs">No scheduler log entries found.</p>
+                  ) : (
+                    logs.map((line, i) => {
+                      let parsed;
+                      try { parsed = JSON.parse(line); } catch { parsed = null; }
+                      const isError = parsed?.level === 'error' || /error/i.test(line);
+                      const isWarn  = parsed?.level === 'warn'  || /warn/i.test(line);
+                      const ts = parsed?.timestamp || '';
+                      const msg = parsed?.message || line;
+                      return (
+                        <div key={i} className={`font-mono text-xs py-0.5 ${isError ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-slate-400'}`}>
+                          {ts && <span className="text-slate-600 mr-2">{ts}</span>}
+                          {msg}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* What gets sent */}
         <div className="card">

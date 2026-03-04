@@ -265,14 +265,26 @@ function loadSettings() {
   return db.prepare('SELECT * FROM email_settings WHERE id = 1').get();
 }
 
-function updateLastSentDate(date) {
+function updateLastSentDate(date, sentAt) {
   const db = getDb();
-  db.prepare('UPDATE email_settings SET last_sent_date = ?, updatedAt = ? WHERE id = 1').run(date, new Date().toISOString());
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    UPDATE email_settings
+    SET last_sent_date = ?, last_sent_at = ?, updatedAt = ?
+    WHERE id = 1
+  `).run(date, sentAt || nowIso, nowIso);
+}
+
+function resetLastSent() {
+  const db = getDb();
+  db.prepare(`
+    UPDATE email_settings SET last_sent_date = NULL, last_sent_at = NULL WHERE id = 1
+  `).run();
 }
 
 // ── Exported functions ─────────────────────────────────────────────────────
 
-async function sendDailyReport({ forceEnabled = false } = {}) {
+async function sendDailyReport({ forceEnabled = false, markLastSent = true } = {}) {
   const settings = loadSettings();
   if (!settings) throw new Error('Email settings not found.');
   if (!forceEnabled && !settings.is_enabled) throw new Error('Email reporting is disabled.');
@@ -319,7 +331,9 @@ async function sendDailyReport({ forceEnabled = false } = {}) {
     attachments: [{ filename: csvFilename, content: Buffer.from(csvString, 'utf8'), contentType: 'text/csv' }],
   });
 
-  updateLastSentDate(today);
+  if (markLastSent) {
+    updateLastSentDate(today, new Date().toISOString());
+  }
   logger.info(`Daily report sent to ${settings.recipient_email} for ${today}`);
   return { sentTo: settings.recipient_email, date: today };
 }
@@ -341,4 +355,4 @@ async function sendTestEmail(settings) {
   });
 }
 
-module.exports = { sendDailyReport, sendTestEmail, loadSettings };
+module.exports = { sendDailyReport, sendTestEmail, loadSettings, resetLastSent };

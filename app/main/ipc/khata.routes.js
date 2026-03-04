@@ -18,7 +18,7 @@ function registerKhataRoutes() {
 
   ipcMain.handle('khata:addProfile', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager'], async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
         return khataController.addProfile(payload);
       });
     });
@@ -42,7 +42,7 @@ function registerKhataRoutes() {
 
   ipcMain.handle('khata:updateTransaction', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager', 'cashier'], async () => {
+      return requireRole(['admin', 'manager'], async () => {
         return khataController.updateTransaction(payload);
       });
     });
@@ -50,7 +50,7 @@ function registerKhataRoutes() {
 
   ipcMain.handle('khata:deleteTransaction', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager', 'cashier'], async () => {
+      return requireRole(['admin', 'manager'], async () => {
         return khataController.deleteTransaction(payload);
       });
     });
@@ -66,7 +66,7 @@ function registerKhataRoutes() {
 
   ipcMain.handle('khata:clearTransactions', async (_event, payload) => {
     return requireAuth(async () => {
-      return requireRole(['admin', 'manager', 'cashier'], async () => {
+      return requireRole(['admin', 'manager'], async () => {
         return khataController.clearTransactions(payload);
       });
     });

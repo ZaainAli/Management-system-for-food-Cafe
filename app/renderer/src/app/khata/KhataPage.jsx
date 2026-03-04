@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../../store/AuthContext';
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -8,6 +9,9 @@ const emptyPaymentForm = { amount: '', date: today(), note: '', paymentSource: '
 const emptyTxForm = { id: '', type: 'due', amount: '', date: today(), note: '', paymentSource: 'today_sale' };
 
 export default function KhataPage() {
+  const { user } = useAuth();
+  const isCashier = user?.role === 'cashier';
+
   const [profiles, setProfiles] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [activeData, setActiveData] = useState(null);
@@ -201,6 +205,11 @@ export default function KhataPage() {
           <h1 className="text-lg font-bold text-white">Khata (Ledger)</h1>
           <button onClick={() => setShowProfileModal(true)} className="btn-primary text-xs">+ New</button>
         </div>
+        {isCashier && (
+          <p className="text-amber-400 text-xs mb-3">
+            Cashier can create profiles and add transactions only. Edit/Delete actions are restricted.
+          </p>
+        )}
         <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
           {profiles.map(profile => (
             <button
@@ -259,13 +268,15 @@ export default function KhataPage() {
                     </button>
                     <button
                       onClick={handleClearTransactions}
-                      className="text-xs px-3 py-1.5 rounded-md bg-amber-700/70 hover:bg-amber-600 text-white"
+                      disabled={isCashier}
+                      className="text-xs px-3 py-1.5 rounded-md bg-amber-700/70 hover:bg-amber-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Clear Transactions
                     </button>
                     <button
                       onClick={handleDeleteProfile}
-                      className="text-xs px-3 py-1.5 rounded-md bg-red-700/70 hover:bg-red-600 text-white"
+                      disabled={isCashier}
+                      className="text-xs px-3 py-1.5 rounded-md bg-red-700/70 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Delete Profile
                     </button>
@@ -366,17 +377,25 @@ export default function KhataPage() {
                           <button
                             onClick={() => openEditTransaction(tx)}
                             className="text-xs text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={Boolean(tx.linkedExpenseId)}
-                            title={tx.linkedExpenseId ? 'Linked to expense, edit from Expenses tab' : 'Edit transaction'}
+                            disabled={Boolean(tx.linkedExpenseId) || isCashier}
+                            title={
+                              isCashier
+                                ? 'Cashier cannot edit transactions'
+                                : tx.linkedExpenseId
+                                  ? 'Linked to expense, edit from Expenses tab'
+                                  : 'Edit transaction'
+                            }
                           >
                             Edit
                           </button>
-                          <button
-                            onClick={() => handleDeleteTransaction(tx.id)}
-                            className="text-xs text-red-400 hover:text-red-300"
-                          >
-                            Delete
-                          </button>
+                          {!isCashier && (
+                            <button
+                              onClick={() => handleDeleteTransaction(tx.id)}
+                              className="text-xs text-red-400 hover:text-red-300"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

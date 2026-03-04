@@ -5,10 +5,12 @@ const DEFAULT_HOURS = 12;
 export default function AttendancePage() {
   const [employees, setEmployees] = useState([]);
   const [attendanceByEmployee, setAttendanceByEmployee] = useState({});
+  const [draftByEmployee, setDraftByEmployee] = useState({});
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState(null);
+  const [savingAll, setSavingAll] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const fetchEmployees = async () => {
     const res = await window.api.staff.getAll({ isActive: true });
@@ -38,33 +40,78 @@ export default function AttendancePage() {
     fetchAttendance(selectedDate);
   }, [selectedDate]);
 
-  const rows = useMemo(() => {
-    return employees.map((emp) => {
+  useEffect(() => {
+    const nextDraft = {};
+    employees.forEach((emp) => {
       const record = attendanceByEmployee[emp.id];
       const status = record?.status || 'absent';
       const hoursWorked = record?.hoursWorked ?? (status === 'present' ? DEFAULT_HOURS : 0);
-      return { emp, record, status, hoursWorked };
+      nextDraft[emp.id] = { status, hoursWorked };
     });
+    setDraftByEmployee(nextDraft);
   }, [employees, attendanceByEmployee]);
 
-  const saveAttendance = async (employeeId, status, hoursWorked, notes = '') => {
-    setSavingId(employeeId);
-    const payload = {
-      id: attendanceByEmployee[employeeId]?.id,
-      employeeId,
-      date: selectedDate,
-      status,
-      hoursWorked: status === 'present' ? Math.max(0, Number(hoursWorked) || 0) : 0,
-      notes,
-    };
-    const res = await window.api.staff.markAttendance(payload);
-    if (res.success) {
-      await fetchAttendance(selectedDate);
-      setError('');
-    } else {
-      setError(res.error || 'Failed to save attendance');
+  const rows = useMemo(() => {
+    return employees.map((emp) => {
+      const record = attendanceByEmployee[emp.id];
+      const originalStatus = record?.status || 'absent';
+      const originalHours = record?.hoursWorked ?? (originalStatus === 'present' ? DEFAULT_HOURS : 0);
+      const draft = draftByEmployee[emp.id] || { status: originalStatus, hoursWorked: originalHours };
+      const normalizedOriginalHours = originalStatus === 'present' ? Number(originalHours) || 0 : 0;
+      const normalizedDraftHours = draft.status === 'present' ? Number(draft.hoursWorked) || 0 : 0;
+      const isDirty = draft.status !== originalStatus || normalizedDraftHours !== normalizedOriginalHours;
+      return { emp, draft, isDirty };
+    });
+  }, [employees, attendanceByEmployee, draftByEmployee]);
+
+  const hasChanges = rows.some((row) => row.isDirty);
+
+  const updateDraft = (employeeId, next) => {
+    setDraftByEmployee((prev) => ({
+      ...prev,
+      [employeeId]: {
+        ...prev[employeeId],
+        ...next,
+      },
+    }));
+  };
+
+  const saveAllAttendance = async () => {
+    const dirtyRows = rows.filter((row) => row.isDirty);
+    if (dirtyRows.length === 0) return;
+
+    setSavingAll(true);
+    setError('');
+    setMessage('');
+
+    const failed = [];
+    for (const row of dirtyRows) {
+      const employeeId = row.emp.id;
+      const draft = row.draft;
+      const payload = {
+        id: attendanceByEmployee[employeeId]?.id,
+        employeeId,
+        date: selectedDate,
+        status: draft.status,
+        hoursWorked: draft.status === 'present' ? Math.max(0, Number(draft.hoursWorked) || 0) : 0,
+        notes: attendanceByEmployee[employeeId]?.notes || '',
+      };
+      const res = await window.api.staff.markAttendance(payload);
+      if (!res.success) {
+        failed.push(`${row.emp.name}: ${res.error || 'Failed to save'}`);
+      }
     }
-    setSavingId(null);
+
+    await fetchAttendance(selectedDate);
+
+    if (failed.length > 0) {
+      setError(failed[0]);
+      setMessage(`Saved ${dirtyRows.length - failed.length} of ${dirtyRows.length} attendance records.`);
+    } else {
+      setMessage(`Saved ${dirtyRows.length} attendance record${dirtyRows.length > 1 ? 's' : ''}.`);
+    }
+
+    setSavingAll(false);
   };
 
   if (loading) return <div className="text-slate-400">Loading attendance...</div>;
@@ -78,33 +125,74 @@ export default function AttendancePage() {
           <input
             type="date"
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e) => {
+              setSelectedDate(e.target.value);
+              setError('');
+              setMessage('');
+            }}
             className="input-field py-1.5 text-xs w-40"
           />
+          <button
+            onClick={saveAllAttendance}
+            disabled={savingAll || !hasChanges}
+            className="btn-primary text-xs py-1.5 px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingAll ? 'Saving All...' : 'Save All'}
+          </button>
         </div>
       </div>
 
       <div className="card p-0 overflow-hidden">
         {error && <p className="px-4 pt-4 text-xs text-red-400">{error}</p>}
+        {message && <p className="px-4 pt-4 text-xs text-emerald-400">{message}</p>}
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-700">
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Employee</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Status</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Hours</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Action</th>
+              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">State</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ emp, status, hoursWorked }) => (
-              <AttendanceRow
-                key={emp.id}
-                employee={emp}
-                initialStatus={status}
-                initialHours={hoursWorked}
-                saving={savingId === emp.id}
-                onSave={(nextStatus, nextHours) => saveAttendance(emp.id, nextStatus, nextHours)}
-              />
+            {rows.map(({ emp, draft, isDirty }) => (
+              <tr key={emp.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                <td className="px-4 py-3 text-white font-medium">{emp.name}</td>
+                <td className="px-4 py-3">
+                  <select
+                    value={draft.status}
+                    onChange={(e) => {
+                      const nextStatus = e.target.value;
+                      updateDraft(emp.id, {
+                        status: nextStatus,
+                        hoursWorked: nextStatus === 'absent'
+                          ? 0
+                          : ((Number(draft.hoursWorked) || 0) === 0 ? DEFAULT_HOURS : draft.hoursWorked),
+                      });
+                    }}
+                    className="input-field py-1.5 text-xs bg-slate-700"
+                  >
+                    <option value="present">Present</option>
+                    <option value="absent">Absent</option>
+                  </select>
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    disabled={draft.status !== 'present'}
+                    value={draft.status === 'present' ? draft.hoursWorked : 0}
+                    onChange={(e) => updateDraft(emp.id, { hoursWorked: e.target.value })}
+                    className="input-field py-1.5 text-xs w-28 disabled:opacity-50"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs ${isDirty ? 'text-amber-400' : 'text-slate-500'}`}>
+                    {isDirty ? 'Unsaved changes' : 'Saved'}
+                  </span>
+                </td>
+              </tr>
             ))}
             {rows.length === 0 && (
               <tr>
@@ -115,56 +203,5 @@ export default function AttendancePage() {
         </table>
       </div>
     </div>
-  );
-}
-
-function AttendanceRow({ employee, initialStatus, initialHours, saving, onSave }) {
-  const [status, setStatus] = useState(initialStatus || 'absent');
-  const [hours, setHours] = useState(initialHours ?? 0);
-
-  useEffect(() => {
-    setStatus(initialStatus || 'absent');
-    setHours(initialHours ?? 0);
-  }, [initialStatus, initialHours]);
-
-  return (
-    <tr className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-      <td className="px-4 py-3 text-white font-medium">{employee.name}</td>
-      <td className="px-4 py-3">
-        <select
-          value={status}
-          onChange={(e) => {
-            const nextStatus = e.target.value;
-            setStatus(nextStatus);
-            if (nextStatus === 'present' && Number(hours) === 0) setHours(DEFAULT_HOURS);
-            if (nextStatus === 'absent') setHours(0);
-          }}
-          className="input-field py-1.5 text-xs bg-slate-700"
-        >
-          <option value="present">Present</option>
-          <option value="absent">Absent</option>
-        </select>
-      </td>
-      <td className="px-4 py-3">
-        <input
-          type="number"
-          min="0"
-          step="0.5"
-          disabled={status !== 'present'}
-          value={status === 'present' ? hours : 0}
-          onChange={(e) => setHours(e.target.value)}
-          className="input-field py-1.5 text-xs w-28 disabled:opacity-50"
-        />
-      </td>
-      <td className="px-4 py-3">
-        <button
-          onClick={() => onSave(status, hours)}
-          disabled={saving}
-          className="btn-primary text-xs py-1.5 px-3 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-      </td>
-    </tr>
   );
 }

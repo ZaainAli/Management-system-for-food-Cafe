@@ -99,7 +99,7 @@ export default function App({ isPOSWindow }) {
           <ProtectedRoute permission="canAccessStaff"><StaffPage /></ProtectedRoute>
         } />
         <Route path="/attendance" element={
-          <ProtectedRoute permission="canAccessStaff"><AttendancePage /></ProtectedRoute>
+          <ProtectedRoute permission="canAccessAttendance"><AttendancePage /></ProtectedRoute>
         } />
         <Route path="/reports" element={
           <ProtectedRoute permission="canAccessReports"><ReportsPage /></ProtectedRoute>

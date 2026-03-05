@@ -107,16 +107,24 @@ This starts both Vite (React dev server on port 5173) and Electron simultaneousl
 
 ### Troubleshooting
 
-**Error: "was compiled against a different Node.js version"**
+**Error: "was compiled against a different Node.js version" (NODE_MODULE_VERSION mismatch)**
 
-Run the rebuild command:
+`better-sqlite3` was compiled for plain Node.js but Electron uses its own Node.js runtime with a different MODULE_VERSION. You must rebuild the native module against Electron's headers.
+
+`npm run rebuild` uses `electron-rebuild`, which requires Node.js v20+. If you're on Node.js v18 (the default on many systems), it will crash with `TypeError: util.styleText is not a function`. Use `node-gyp` directly instead:
+
 ```bash
-npm run rebuild
-# or if that fails:
-rm -rf node_modules
-npm install
-npx electron-rebuild -f -w better-sqlite3
+cd node_modules/better-sqlite3
+HOME=~/.electron-gyp /path/to/repo/node_modules/.bin/node-gyp rebuild \
+  --target=28.3.3 \
+  --arch=x64 \
+  --dist-url=https://electronjs.org/headers
+cd ../..
 ```
+
+Replace `28.3.3` with your actual Electron version (`cat node_modules/electron/package.json | grep '"version"'`).
+
+> **Why this happens:** `npm install` compiles `better-sqlite3` against the system Node.js. Electron embeds its own Node.js with a different ABI version, so the `.node` binary must be recompiled targeting Electron's headers every time you run `npm install`.
 
 **Still having issues?**
 

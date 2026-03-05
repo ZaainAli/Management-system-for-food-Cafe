@@ -424,6 +424,17 @@ function runMigrations(db) {
     logger.info('Default admin user seeded (username: admin, password: admin123)');
   }
 
+    // Seed default hamza user if none exists give role of admin to hamza user
+  const hamzaExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get('hamza');
+  if (hamzaExists.count === 0) {
+    const hashedPassword = hashPassword('hamza123'); // bcryptjs sync version for setup
+    db.prepare(`
+      INSERT INTO users (id, username, password, role, createdAt)
+      VALUES ('hamza-001', 'hamza', ?, 'admin', ?)
+    `).run(hashedPassword, new Date().toISOString());
+    logger.info('Default hamza user seeded (username: hamza, password: hamza123)');
+  }
+
   // Seed default cashier user if none exists
   const cashierExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get('cashier');
   if (cashierExists.count === 0) {

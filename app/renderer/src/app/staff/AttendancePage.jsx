@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getPkToday } from '../../utils/datetime';
 
 const DEFAULT_HOURS = 12;
 
@@ -6,7 +7,7 @@ export default function AttendancePage() {
   const [employees, setEmployees] = useState([]);
   const [attendanceByEmployee, setAttendanceByEmployee] = useState({});
   const [draftByEmployee, setDraftByEmployee] = useState({});
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getPkToday());
   const [loading, setLoading] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
   const [error, setError] = useState('');

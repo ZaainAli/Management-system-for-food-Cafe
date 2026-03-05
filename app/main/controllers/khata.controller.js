@@ -3,6 +3,7 @@ const path = require('path');
 const { app, dialog } = require('electron');
 const khataService = require('../services/khata.service');
 const logger = require('../utils/logger');
+const { formatPkDate, formatPkDateTime } = require('../utils/datetime');
 
 function csvEscape(value) {
   if (value === null || value === undefined) return '';
@@ -130,13 +131,13 @@ async function exportProfile(payload = {}) {
 
     const { profile, transactions } = data;
     const profileName = sanitizeFilename(profile.name);
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatPkDate(new Date());
     const defaultPath = path.join(app.getPath('documents'), `khata_${profileName}_${today}.csv`);
 
     const parts = [];
     parts.push('Khata Profile');
     parts.push(toCsv(
-      ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'],
+      ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At (PKT)'],
       [[
         profile.name,
         profile.phone,
@@ -144,20 +145,20 @@ async function exportProfile(payload = {}) {
         profile.totalDue,
         profile.totalPaid,
         profile.balance,
-        profile.createdAt,
+        formatPkDateTime(profile.createdAt),
       ]]
     ));
     parts.push('');
     parts.push('Transactions');
     parts.push(toCsv(
-      ['Date', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'],
+      ['Date', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At (PKT)'],
       (transactions || []).map((tx) => [
         tx.date,
         tx.type,
         tx.amount,
         tx.paymentSource,
         tx.note,
-        tx.createdAt,
+        formatPkDateTime(tx.createdAt),
       ])
     ));
 

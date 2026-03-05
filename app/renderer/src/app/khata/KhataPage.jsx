@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../store/AuthContext';
+import { getPkToday } from '../../utils/datetime';
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => getPkToday();
 
 const emptyProfileForm = { name: '', phone: '', businessDetails: '' };
 const emptyDueForm = { amount: '', date: today(), note: '' };

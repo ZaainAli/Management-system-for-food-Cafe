@@ -16,6 +16,7 @@ import AttendancePage from './staff/AttendancePage';
 import ReportsPage from './reports/ReportsPage';
 import ExportReportsPage from './reports/ExportReportsPage';
 import DiscountReportPage from './reports/DiscountReportPage';
+import RecentBillsPage from './reports/RecentBillsPage';
 import UsersPage from './users/UsersPage';
 import BranchPage from './setup/BranchPage';
 
@@ -109,6 +110,9 @@ export default function App({ isPOSWindow }) {
         } />
         <Route path="/reports/discount" element={
           <ProtectedRoute permission="canAccessDiscountReports"><DiscountReportPage /></ProtectedRoute>
+        } />
+        <Route path="/reports/recent-bills" element={
+          <ProtectedRoute permission="canAccessBillHistory"><RecentBillsPage /></ProtectedRoute>
         } />
         <Route path="/users" element={
           <ProtectedRoute permission="canManageUsers"><UsersPage /></ProtectedRoute>

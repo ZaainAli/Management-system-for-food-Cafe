@@ -4,6 +4,7 @@ const employeeModel = require('../models/employee.model');
 const khataModel = require('../models/khata.model');
 const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
+const { formatPkDate } = require('../utils/datetime');
 
 async function getAll(filters = {}) {
   return expenseModel.findAll(filters);
@@ -36,7 +37,7 @@ async function add(expense) {
   let sourceEntityId = null;
   let sourceEntityName = '';
   let sourceRecordId = null;
-  const date = expense.date || new Date().toISOString().split('T')[0];
+  const date = expense.date || formatPkDate(new Date());
   const notes = expense.notes || '';
 
   if (sourceType === 'khata') {

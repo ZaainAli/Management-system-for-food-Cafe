@@ -92,6 +92,20 @@ function registerPosRoutes() {
     });
   });
 
+  ipcMain.handle('pos:getRecentBills', async (_event, payload) => {
+    return requireAuth(async () => {
+      return posController.getRecentBills(payload?.limit);
+    });
+  });
+
+  ipcMain.handle('pos:cancelBill', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager', 'cashier'], async () => {
+        return posController.cancelBill(payload);
+      });
+    });
+  });
+
   // Table management
   ipcMain.handle('pos:getTables', async () => {
     return requireAuth(async () => {

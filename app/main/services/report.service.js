@@ -3,35 +3,18 @@ const expenseModel = require('../models/expense.model');
 const employeeModel = require('../models/employee.model');
 const salesModel = require('../models/sales.model');
 const khataModel = require('../models/khata.model');
-
-function formatDateLocal(date) {
-  const p = n => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
-}
-
-function extractDate(value) {
-  if (!value) return '';
-  const str = String(value).trim();
-  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (match) return match[1];
-  const parsed = new Date(str);
-  if (Number.isNaN(parsed.getTime())) return '';
-  return formatDateLocal(parsed);
-}
-
-function getUtcDateBounds(date) {
-  if (!date) return { from: '', to: '' };
-  return {
-    from: `${date}T00:00:00.000Z`,
-    to: `${date}T23:59:59.999Z`,
-  };
-}
+const {
+  formatPkDate,
+  shiftPkDate,
+  extractDatePk,
+  getPkDateUtcBounds,
+} = require('../utils/datetime');
 
 function normalizeDateRange(filters = {}, fallbackPeriod = 'today') {
   if (filters.from && filters.to) {
     return {
-      fromDate: extractDate(filters.from),
-      toDate: extractDate(filters.to),
+      fromDate: extractDatePk(filters.from),
+      toDate: extractDatePk(filters.to),
       period: filters.period || fallbackPeriod,
     };
   }
@@ -44,28 +27,21 @@ function normalizeDateRange(filters = {}, fallbackPeriod = 'today') {
 }
 
 function getDateRange(period = 'today') {
-  const now = new Date();
+  const today = formatPkDate(new Date());
 
   switch (period) {
     case 'today':
-      return { from: formatDateLocal(now), to: formatDateLocal(now) };
-    case 'week': {
-      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-      const monday = new Date(now);
-      const daysBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      monday.setDate(now.getDate() - daysBack);
-      return { from: formatDateLocal(monday), to: formatDateLocal(now) };
-    }
+      return { from: today, to: today };
+    case 'week':
+      return { from: shiftPkDate(today, -6), to: today };
     case 'month': {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: formatDateLocal(firstOfMonth), to: formatDateLocal(now) };
+      return { from: `${today.slice(0, 7)}-01`, to: today };
     }
     case 'year': {
-      const firstOfYear = new Date(now.getFullYear(), 0, 1);
-      return { from: formatDateLocal(firstOfYear), to: formatDateLocal(now) };
+      return { from: `${today.slice(0, 4)}-01-01`, to: today };
     }
     default:
-      return { from: formatDateLocal(now), to: formatDateLocal(now) };
+      return { from: today, to: today };
   }
 }
 
@@ -94,8 +70,8 @@ async function getDashboardStats(filters = {}) {
 
 async function getSalesReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const fromUtc = getUtcDateBounds(fromDate).from;
-  const toUtc = getUtcDateBounds(toDate).to;
+  const fromUtc = getPkDateUtcBounds(fromDate).from;
+  const toUtc = getPkDateUtcBounds(toDate).to;
 
   const dailyRows = await salesModel.getDailySales({ from: fromDate, to: toDate });
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
@@ -176,11 +152,14 @@ async function getProfitLoss(filters = {}) {
 
 async function getDiscountedBillsReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const from = getUtcDateBounds(fromDate).from;
-  const to = getUtcDateBounds(toDate).to;
+  const from = getPkDateUtcBounds(fromDate).from;
+  const to = getPkDateUtcBounds(toDate).to;
 
-  const discountedBills = await billModel.getDiscountedBills({ from, to });
-  const totals = discountedBills.reduce((acc, row) => {
+  const records = await billModel.getDiscountedBills({ from, to });
+  const activeRecords = records.filter(row => row.rowType !== 'cancelled');
+  const cancelledRecords = records.filter(row => row.rowType === 'cancelled');
+
+  const totals = activeRecords.reduce((acc, row) => {
     acc.totalBillAmount += Number(row.billAmount) || 0;
     acc.totalDiscount += Number(row.discountAmount) || 0;
     acc.totalFinalAmount += Number(row.finalAmount) || 0;
@@ -190,13 +169,18 @@ async function getDiscountedBillsReport(filters = {}) {
     return acc;
   }, { totalBillAmount: 0, totalDiscount: 0, totalFinalAmount: 0, totalTableBills: 0 });
 
+  const totalCancelledBills = cancelledRecords.length;
+  const totalReturnAmount = cancelledRecords.reduce((sum, row) => sum + (Number(row.returnAmount) || 0), 0);
+
   return {
-    records: discountedBills,
-    totalRecords: discountedBills.length,
+    records,
+    totalRecords: records.length,
     totalTableBills: totals.totalTableBills,
     totalBillAmount: parseFloat(totals.totalBillAmount.toFixed(2)),
     totalDiscount: parseFloat(totals.totalDiscount.toFixed(2)),
     totalFinalAmount: parseFloat(totals.totalFinalAmount.toFixed(2)),
+    totalCancelledBills,
+    totalReturnAmount: parseFloat(totalReturnAmount.toFixed(2)),
     period,
   };
 }

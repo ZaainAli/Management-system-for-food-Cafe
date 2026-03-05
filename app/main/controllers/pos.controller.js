@@ -152,6 +152,27 @@ async function getBillById(id) {
   }
 }
 
+async function getRecentBills(limit = 20) {
+  try {
+    const bills = await billingService.getRecentBills(limit);
+    return { success: true, data: bills };
+  } catch (err) {
+    logger.error('getRecentBills failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function cancelBill(payload = {}) {
+  try {
+    const cancelled = await billingService.cancelBill(payload);
+    logger.info(`Bill cancelled: #${payload.billId || ''}`);
+    return { success: true, data: cancelled };
+  } catch (err) {
+    logger.error('cancelBill failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function getTables() {
   try {
     const tables = await billingService.getTables();
@@ -217,6 +238,8 @@ module.exports = {
   deleteHeldBill,
   getBills,
   getBillById,
+  getRecentBills,
+  cancelBill,
   getTables,
   updateTableStatus,
   getDiscountedBills,

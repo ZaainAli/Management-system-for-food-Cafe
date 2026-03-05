@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
+import { formatPkDateTime, getPkDateUtcBounds, getPkToday, monthBounds, shiftDate } from '../../utils/datetime';
 
 function curMonth() {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+  return getPkToday().slice(0, 7);
 }
-function curYear() { return String(new Date().getFullYear()); }
+function curYear() { return getPkToday().slice(0, 4); }
 const YEAR_OPTIONS = Array.from(
-  { length: new Date().getFullYear() - 2019 },
-  (_, i) => String(new Date().getFullYear() - i)
+  { length: Number(getPkToday().slice(0, 4)) - 2019 },
+  (_, i) => String(Number(getPkToday().slice(0, 4)) - i)
 );
 const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500';
 
@@ -32,30 +32,25 @@ export default function DiscountReportPage() {
       setLoading(true);
       setError('');
       try {
-        const now = new Date();
         let from, to;
-
-        const pad = n => String(n).padStart(2, '0');
-        const td  = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+        const td = getPkToday();
         if (period === 'custom') {
-          from = new Date(`${customFrom}T00:00:00`).toISOString();
-          to   = new Date(`${customTo}T23:59:59.999`).toISOString();
+          from = getPkDateUtcBounds(customFrom).from;
+          to = getPkDateUtcBounds(customTo).to;
         } else if (period === 'today') {
-          from = new Date(`${td}T00:00:00`).toISOString();
-          to   = new Date(`${td}T23:59:59.999`).toISOString();
+          from = getPkDateUtcBounds(td).from;
+          to = getPkDateUtcBounds(td).to;
         } else if (period === 'week') {
-          const d = new Date(now); d.setDate(now.getDate() - 6);
-          const weekStart = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-          from = new Date(`${weekStart}T00:00:00`).toISOString();
-          to   = new Date(`${td}T23:59:59.999`).toISOString();
+          const weekStart = shiftDate(td, -6);
+          from = getPkDateUtcBounds(weekStart).from;
+          to = getPkDateUtcBounds(td).to;
         } else if (period === 'month') {
-          const [y, m] = selMonth.split('-').map(Number);
-          const lastDay = pad(new Date(y, m, 0).getDate());
-          from = new Date(`${selMonth}-01T00:00:00`).toISOString();
-          to   = new Date(`${selMonth}-${lastDay}T23:59:59.999`).toISOString();
+          const range = monthBounds(selMonth);
+          from = getPkDateUtcBounds(range.from).from;
+          to = getPkDateUtcBounds(range.to).to;
         } else if (period === 'year') {
-          from = new Date(`${selYear}-01-01T00:00:00`).toISOString();
-          to   = new Date(`${selYear}-12-31T23:59:59.999`).toISOString();
+          from = getPkDateUtcBounds(`${selYear}-01-01`).from;
+          to = getPkDateUtcBounds(`${selYear}-12-31`).to;
         }
 
         const res = await window.api.pos.getDiscountedBills({ from, to });
@@ -69,10 +64,20 @@ export default function DiscountReportPage() {
     })();
   }, [period, selMonth, selYear, customFrom, customTo]);
 
-  const totalBillAmount = data.reduce((sum, r) => sum + r.billAmount, 0);
-  const totalDiscount = data.reduce((sum, r) => sum + r.discountAmount, 0);
-  const totalFinal = data.reduce((sum, r) => sum + r.finalAmount, 0);
-  const totalTableBills = data.filter(r => r.tableNum !== null && r.tableNum !== undefined && r.tableNum !== '').length;
+  const totalBillAmount = data
+    .filter(r => r.rowType !== 'cancelled')
+    .reduce((sum, r) => sum + (Number(r.billAmount) || 0), 0);
+  const totalDiscount = data
+    .filter(r => r.rowType !== 'cancelled')
+    .reduce((sum, r) => sum + (Number(r.discountAmount) || 0), 0);
+  const totalFinal = data
+    .filter(r => r.rowType !== 'cancelled')
+    .reduce((sum, r) => sum + (Number(r.finalAmount) || 0), 0);
+  const totalTableBills = data.filter(r => r.tableNum !== null && r.tableNum !== undefined && r.tableNum !== '' && r.rowType !== 'cancelled').length;
+  const totalCancelledBills = data.filter(r => r.rowType === 'cancelled').length;
+  const totalReturnAmount = data
+    .filter(r => r.rowType === 'cancelled')
+    .reduce((sum, r) => sum + (Number(r.returnAmount) || 0), 0);
 
   return (
     <div>
@@ -106,7 +111,7 @@ export default function DiscountReportPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
         <div className="card">
           <p className="text-slate-500 text-xs mb-1">Total Bills</p>
           <p className="text-white text-lg font-bold">{data.length}</p>
@@ -122,6 +127,14 @@ export default function DiscountReportPage() {
         <div className="card">
           <p className="text-slate-500 text-xs mb-1">Total After Discount</p>
           <p className="text-white text-lg font-bold">PKR {totalFinal.toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-slate-500 text-xs mb-1">Cancelled Bills</p>
+          <p className="text-red-400 text-lg font-bold">{totalCancelledBills}</p>
+        </div>
+        <div className="card">
+          <p className="text-slate-500 text-xs mb-1">Total Return Amount</p>
+          <p className="text-red-300 text-lg font-bold">PKR {totalReturnAmount.toLocaleString()}</p>
         </div>
       </div>
 
@@ -141,32 +154,50 @@ export default function DiscountReportPage() {
               <tr className="border-b border-slate-700 text-slate-400 text-xs">
                 <th className="py-2 px-3">#</th>
                 <th className="py-2 px-3">Bill No</th>
+                <th className="py-2 px-3">Type</th>
                 <th className="py-2 px-3">Table No</th>
                 <th className="py-2 px-3">Date</th>
                 <th className="py-2 px-3 text-right">Bill Amount</th>
                 <th className="py-2 px-3 text-right">Discount</th>
                 <th className="py-2 px-3 text-right">Final Amount</th>
+                <th className="py-2 px-3 text-right">Return Amount</th>
+                <th className="py-2 px-3">Reason</th>
               </tr>
             </thead>
             <tbody>
               {data.map((row, idx) => (
-                <tr key={row.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                <tr key={`${row.rowType || 'record'}-${row.id}`} className="border-b border-slate-700/50 hover:bg-slate-700/30">
                   <td className="py-2 px-3 text-slate-500 text-xs">{idx + 1}</td>
                   <td className="py-2 px-3 text-white text-xs font-medium">{row.billId}</td>
+                  <td className="py-2 px-3 text-xs">
+                    <span className={
+                      row.rowType === 'cancelled'
+                        ? 'text-red-400'
+                        : row.rowType === 'discounted'
+                          ? 'text-green-400'
+                          : 'text-slate-300'
+                    }>
+                      {row.rowType === 'cancelled' ? 'Cancelled' : row.rowType === 'discounted' ? 'Discounted' : 'Table'}
+                    </span>
+                  </td>
                   <td className="py-2 px-3 text-slate-300 text-xs">{row.tableNum ?? ''}</td>
-                  <td className="py-2 px-3 text-slate-400 text-xs">{new Date(row.createdAt).toLocaleDateString()}</td>
-                  <td className="py-2 px-3 text-white text-xs text-right">PKR {row.billAmount.toLocaleString()}</td>
-                  <td className="py-2 px-3 text-green-400 text-xs text-right">PKR {row.discountAmount.toLocaleString()}</td>
-                  <td className="py-2 px-3 text-white text-xs text-right">PKR {row.finalAmount.toLocaleString()}</td>
+                  <td className="py-2 px-3 text-slate-400 text-xs">{formatPkDateTime(row.createdAt)}</td>
+                  <td className="py-2 px-3 text-white text-xs text-right">PKR {Number(row.billAmount || 0).toLocaleString()}</td>
+                  <td className="py-2 px-3 text-green-400 text-xs text-right">{row.rowType === 'cancelled' ? '-' : `PKR ${Number(row.discountAmount || 0).toLocaleString()}`}</td>
+                  <td className="py-2 px-3 text-white text-xs text-right">{row.rowType === 'cancelled' ? '-' : `PKR ${Number(row.finalAmount || 0).toLocaleString()}`}</td>
+                  <td className="py-2 px-3 text-red-300 text-xs text-right">{row.rowType === 'cancelled' ? `PKR ${Number(row.returnAmount || 0).toLocaleString()}` : '-'}</td>
+                  <td className="py-2 px-3 text-slate-300 text-xs">{row.rowType === 'cancelled' ? (row.reason || '-') : '-'}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-600 font-semibold text-xs">
-                <td className="py-2 px-3" colSpan="4">Totals</td>
+                <td className="py-2 px-3" colSpan="5">Totals</td>
                 <td className="py-2 px-3 text-white text-right">PKR {totalBillAmount.toLocaleString()}</td>
                 <td className="py-2 px-3 text-green-400 text-right">PKR {totalDiscount.toLocaleString()}</td>
                 <td className="py-2 px-3 text-white text-right">PKR {totalFinal.toLocaleString()}</td>
+                <td className="py-2 px-3 text-red-300 text-right">PKR {totalReturnAmount.toLocaleString()}</td>
+                <td className="py-2 px-3 text-slate-400 text-right">-</td>
               </tr>
             </tfoot>
           </table>

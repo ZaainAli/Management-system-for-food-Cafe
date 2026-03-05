@@ -36,6 +36,10 @@ function addExpenseToDailySales({ date, amountDelta }) {
   upsertDailySales({ date, revenueDelta: 0, billsDelta: 0, expensesDelta: amountDelta });
 }
 
+function adjustDailySales({ date, revenueDelta = 0, billsDelta = 0, expensesDelta = 0 }) {
+  upsertDailySales({ date, revenueDelta, billsDelta, expensesDelta });
+}
+
 function getDailySales(filters = {}) {
   const db = getDb();
   let query = 'SELECT date, totalRevenue, totalBills, totalExpenses FROM daily_sales';
@@ -91,6 +95,7 @@ function getTotals(filters = {}) {
 module.exports = {
   addBillToDailySales,
   addExpenseToDailySales,
+  adjustDailySales,
   getDailySales,
   getTotals,
 };

@@ -275,6 +275,33 @@ function getBillById(id) {
   return bill;
 }
 
+function getRecentBills(limit = 20) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT
+      b.id,
+      b.tableId,
+      t.number AS tableNum,
+      b.customerName,
+      b.subtotal,
+      b.discount,
+      b.total,
+      b.paymentMethod,
+      b.status,
+      b.createdAt,
+      cb.id AS cancelledId,
+      cb.billAmount AS cancelledBillAmount,
+      cb.returnAmount,
+      cb.reason AS cancellationReason,
+      cb.createdAt AS cancelledAt
+    FROM bills b
+    LEFT JOIN tables t ON t.id = b.tableId
+    LEFT JOIN cancelled_bills cb ON cb.billId = b.id
+    ORDER BY b.createdAt DESC
+    LIMIT ?
+  `).all(limit);
+}
+
 function getTopItems(filters = {}) {
   const db = getDb();
   let query = `
@@ -320,25 +347,136 @@ function insertDiscountedBill(record) {
 
 function getDiscountedBills(filters = {}) {
   const db = getDb();
-  let query = 'SELECT * FROM discounted_bills';
-  const params = [];
-  const conditions = [];
+  const discountedConditions = [];
+  const discountedParams = [];
 
   if (filters.from) {
-    conditions.push('createdAt >= ?');
-    params.push(filters.from);
+    discountedConditions.push('db.createdAt >= ?');
+    discountedParams.push(filters.from);
   }
   if (filters.to) {
-    conditions.push('createdAt <= ?');
-    params.push(filters.to);
+    discountedConditions.push('db.createdAt <= ?');
+    discountedParams.push(filters.to);
   }
 
-  if (conditions.length > 0) {
-    query += ' WHERE ' + conditions.join(' AND ');
+  const discountedWhere = discountedConditions.length > 0
+    ? `WHERE ${discountedConditions.join(' AND ')} AND NOT EXISTS (SELECT 1 FROM cancelled_bills cbx WHERE cbx.billId = db.billId)`
+    : 'WHERE NOT EXISTS (SELECT 1 FROM cancelled_bills cbx WHERE cbx.billId = db.billId)';
+
+  const billConditions = [
+    'b.tableId IS NOT NULL',
+    'NOT EXISTS (SELECT 1 FROM discounted_bills db2 WHERE db2.billId = b.id)',
+  ];
+  const billParams = [];
+
+  if (filters.from) {
+    billConditions.push('b.createdAt >= ?');
+    billParams.push(filters.from);
+  }
+  if (filters.to) {
+    billConditions.push('b.createdAt <= ?');
+    billParams.push(filters.to);
   }
 
-  query += ' ORDER BY createdAt DESC';
-  return db.prepare(query).all(...params);
+  const query = `
+    SELECT *
+    FROM (
+      SELECT
+        db.id AS id,
+        db.billId AS billId,
+        db.tableNum AS tableNum,
+        db.billAmount AS billAmount,
+        db.discountAmount AS discountAmount,
+        db.finalAmount AS finalAmount,
+        db.createdAt AS createdAt,
+        0 AS returnAmount,
+        '' AS reason,
+        'discounted' AS rowType
+      FROM discounted_bills db
+      ${discountedWhere}
+
+      UNION ALL
+
+      SELECT
+        b.id AS id,
+        b.id AS billId,
+        t.number AS tableNum,
+        b.subtotal AS billAmount,
+        b.discount AS discountAmount,
+        b.total AS finalAmount,
+        b.createdAt AS createdAt,
+        0 AS returnAmount,
+        '' AS reason,
+        'table' AS rowType
+      FROM bills b
+      LEFT JOIN tables t ON t.id = b.tableId
+      WHERE ${billConditions.join(' AND ')}
+        AND b.status != 'cancelled'
+
+      UNION ALL
+
+      SELECT
+        cb.id AS id,
+        cb.billId AS billId,
+        t.number AS tableNum,
+        cb.billAmount AS billAmount,
+        0 AS discountAmount,
+        0 AS finalAmount,
+        cb.createdAt AS createdAt,
+        cb.returnAmount AS returnAmount,
+        cb.reason AS reason,
+        'cancelled' AS rowType
+      FROM cancelled_bills cb
+      JOIN bills b ON b.id = cb.billId
+      LEFT JOIN tables t ON t.id = b.tableId
+      WHERE 1 = 1
+        ${filters.from ? 'AND cb.createdAt >= ?' : ''}
+        ${filters.to ? 'AND cb.createdAt <= ?' : ''}
+    ) combined
+    ORDER BY createdAt DESC
+  `;
+
+  const cancelledParams = [];
+  if (filters.from) cancelledParams.push(filters.from);
+  if (filters.to) cancelledParams.push(filters.to);
+
+  return db.prepare(query).all(...discountedParams, ...billParams, ...cancelledParams);
+}
+
+function cancelBill({ id, billId, billAmount = 0, returnAmount = 0, reason = '', createdAt }) {
+  const db = getDb();
+  const tx = db.transaction((record) => {
+    const bill = db.prepare('SELECT * FROM bills WHERE id = ?').get(record.billId);
+    if (!bill) {
+      throw new Error('Bill not found');
+    }
+
+    if (bill.status === 'cancelled') {
+      throw new Error('Bill is already cancelled');
+    }
+
+    const exists = db.prepare('SELECT id FROM cancelled_bills WHERE billId = ?').get(record.billId);
+    if (exists) {
+      throw new Error('Bill is already cancelled');
+    }
+
+    db.prepare(`
+      INSERT INTO cancelled_bills (id, billId, billAmount, returnAmount, reason, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      record.id,
+      record.billId,
+      record.billAmount,
+      record.returnAmount,
+      record.reason,
+      record.createdAt
+    );
+
+    db.prepare('UPDATE bills SET status = ? WHERE id = ?').run('cancelled', record.billId);
+    return db.prepare('SELECT * FROM cancelled_bills WHERE id = ?').get(record.id);
+  });
+
+  return tx({ id, billId, billAmount, returnAmount, reason, createdAt });
 }
 
 // ─── Quick Keys ────────────────────────────────────────────
@@ -369,8 +507,8 @@ module.exports = {
   getAllMenuItems, getMenuItemById, insertMenuItem, updateMenuItem, deleteMenuItem,
   getAllCategories, insertCategory,
   getAllTables, updateTableStatus, getTableNumberById,
-  insertBill, getBills, getBillById, getTopItems, getTodayBillCount,
+  insertBill, getBills, getBillById, getRecentBills, getTopItems, getTodayBillCount,
   insertHeldBill, getHeldBills, getHeldBillById, deleteHeldBill,
-  insertDiscountedBill, getDiscountedBills,
+  insertDiscountedBill, getDiscountedBills, cancelBill,
   getQuickKeys, setQuickKeys,
 };

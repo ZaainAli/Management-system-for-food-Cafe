@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatPkDateTime } from '../../../utils/datetime';
 
 export default function HeldBillsPanel({ heldBills, fsm, onRecall, onDelete }) {
   if (heldBills.length === 0) return null;
@@ -23,7 +24,7 @@ export default function HeldBillsPanel({ heldBills, fsm, onRecall, onDelete }) {
                 {held.tableNumber ? `Table ${held.tableNumber}` : 'No table'} | {held.itemCount} items
               </p>
               <p className="text-[10px] text-slate-400">
-                PKR {Number(held.total || 0).toLocaleString()} | {new Date(held.updatedAt).toLocaleTimeString()}
+                PKR {Number(held.total || 0).toLocaleString()} | {formatPkDateTime(held.updatedAt)}
               </p>
             </div>
             <button

@@ -3,6 +3,7 @@ const khataModel = require('../models/khata.model');
 const expenseService = require('./expense.service');
 const expenseModel = require('../models/expense.model');
 const syncService = require('./sync.service');
+const { formatPkDate } = require('../utils/datetime');
 
 async function getAllProfiles() {
   return khataModel.getAllProfiles();
@@ -56,7 +57,7 @@ async function addDue(payload) {
     amount: normalizeAmount(payload.amount),
     paymentSource: null,
     note: payload.note ? String(payload.note).trim() : '',
-    date: payload.date || new Date().toISOString().split('T')[0],
+    date: payload.date || formatPkDate(new Date()),
     createdAt: new Date().toISOString(),
   };
   const created = khataModel.insertTransaction(tx);
@@ -83,7 +84,7 @@ async function addPayment(payload) {
     amount,
     paymentSource: source,
     note: payload.note ? String(payload.note).trim() : '',
-    date: payload.date || new Date().toISOString().split('T')[0],
+    date: payload.date || formatPkDate(new Date()),
     createdAt: new Date().toISOString(),
   };
   const created = khataModel.insertTransaction(tx);

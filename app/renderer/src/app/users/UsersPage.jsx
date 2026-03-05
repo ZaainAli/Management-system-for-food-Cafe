@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatPkDate } from '../../utils/datetime';
 
 const emptyForm = { username: '', password: '', role: 'cashier', canManage: false };
 
@@ -113,7 +114,7 @@ export default function UsersPage() {
                 <tr key={u.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                   <td className="px-4 py-3 text-white font-medium">{u.username}</td>
                   <td className="px-4 py-3">{roleBadge(u.role, u.canManage)}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">{u.createdAt ? formatPkDate(u.createdAt) : '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5">
                       <button onClick={() => openEdit(u)} className="text-xs text-slate-400 hover:text-white">Edit</button>

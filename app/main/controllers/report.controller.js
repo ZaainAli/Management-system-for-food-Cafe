@@ -3,6 +3,7 @@ const path = require('path');
 const { app, dialog } = require('electron');
 const reportService = require('../services/report.service');
 const logger = require('../utils/logger');
+const { formatPkDateTime, extractDatePk } = require('../utils/datetime');
 
 const EXPORT_MAX_ROWS = 200000;
 const YIELD_EVERY_ROWS = 1000;
@@ -105,8 +106,8 @@ async function writeCsvTable(stream, title, headers, rows, rowMapper) {
 }
 
 async function writeExportCsv(stream, type, data, range) {
-  const from = range?.from?.split('T')[0] || '';
-  const to = range?.to?.split('T')[0] || '';
+  const from = extractDatePk(range?.from) || '';
+  const to = extractDatePk(range?.to) || '';
   const section = (title) => `${title} (From ${from} To ${to})`;
 
   switch (type) {
@@ -135,20 +136,25 @@ async function writeExportCsv(stream, type, data, range) {
         data.pl.netProfit,
         data.pl.profitMargin,
       ]]);
-      await writeCsvTable(stream, section('Table & Discount Report Summary'), ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount'], [[
+      await writeCsvTable(stream, section('Table & Discount Report Summary'), ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount', 'Cancelled Bills', 'Total Return Amount'], [[
         data.discounted.totalRecords,
         data.discounted.totalTableBills || 0,
         data.discounted.totalBillAmount,
         data.discounted.totalDiscount,
         data.discounted.totalFinalAmount,
+        data.discounted.totalCancelledBills || 0,
+        data.discounted.totalReturnAmount || 0,
       ]]);
-      await writeCsvTable(stream, 'Table & Discount Report', ['Bill ID', 'Table No', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Created At'], data.discounted.records, (r) => [
+      await writeCsvTable(stream, 'Table & Discount Report', ['Bill ID', 'Type', 'Table No', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Return Amount', 'Reason', 'Created At (PKT)'], data.discounted.records, (r) => [
         r.billId,
+        r.rowType || '',
         r.tableNum || '',
         r.billAmount,
         r.discountAmount,
         r.finalAmount,
-        r.createdAt,
+        r.returnAmount || 0,
+        r.reason || '',
+        formatPkDateTime(r.createdAt),
       ]);
       await writeCsvTable(stream, section('Khata Summary'), ['Total Profiles', 'Outstanding Balance', 'Transactions In Range', 'Due In Range', 'Paid In Range'], [[
         data.khata.summary?.totalProfiles || 0,
@@ -157,23 +163,23 @@ async function writeExportCsv(stream, type, data, range) {
         data.khata.summary?.totalDueInRange || 0,
         data.khata.summary?.totalPaidInRange || 0,
       ]]);
-      await writeCsvTable(stream, 'Khata Profiles', ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'], data.khata.profiles, (p) => [
+      await writeCsvTable(stream, 'Khata Profiles', ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At (PKT)'], data.khata.profiles, (p) => [
         p.name,
         p.phone,
         p.businessDetails,
         p.totalDue,
         p.totalPaid,
         p.balance,
-        p.createdAt,
+        formatPkDateTime(p.createdAt),
       ]);
-      await writeCsvTable(stream, 'Khata Transactions (Within Selected Range)', ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'], data.khata.transactions, (tx) => [
+      await writeCsvTable(stream, 'Khata Transactions (Within Selected Range)', ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At (PKT)'], data.khata.transactions, (tx) => [
         tx.date,
         tx.khataName,
         tx.type,
         tx.amount,
         tx.paymentSource,
         tx.note,
-        tx.createdAt,
+        formatPkDateTime(tx.createdAt),
       ]);
       return;
     }
@@ -210,20 +216,25 @@ async function writeExportCsv(stream, type, data, range) {
       ]]);
       return;
     case 'discounted':
-      await writeCsvTable(stream, section('Table & Discount Report Summary'), ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount'], [[
+      await writeCsvTable(stream, section('Table & Discount Report Summary'), ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount', 'Cancelled Bills', 'Total Return Amount'], [[
         data.totalRecords,
         data.totalTableBills || 0,
         data.totalBillAmount,
         data.totalDiscount,
         data.totalFinalAmount,
+        data.totalCancelledBills || 0,
+        data.totalReturnAmount || 0,
       ]]);
-      await writeCsvTable(stream, 'Table & Discount Report', ['Bill ID', 'Table No', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Created At'], data.records, (r) => [
+      await writeCsvTable(stream, 'Table & Discount Report', ['Bill ID', 'Type', 'Table No', 'Bill Amount', 'Discount Amount', 'Final Amount', 'Return Amount', 'Reason', 'Created At (PKT)'], data.records, (r) => [
         r.billId,
+        r.rowType || '',
         r.tableNum || '',
         r.billAmount,
         r.discountAmount,
         r.finalAmount,
-        r.createdAt,
+        r.returnAmount || 0,
+        r.reason || '',
+        formatPkDateTime(r.createdAt),
       ]);
       return;
     case 'khata':
@@ -234,23 +245,23 @@ async function writeExportCsv(stream, type, data, range) {
         data.summary?.totalDueInRange || 0,
         data.summary?.totalPaidInRange || 0,
       ]]);
-      await writeCsvTable(stream, 'Khata Profiles', ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'], data.profiles, (p) => [
+      await writeCsvTable(stream, 'Khata Profiles', ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At (PKT)'], data.profiles, (p) => [
         p.name,
         p.phone,
         p.businessDetails,
         p.totalDue,
         p.totalPaid,
         p.balance,
-        p.createdAt,
+        formatPkDateTime(p.createdAt),
       ]);
-      await writeCsvTable(stream, 'Khata Transactions (Within Selected Range)', ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'], data.transactions, (tx) => [
+      await writeCsvTable(stream, 'Khata Transactions (Within Selected Range)', ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At (PKT)'], data.transactions, (tx) => [
         tx.date,
         tx.khataName,
         tx.type,
         tx.amount,
         tx.paymentSource,
         tx.note,
-        tx.createdAt,
+        formatPkDateTime(tx.createdAt),
       ]);
       return;
     default:
@@ -310,8 +321,8 @@ async function exportReport(filters = {}) {
       };
     }
 
-    const fromLabel = (from || '').split('T')[0] || 'start';
-    const toLabel = (to || '').split('T')[0] || 'end';
+    const fromLabel = extractDatePk(from) || 'start';
+    const toLabel = extractDatePk(to) || 'end';
     const defaultName = `report_${type}_${fromLabel}_to_${toLabel}.csv`;
     const defaultPath = path.join(app.getPath('documents'), defaultName);
 

@@ -1,33 +1,31 @@
 import { useMemo, useState } from 'react';
+import { getPkDateUtcBounds, getPkToday, monthBounds, shiftDate } from '../../utils/datetime';
 
 // ── Helpers ───────────────────────────────────────────────────
 
 function curMonth() {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+  return getPkToday().slice(0, 7);
 }
-function curYear() { return String(new Date().getFullYear()); }
+function curYear() { return getPkToday().slice(0, 4); }
 function todayStr() {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+  return getPkToday();
 }
 const YEAR_OPTIONS = Array.from(
-  { length: new Date().getFullYear() - 2019 },
-  (_, i) => String(new Date().getFullYear() - i)
+  { length: Number(getPkToday().slice(0, 4)) - 2019 },
+  (_, i) => String(Number(getPkToday().slice(0, 4)) - i)
 );
 
 function rangeForPeriod(period, selMonth, selYear) {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  const td = `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+  const td = getPkToday();
   if (period === 'today') return { from: td, to: td };
-  if (period === 'week')  { const d = new Date(t); d.setDate(t.getDate()-6); return { from: d.toISOString().split('T')[0], to: td }; }
-  if (period === 'month') { const [y, m] = selMonth.split('-').map(Number); return { from: `${selMonth}-01`, to: `${selMonth}-${p(new Date(y, m, 0).getDate())}` }; }
+  if (period === 'week') return { from: shiftDate(td, -6), to: td };
+  if (period === 'month') return monthBounds(selMonth);
   if (period === 'year')  return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
   return { from: '', to: '' };
 }
 
-function toIsoStart(dateStr) { return dateStr ? new Date(`${dateStr}T00:00:00`).toISOString() : ''; }
-function toIsoEnd(dateStr)   { return dateStr ? new Date(`${dateStr}T23:59:59.999`).toISOString() : ''; }
+function toIsoStart(dateStr) { return dateStr ? getPkDateUtcBounds(dateStr).from : ''; }
+function toIsoEnd(dateStr)   { return dateStr ? getPkDateUtcBounds(dateStr).to : ''; }
 
 const reportTypes = [
   { id: 'all',       label: 'All Reports' },

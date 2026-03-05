@@ -3,11 +3,7 @@ const stockModel = require('../models/stock.model');
 const salesModel = require('../models/sales.model');
 const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
-
-function formatDateLocal(date) {
-  const p = n => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
-}
+const { formatPkDate } = require('../utils/datetime');
 
 function getBillLocalDate(savedBill) {
   const billIdMatch = String(savedBill?.id || '').match(/^(\d{4})_(\d{2})_(\d{2})-/);
@@ -15,7 +11,18 @@ function getBillLocalDate(savedBill) {
     return `${billIdMatch[1]}-${billIdMatch[2]}-${billIdMatch[3]}`;
   }
   const createdAt = savedBill?.createdAt ? new Date(savedBill.createdAt) : new Date();
-  return formatDateLocal(createdAt);
+  return formatPkDate(createdAt);
+}
+
+function parseOptionalAmount(value, fallback) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error('Amount must be a non-negative number');
+  }
+  return parsed;
 }
 
 // ─── Menu Items ─────────────────────────────────────────────
@@ -148,8 +155,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   const discountAmount = Math.min(discount, subtotal); // flat discount, capped at subtotal
   const total = subtotal - discountAmount;
 
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
+  const dateStr = formatPkDate(new Date()).replace(/-/g, '_');
   const billNum = billModel.getTodayBillCount(dateStr) + 1;
   const billId = `${dateStr}-${String(billNum).padStart(2, '0')}`;
 
@@ -277,6 +283,48 @@ async function getBillById(id) {
   return billModel.getBillById(id);
 }
 
+async function getRecentBills(limit = 20) {
+  const parsedLimit = Number(limit);
+  const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+    ? Math.min(Math.floor(parsedLimit), 100)
+    : 20;
+  return billModel.getRecentBills(safeLimit);
+}
+
+async function cancelBill({ billId, billAmount, returnAmount, reason }) {
+  if (!billId) {
+    throw new Error('Bill ID is required');
+  }
+
+  const bill = await billModel.getBillById(billId);
+  if (!bill) {
+    throw new Error('Bill not found');
+  }
+
+  const resolvedBillAmount = parseFloat(parseOptionalAmount(billAmount, Number(bill.total) || 0).toFixed(2));
+  const resolvedReturnAmount = parseFloat(parseOptionalAmount(returnAmount, Number(bill.total) || 0).toFixed(2));
+  const cancellationReason = String(reason || '').trim();
+
+  const cancellation = billModel.cancelBill({
+    id: uuidv4(),
+    billId,
+    billAmount: resolvedBillAmount,
+    returnAmount: resolvedReturnAmount,
+    reason: cancellationReason,
+    createdAt: new Date().toISOString(),
+  });
+
+  const billDate = getBillLocalDate(bill);
+  salesModel.adjustDailySales({
+    date: billDate,
+    revenueDelta: -(Number(bill.total) || 0),
+    billsDelta: -1,
+    expensesDelta: 0,
+  });
+
+  return cancellation;
+}
+
 // ─── Tables ─────────────────────────────────────────────────
 
 async function getTables() {
@@ -322,7 +370,7 @@ module.exports = {
   getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem,
   getMenuCategories, addMenuCategory,
   holdBill, getHeldBills, getHeldBillById, deleteHeldBill,
-  createBill, getBills, getBillById,
+  createBill, getBills, getBillById, getRecentBills, cancelBill,
   getTables, updateTableStatus,
   getDiscountedBills,
   getQuickKeys, setQuickKeys,

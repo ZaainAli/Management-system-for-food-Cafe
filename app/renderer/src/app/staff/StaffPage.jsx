@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../store/AuthContext';
+import { getPkToday, monthBounds } from '../../utils/datetime';
 
 const POSITION_OPTIONS = ['Staff', 'Waiter', 'Cook', 'Manager', 'Cashier'];
 const emptyForm = {
@@ -8,24 +9,18 @@ const emptyForm = {
   phone: '',
   email: '',
   monthlySalary: 0,
-  hireDate: new Date().toISOString().split('T')[0],
+  hireDate: getPkToday(),
   isActive: true,
 };
 
 function getMonthRange(monthValue) {
-  const [yearStr, monthStr] = (monthValue || '').split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  if (!year || !month) return null;
-
-  const from = `${yearStr}-${monthStr.padStart(2, '0')}-01`;
-  const lastDay = new Date(year, month, 0).getDate();
-  const to = `${yearStr}-${monthStr.padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  return { from, to };
+  const range = monthBounds(monthValue);
+  if (!range.from || !range.to) return null;
+  return range;
 }
 
 function toMonthValue(dateString) {
-  return (dateString || new Date().toISOString().split('T')[0]).slice(0, 7);
+  return (dateString || getPkToday()).slice(0, 7);
 }
 
 function round2(value) {
@@ -50,8 +45,8 @@ export default function StaffPage() {
   // Salary panel
   const [salaryEmp, setSalaryEmp] = useState(null);
   const [salaryHistory, setSalaryHistory] = useState([]);
-  const [salaryMonth, setSalaryMonth] = useState(toMonthValue(new Date().toISOString()));
-  const [salaryForm, setSalaryForm] = useState({ amount: '', payDate: new Date().toISOString().split('T')[0], notes: '' });
+  const [salaryMonth, setSalaryMonth] = useState(toMonthValue(getPkToday()));
+  const [salaryForm, setSalaryForm] = useState({ amount: '', payDate: getPkToday(), notes: '' });
   const [attendanceSummary, setAttendanceSummary] = useState({
     from: '',
     to: '',
@@ -133,7 +128,7 @@ export default function StaffPage() {
   // Salary panel handlers
   const openSalary = async (emp) => {
     setSalaryEmp(emp);
-    const now = toMonthValue(new Date().toISOString());
+    const now = toMonthValue(getPkToday());
     setSalaryMonth(now);
 
     const [historyRes] = await Promise.all([
@@ -148,7 +143,7 @@ export default function StaffPage() {
     if (!salaryEmp.isActive) return;
     const res = await window.api.staff.addSalaryRecord({ employeeId: salaryEmp.id, ...salaryForm });
     if (res.success) {
-      setSalaryForm({ amount: '', payDate: new Date().toISOString().split('T')[0], notes: '' });
+      setSalaryForm({ amount: '', payDate: getPkToday(), notes: '' });
       const hRes = await window.api.staff.getSalaryHistory({ employeeId: salaryEmp.id, filters: {} });
       if (hRes.success) setSalaryHistory(hRes.data.records);
       await refreshAttendanceSummary(salaryEmp, salaryMonth);

@@ -226,6 +226,17 @@ function runMigrations(db) {
       FOREIGN KEY (billId) REFERENCES bills(id)
     );
 
+    -- Cancelled bills log
+    CREATE TABLE IF NOT EXISTS cancelled_bills (
+      id TEXT PRIMARY KEY,
+      billId TEXT UNIQUE NOT NULL,
+      billAmount REAL NOT NULL DEFAULT 0,
+      returnAmount REAL NOT NULL DEFAULT 0,
+      reason TEXT DEFAULT '',
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (billId) REFERENCES bills(id)
+    );
+
     -- Quick keys (POS keyboard shortcuts for frequent items)
     CREATE TABLE IF NOT EXISTS quick_keys (
       key TEXT PRIMARY KEY,
@@ -243,6 +254,7 @@ function runMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
     CREATE INDEX IF NOT EXISTS idx_bill_items_billId ON bill_items(billId);
     CREATE INDEX IF NOT EXISTS idx_discounted_bills_createdAt ON discounted_bills(createdAt);
+    CREATE INDEX IF NOT EXISTS idx_cancelled_bills_createdAt ON cancelled_bills(createdAt);
     CREATE INDEX IF NOT EXISTS idx_khata_transactions_khataId ON khata_transactions(khataId);
     CREATE INDEX IF NOT EXISTS idx_khata_transactions_date ON khata_transactions(date);
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);

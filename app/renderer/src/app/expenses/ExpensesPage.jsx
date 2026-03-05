@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
+import { getPkToday, monthBounds, shiftDate } from '../../utils/datetime';
 
 function localToday() {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+  return getPkToday();
 }
 
 const emptyForm = {
@@ -15,35 +15,21 @@ const emptyForm = {
   sourceEntityId: '',
 };
 
-function formatDate(date) {
-  const p = n => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${p(date.getMonth()+1)}-${p(date.getDate())}`;
-}
-
 function curMonth() {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}`;
+  return getPkToday().slice(0, 7);
 }
-function curYear() { return String(new Date().getFullYear()); }
+function curYear() { return getPkToday().slice(0, 4); }
 const YEAR_OPTIONS = Array.from(
-  { length: new Date().getFullYear() - 2019 },
-  (_, i) => String(new Date().getFullYear() - i)
+  { length: Number(getPkToday().slice(0, 4)) - 2019 },
+  (_, i) => String(Number(getPkToday().slice(0, 4)) - i)
 );
 const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500';
 
 function getDateRange(period, selMonth, selYear, customFrom, customTo) {
-  const now = new Date();
-  const today = formatDate(now);
-  const pad = n => String(n).padStart(2, '0');
+  const today = getPkToday();
   if (period === 'today') return { from: today, to: today };
-  if (period === 'week') {
-    const start = new Date(now); start.setDate(now.getDate() - 6);
-    return { from: formatDate(start), to: today };
-  }
-  if (period === 'month') {
-    const [y, m] = selMonth.split('-').map(Number);
-    return { from: `${selMonth}-01`, to: `${selMonth}-${pad(new Date(y, m, 0).getDate())}` };
-  }
+  if (period === 'week') return { from: shiftDate(today, -6), to: today };
+  if (period === 'month') return monthBounds(selMonth);
   if (period === 'year') {
     return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
   }
@@ -68,8 +54,8 @@ export default function ExpensesPage() {
   const [period, setPeriod]         = useState('today');
   const [selMonth, setSelMonth]     = useState(curMonth());
   const [selYear, setSelYear]       = useState(curYear());
-  const [customFrom, setCustomFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-  const [customTo, setCustomTo]     = useState(new Date().toISOString().split('T')[0]);
+  const [customFrom, setCustomFrom] = useState(`${getPkToday().slice(0, 7)}-01`);
+  const [customTo, setCustomTo]     = useState(getPkToday());
 
   const fetchData = async () => {
     const periodFilters = getDateRange(period, selMonth, selYear, customFrom, customTo);

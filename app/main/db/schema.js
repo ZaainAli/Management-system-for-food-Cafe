@@ -312,6 +312,55 @@ function runMigrations(db) {
     logger.info('Backfilled daily_sales from existing bills and expenses');
   }
 
+  // One-time correction: align daily_sales bill dates with local bill-id date format (YYYY_MM_DD-XX).
+  // Older builds derived daily_sales date from UTC createdAt, which can shift midnight bills to previous day.
+  const getMeta = db.prepare('SELECT value FROM app_meta WHERE key = ?');
+  const setMeta = db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+  const dailySalesLocalFix = Number((getMeta.get('daily_sales_local_date_fix_v1') || {}).value || 0);
+  if (dailySalesLocalFix < 1) {
+    const now = new Date().toISOString();
+    const rebuildDailySalesTx = db.transaction(() => {
+      db.prepare('DELETE FROM daily_sales').run();
+
+      db.prepare(`
+        INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+        SELECT
+          CASE
+            WHEN id GLOB '????_??_??-*' THEN REPLACE(SUBSTR(id, 1, 10), '_', '-')
+            ELSE SUBSTR(createdAt, 1, 10)
+          END as date,
+          SUM(total) as revenue,
+          COUNT(*) as bills,
+          0 as expenses,
+          ?
+        FROM bills
+        GROUP BY
+          CASE
+            WHEN id GLOB '????_??_??-*' THEN REPLACE(SUBSTR(id, 1, 10), '_', '-')
+            ELSE SUBSTR(createdAt, 1, 10)
+          END
+      `).run(now);
+
+      db.prepare(`
+        INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+        SELECT
+          COALESCE(NULLIF(date, ''), SUBSTR(createdAt, 1, 10)) as date,
+          0 as revenue,
+          0 as bills,
+          SUM(amount) as expenses,
+          ?
+        FROM expenses
+        GROUP BY COALESCE(NULLIF(date, ''), SUBSTR(createdAt, 1, 10))
+        ON CONFLICT(date) DO UPDATE SET
+          totalExpenses = totalExpenses + excluded.totalExpenses,
+          updatedAt = excluded.updatedAt
+      `).run(now);
+    });
+    rebuildDailySalesTx();
+    setMeta.run('daily_sales_local_date_fix_v1', '1');
+    logger.info('Migration: Rebuilt daily_sales with local bill dates');
+  }
+
   // Seed menu categories (must come before menu items)
   const catCount = db.prepare('SELECT COUNT(*) as count FROM menu_categories').get();
   if (catCount.count === 0) {
@@ -327,8 +376,6 @@ function runMigrations(db) {
   }
 
   // Migration: Update default menu items if seed version changes
-  const getMeta = db.prepare('SELECT value FROM app_meta WHERE key = ?');
-  const setMeta = db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
   const menuSeedVersion = Number((getMeta.get('menu_seed_version') || {}).value || 0);
   const targetMenuSeedVersion = 1;
   if (menuSeedVersion < targetMenuSeedVersion) {

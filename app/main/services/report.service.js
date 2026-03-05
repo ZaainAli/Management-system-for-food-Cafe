@@ -19,11 +19,15 @@ function extractDate(value) {
   return formatDateLocal(parsed);
 }
 
-function getUtcDateBounds(date) {
+function getLocalDateUtcBounds(date) {
   if (!date) return { from: '', to: '' };
+  const [year, month, day] = String(date).split('-').map(Number);
+  if (!year || !month || !day) return { from: '', to: '' };
+  const fromLocal = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const toLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
   return {
-    from: `${date}T00:00:00.000Z`,
-    to: `${date}T23:59:59.999Z`,
+    from: fromLocal.toISOString(),
+    to: toLocal.toISOString(),
   };
 }
 
@@ -94,8 +98,8 @@ async function getDashboardStats(filters = {}) {
 
 async function getSalesReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const fromUtc = getUtcDateBounds(fromDate).from;
-  const toUtc = getUtcDateBounds(toDate).to;
+  const fromUtc = getLocalDateUtcBounds(fromDate).from;
+  const toUtc = getLocalDateUtcBounds(toDate).to;
 
   const dailyRows = await salesModel.getDailySales({ from: fromDate, to: toDate });
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
@@ -176,8 +180,8 @@ async function getProfitLoss(filters = {}) {
 
 async function getDiscountedBillsReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const from = getUtcDateBounds(fromDate).from;
-  const to = getUtcDateBounds(toDate).to;
+  const from = getLocalDateUtcBounds(fromDate).from;
+  const to = getLocalDateUtcBounds(toDate).to;
 
   const discountedBills = await billModel.getDiscountedBills({ from, to });
   const totals = discountedBills.reduce((acc, row) => {

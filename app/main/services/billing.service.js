@@ -4,6 +4,20 @@ const salesModel = require('../models/sales.model');
 const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
 
+function formatDateLocal(date) {
+  const p = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+function getBillLocalDate(savedBill) {
+  const billIdMatch = String(savedBill?.id || '').match(/^(\d{4})_(\d{2})_(\d{2})-/);
+  if (billIdMatch) {
+    return `${billIdMatch[1]}-${billIdMatch[2]}-${billIdMatch[3]}`;
+  }
+  const createdAt = savedBill?.createdAt ? new Date(savedBill.createdAt) : new Date();
+  return formatDateLocal(createdAt);
+}
+
 // ─── Menu Items ─────────────────────────────────────────────
 
 async function getMenuItems() {
@@ -179,7 +193,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     });
   }
 
-  const billDate = saved.createdAt.split('T')[0];
+  const billDate = getBillLocalDate(saved);
   salesModel.addBillToDailySales({ date: billDate, total: saved.total });
   saved.stockAdjustments = stockAdjustments.map(adj => {
     const consumed = Math.abs(adj.consumeQty);

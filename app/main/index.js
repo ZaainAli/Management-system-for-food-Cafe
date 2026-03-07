@@ -1,10 +1,40 @@
-require('dotenv').config(); // load .env from project root into process.env
-const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
+const fs   = require('fs');
+const dotenvResult = require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+const { app, BrowserWindow, Menu } = require('electron');
 const { initializeDatabase } = require('./db/index');
 const { registerIPCHandlers } = require('./ipc/index');
 const { pullAllFromSupabase } = require('./services/pull.service');
 const logger = require('./utils/logger');
+
+// Debug: confirm dotenv loaded correctly
+logger.info('[dotenv] path resolved to: ' + path.join(__dirname, '../../.env'));
+logger.info('[dotenv] load result: ' + (dotenvResult.error ? 'ERROR: ' + dotenvResult.error.message : 'OK'));
+logger.info('[dotenv] SUPABASE_URL set: ' + !!process.env.SUPABASE_URL);
+logger.info('[dotenv] SUPABASE_SERVICE_ROLE_KEY set: ' + !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// Load Supabase credentials from userData/supabase-config.json (packaged app support)
+function loadSupabaseConfig() {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'supabase-config.json');
+    if (!fs.existsSync(configPath)) {
+      logger.info('[config] No supabase-config.json in userData — Supabase not configured');
+      return;
+    }
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (config.supabaseUrl && !process.env.SUPABASE_URL) {
+      process.env.SUPABASE_URL = config.supabaseUrl;
+    }
+    if (config.supabaseKey && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = config.supabaseKey;
+    }
+    logger.info('[config] Loaded Supabase config from userData');
+    logger.info('[config] SUPABASE_URL set: ' + !!process.env.SUPABASE_URL);
+    logger.info('[config] SUPABASE_SERVICE_ROLE_KEY set: ' + !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+  } catch (err) {
+    logger.error('[config] Failed to load supabase-config.json:', err.message);
+  }
+}
 
 let mainWindow;
 
@@ -66,6 +96,7 @@ function createWindow() {
 }
 
 app.on('ready', () => {
+  loadSupabaseConfig();
   logger.info('Electron app ready');
   createWindow();
 });

@@ -10,6 +10,13 @@ import { useAuth } from '../../store/AuthContext';
 // ── Helpers ──────────────────────────────────────────────────
 
 const fmt     = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
+const fmtAxis = (n) => {
+  const v = Number(n || 0);
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+  return `${v}`;
+};
 const today   = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`; };
 const curMonth = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}`; };
 const curYear  = () => String(new Date().getFullYear());
@@ -131,6 +138,11 @@ export default function ReportsPage() {
     dailyMap[r.date].profit   += Number(r.total_revenue) - Number(r.total_expenses);
   });
   const dailyData = Object.values(dailyMap);
+  const avgDailyExpense = dailyData.length > 0 ? totalExpenses / dailyData.length : 0;
+  const billsByDate = salesRows.reduce((acc, row) => {
+    acc[row.date] = (acc[row.date] || 0) + Number(row.bill_count || 0);
+    return acc;
+  }, {});
 
   // Expense category breakdown
   const catMap = {};
@@ -262,6 +274,97 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {/* Sales style section */}
+      <div className="mb-4">
+        <div className="card">
+          <h2 className="text-sm font-semibold text-white mb-3">Sales Daily Breakdown</h2>
+          {loading ? (
+            <p className="text-slate-600 text-sm text-center py-6">Loading...</p>
+          ) : dailyData.length === 0 ? (
+            <p className="text-slate-600 text-sm text-center py-6">No sales data</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-2 text-slate-400 text-xs">Date</th>
+                    <th className="text-left py-2 text-slate-400 text-xs">Bills</th>
+                    <th className="text-left py-2 text-slate-400 text-xs">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyData.map((d) => (
+                    <tr key={d.date} className="border-b border-slate-700/40">
+                      <td className="py-2 text-slate-300 text-xs">{d.date}</td>
+                      <td className="py-2 text-white text-xs">{billsByDate[d.date] || 0}</td>
+                      <td className="py-2 text-green-400 text-xs font-medium">{fmt(d.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Expense style section */}
+      <div className="mb-4">
+        <div className="card">
+          <h2 className="text-sm font-semibold text-white mb-3">Top Expense Categories</h2>
+          {loading ? (
+            <p className="text-slate-600 text-sm text-center py-6">Loading...</p>
+          ) : catData.length === 0 ? (
+            <p className="text-slate-600 text-sm text-center py-6">No expense data</p>
+          ) : (
+            <div className="space-y-2">
+              {catData.map((c, i) => {
+                const max = catData[0]?.amount || 0;
+                const pct = max > 0 ? (c.amount / max) * 100 : 0;
+                return (
+                  <div key={`${c.category}-${i}`}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="text-white">{c.category}</span>
+                      <span className="text-slate-500">{fmt(c.amount)}</span>
+                    </div>
+                    <div className="w-full bg-slate-700 rounded-full h-1.5">
+                      <div className="bg-red-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="card mt-4">
+          <h2 className="text-sm font-semibold text-white mb-3">Daily Expense Breakdown</h2>
+          {loading ? (
+            <p className="text-slate-600 text-sm text-center py-6">Loading...</p>
+          ) : dailyData.length === 0 ? (
+            <p className="text-slate-600 text-sm text-center py-6">No Expense data</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-2 text-slate-400 text-xs">Date</th>
+                    <th className="text-left py-2 text-slate-400 text-xs">Expense</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyData.map((d) => (
+                    <tr key={`expense-${d.date}`} className="border-b border-slate-700/40">
+                      <td className="py-2 text-slate-300 text-xs">{d.date}</td>
+                      <td className="py-2 text-red-400 text-xs font-medium">{fmt(d.expenses)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Charts row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
 
@@ -272,10 +375,10 @@ export default function ReportsPage() {
             ? <EmptyChart loading={loading} />
             : (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={dailyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <BarChart data={dailyData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} width={48} tickFormatter={fmtAxis} />
                   <Tooltip content={<DarkTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
                   <Bar dataKey="revenue"  name="Revenue"  fill="#f97316" radius={[3,3,0,0]} />
@@ -292,10 +395,10 @@ export default function ReportsPage() {
             ? <EmptyChart loading={loading} />
             : (
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={dailyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <LineChart data={dailyData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} width={48} tickFormatter={fmtAxis} />
                   <Tooltip content={<DarkTooltip />} />
                   <Line
                     type="monotone"

@@ -105,6 +105,8 @@ const setupAPI = {
   getBranchId: () => ipcRenderer.invoke('setup:getBranchId'),
   saveBranchId: (payload) => ipcRenderer.invoke('setup:saveBranchId', payload),
   getBranchInfo: () => ipcRenderer.invoke('setup:getBranchInfo'),
+  getSupabaseConfig: () => ipcRenderer.invoke('setup:getSupabaseConfig'),
+  saveSupabaseConfig: (payload) => ipcRenderer.invoke('setup:saveSupabaseConfig', payload),
 };
 
 // ─── Window API ─────────────────────────────────────────────

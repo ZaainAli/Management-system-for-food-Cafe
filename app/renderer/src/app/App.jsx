@@ -31,20 +31,26 @@ function ProtectedRoute({ permission, children }) {
 
 export default function App({ isPOSWindow }) {
   const { user, loading } = useAuth();
-  const [branchConfigured, setBranchConfigured] = useState(null); // null = checking
+  const [supabaseConfigured, setSupabaseConfigured] = useState(null); // null = checking
+  const [branchConfigured, setBranchConfigured]     = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await window.api.setup.getBranchId();
-        setBranchConfigured(res.success && !!res.data.branchId);
+        const [supabaseRes, branchRes] = await Promise.all([
+          window.api.setup.getSupabaseConfig(),
+          window.api.setup.getBranchId(),
+        ]);
+        setSupabaseConfigured(supabaseRes.success && supabaseRes.data.configured);
+        setBranchConfigured(branchRes.success && !!branchRes.data.branchId);
       } catch {
+        setSupabaseConfigured(false);
         setBranchConfigured(false);
       }
     })();
   }, []);
 
-  if (loading || branchConfigured === null) {
+  if (loading || supabaseConfigured === null || branchConfigured === null) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-slate-400 text-lg">Loading...</div>
@@ -52,8 +58,15 @@ export default function App({ isPOSWindow }) {
     );
   }
 
-  if (!branchConfigured) {
-    return <SetupPage onSetupComplete={() => setBranchConfigured(true)} />;
+  if (!supabaseConfigured || !branchConfigured) {
+    return (
+      <SetupPage
+        supabaseConfigured={supabaseConfigured}
+        branchConfigured={branchConfigured}
+        onSupabaseSaved={() => setSupabaseConfigured(true)}
+        onBranchSaved={() => setBranchConfigured(true)}
+      />
+    );
   }
 
   if (!user) {

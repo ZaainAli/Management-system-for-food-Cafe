@@ -8,6 +8,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const usernameRef = useRef(null);
+  const passwordRef = useRef(null);
 
   useEffect(() => {
     usernameRef.current?.focus();
@@ -15,17 +16,25 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username || !password) {
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername || !password) {
       setError('Please fill in both fields');
       return;
     }
     setLoading(true);
     setError('');
-    const res = await login({ username, password });
+    const res = await login({ username: normalizedUsername, password });
     if (!res.success) {
       setError(res.error);
     }
     setLoading(false);
+  };
+
+  const handleUsernameKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      passwordRef.current?.focus();
+    }
   };
 
   return (
@@ -57,6 +66,7 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={handleUsernameKeyDown}
                 placeholder="username"
                 className="input-field"
               />
@@ -64,6 +74,7 @@ export default function LoginPage() {
             <div>
               <label className="label">Password</label>
               <input
+                ref={passwordRef}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

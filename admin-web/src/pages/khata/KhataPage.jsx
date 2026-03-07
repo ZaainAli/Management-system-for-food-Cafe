@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, X, Pencil } from 'lucide-react';
+import { Plus, Trash2, Pencil, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import TransactionModal from './TransactionModal';
+import ProfileModal from './ProfileModal';
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
 
 export default function KhataPage() {
   const { activeBranch } = useAuth();
@@ -12,9 +20,8 @@ export default function KhataPage() {
   const [loading, setLoading]               = useState(true);
   const [txLoading, setTxLoading]           = useState(false);
   const [showTxModal, setShowTxModal]       = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingTx, setEditingTx]           = useState(null);
-  const [newProfileName, setNewProfileName] = useState('');
-  const [addingProfile, setAddingProfile]   = useState(false);
 
   const branchId = activeBranch?.id;
 
@@ -65,17 +72,35 @@ export default function KhataPage() {
   });
   const finalBalance = txWithBalance[txWithBalance.length - 1]?.runningBalance ?? 0;
 
-  // ── Add profile ───────────────────────────────────────────────
-  const handleAddProfile = async () => {
-    if (!newProfileName.trim()) return;
-    const { data } = await supabase
-      .from('khata_profiles')
-      .insert({ branch_id: branchId, name: newProfileName.trim() })
-      .select()
-      .single();
-    setNewProfileName(''); setAddingProfile(false);
+  const downloadSelectedProfileCsv = () => {
+    if (!selected) return;
+
+    const rows = [
+      ['Profile Name', selected.name],
+      ['Phone', selected.phone || ''],
+      ['Notes', selected.notes || ''],
+      ['Current Balance', finalBalance],
+      [],
+      ['Date', 'Type', 'Amount', 'Note', 'Running Balance'],
+      ...txWithBalance.map((t) => [t.date, t.type, t.amount, t.note || '', t.runningBalance]),
+    ];
+
+    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = String(selected.name || 'khata_profile').replace(/[^a-z0-9_-]+/gi, '_');
+    a.href = url;
+    a.download = `${safeName}_transactions.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleProfileCreated = async (profile) => {
     await fetchProfiles();
-    if (data) selectProfile(data);
+    if (profile?.id) selectProfile(profile);
   };
 
   // ── Delete transaction ────────────────────────────────────────
@@ -108,26 +133,10 @@ export default function KhataPage() {
         <div className="w-full lg:w-64 lg:flex-shrink-0 flex flex-col card p-0 overflow-hidden max-h-[40vh] lg:max-h-none">
           <div className="px-3 py-3 border-b border-slate-700 flex items-center justify-between">
             <span className="text-slate-300 text-sm font-medium">Profiles</span>
-            <button onClick={() => setAddingProfile(true)} className="text-primary-400 hover:text-primary-300 transition-colors">
+            <button onClick={() => setShowProfileModal(true)} className="text-primary-400 hover:text-primary-300 transition-colors">
               <Plus className="w-4 h-4" />
             </button>
           </div>
-
-          {/* New profile input */}
-          {addingProfile && (
-            <div className="px-3 py-2 border-b border-slate-700 flex items-center gap-1">
-              <input
-                autoFocus
-                value={newProfileName}
-                onChange={(e) => setNewProfileName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddProfile(); if (e.key === 'Escape') setAddingProfile(false); }}
-                placeholder="Profile name"
-                className="input-field !py-1 text-xs flex-1"
-              />
-              <button onClick={handleAddProfile} className="text-green-400 hover:text-green-300 text-xs px-1">Add</button>
-              <button onClick={() => setAddingProfile(false)} className="text-slate-500 hover:text-white"><X className="w-3 h-3" /></button>
-            </div>
-          )}
 
           {/* Profile list */}
           <div className="flex-1 overflow-y-auto">
@@ -140,9 +149,14 @@ export default function KhataPage() {
                     className={`flex items-center justify-between px-3 py-2.5 cursor-pointer group transition-colors
                       ${selected?.id === p.id ? 'bg-primary-500/10 border-l-2 border-primary-500' : 'hover:bg-slate-700/50 border-l-2 border-transparent'}`}
                   >
-                    <span className={`text-sm truncate ${selected?.id === p.id ? 'text-primary-400' : 'text-slate-300'}`}>
-                      {p.name}
-                    </span>
+                    <div className="min-w-0">
+                      <p className={`text-sm truncate ${selected?.id === p.id ? 'text-primary-400' : 'text-slate-300'}`}>
+                        {p.name}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {p.phone || 'No phone'}
+                      </p>
+                    </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p); }}
                       className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
@@ -178,9 +192,18 @@ export default function KhataPage() {
                       : 'Settled'}
                   </p>
                 </div>
-                <button onClick={() => { setEditingTx(null); setShowTxModal(true); }} className="btn-primary text-xs py-1.5 px-3">
-                  + Transaction
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={downloadSelectedProfileCsv}
+                    className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+                  >
+                    <Download className="w-3 h-3" />
+                    Download
+                  </button>
+                  <button onClick={() => { setEditingTx(null); setShowTxModal(true); }} className="btn-primary text-xs py-1.5 px-3">
+                    + Transaction
+                  </button>
+                </div>
               </div>
 
               {/* Transaction table */}
@@ -250,6 +273,14 @@ export default function KhataPage() {
           transaction={editingTx}
           onClose={() => { setShowTxModal(false); setEditingTx(null); }}
           onSaved={() => fetchTransactions(selected.id)}
+        />
+      )}
+
+      {showProfileModal && (
+        <ProfileModal
+          branchId={branchId}
+          onClose={() => setShowProfileModal(false)}
+          onSaved={handleProfileCreated}
         />
       )}
     </div>

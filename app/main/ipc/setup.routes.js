@@ -13,6 +13,14 @@ function registerSetupRoutes() {
   ipcMain.handle('setup:getBranchInfo', async () => {
     return setupController.getBranchInfo();
   });
+
+  ipcMain.handle('setup:getSupabaseConfig', async () => {
+    return setupController.getSupabaseConfig();
+  });
+
+  ipcMain.handle('setup:saveSupabaseConfig', async (_event, payload) => {
+    return setupController.saveSupabaseConfig(payload);
+  });
 }
 
 module.exports = { registerSetupRoutes };

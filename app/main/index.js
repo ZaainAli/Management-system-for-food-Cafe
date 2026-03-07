@@ -56,18 +56,8 @@ function createWindow() {
   // Disable the default menu
   Menu.setApplicationMenu(null);
 
-  // Initialize database
-  initializeDatabase();
-
-  // Pull latest data from Supabase into SQLite (non-blocking)
-  pullAllFromSupabase().catch(() => {});
-
-  // Register all IPC handlers
-  registerIPCHandlers();
-
-  // Load renderer
+  // Start loading the renderer immediately so it loads in parallel with DB init
   const isDev = process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
-
   if (isDev) {
     const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
     mainWindow.loadURL(devServerUrl).catch(() => {
@@ -76,6 +66,13 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/dist/index.html'));
   }
+
+  // Initialize database and register IPC handlers (renderer loads in parallel)
+  initializeDatabase();
+  registerIPCHandlers();
+
+  // Pull latest data from Supabase into SQLite (non-blocking)
+  pullAllFromSupabase().catch(() => {});
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

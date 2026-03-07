@@ -168,9 +168,9 @@ export default function ExportReportsPage() {
           <div className="mt-5 flex items-center gap-3">
             <button onClick={handleExport} disabled={!canExport || loading}
               className={`btn-primary ${(!canExport || loading) ? 'opacity-60 cursor-not-allowed' : ''}`}>
-              {loading ? 'Exporting...' : 'Export CSV'}
+              {loading ? 'Exporting...' : 'Export PDF'}
             </button>
-            <p className="text-xs text-slate-500">Choose a period or date range to export a CSV report.</p>
+            <p className="text-xs text-slate-500">Choose a period or date range to export a PDF report.</p>
           </div>
         </div>
 

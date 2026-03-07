@@ -2,15 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Pencil, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
+import { jsPDF } from 'jspdf';
 import TransactionModal from './TransactionModal';
 import ProfileModal from './ProfileModal';
-
-function csvEscape(value) {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
 
 export default function KhataPage() {
   const { activeBranch } = useAuth();
@@ -72,30 +66,132 @@ export default function KhataPage() {
   });
   const finalBalance = txWithBalance[txWithBalance.length - 1]?.runningBalance ?? 0;
 
-  const downloadSelectedProfileCsv = () => {
+  const downloadSelectedProfilePdf = () => {
     if (!selected) return;
 
-    const rows = [
-      ['Profile Name', selected.name],
-      ['Phone', selected.phone || ''],
-      ['Notes', selected.notes || ''],
-      ['Current Balance', finalBalance],
-      [],
-      ['Date', 'Type', 'Amount', 'Note', 'Running Balance'],
-      ...txWithBalance.map((t) => [t.date, t.type, t.amount, t.note || '', t.runningBalance]),
-    ];
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const PX = 30, PW = 595.28, PH = 841.89, CW = PW - PX * 2;
 
-    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const safeName = String(selected.name || 'khata_profile').replace(/[^a-z0-9_-]+/gi, '_');
-    a.href = url;
-    a.download = `${safeName}_transactions.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // ── helpers ────────────────────────────────────────────────
+    const fill = (x, y, w, h, color) => { doc.setFillColor(color); doc.rect(x, y, w, h, 'F'); };
+    const hline = (y) => { doc.setDrawColor('#e2e8f0'); doc.setLineWidth(0.5); doc.line(PX, y, PX + CW, y); };
+    const t = (str, x, y, size, color, bold = false, opts = {}) => {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      doc.setTextColor(color);
+      doc.text(String(str ?? ''), x, y, { baseline: 'top', ...opts });
+    };
+    const truncate = (str, maxW) => {
+      let s = String(str ?? '');
+      if (doc.getTextWidth(s) <= maxW) return s;
+      while (s.length > 0 && doc.getTextWidth(s + '...') > maxW) s = s.slice(0, -1);
+      return s + '...';
+    };
+
+    // ── page 1 background ──────────────────────────────────────
+    fill(0, 0, PW, PH, '#f1f5f9');
+
+    // ── cover header ───────────────────────────────────────────
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    fill(PX, 30, CW, 90, '#1e293b');
+    t('Restaurant Report', PX + 16, 44, 18, '#ffffff', true);
+    t(selected.name, PX + 16, 66, 9, '#94a3b8');
+    doc.setFillColor('#334155');
+    doc.roundedRect(PX + 16, 86, 170, 20, 10, 10, 'F');
+    t('Khata Transactions', PX + 24, 92, 8, '#94a3b8');
+    t(dateStr, PX + CW - 10, 48, 13, '#ffffff', true, { align: 'right' });
+    t(timeStr, PX + CW - 10, 68, 10, '#94a3b8', false, { align: 'right' });
+
+    let y = 132;
+
+    // ── khata banner ───────────────────────────────────────────
+    fill(PX, y, CW, 34, '#d97706');
+    doc.setFillColor('#ffffff');
+    doc.circle(PX + 23, y + 17, 5, 'F');
+    t('Khata', PX + 36, y + 11, 13, '#ffffff', true);
+    y += 34;
+
+    // ── summary cards ──────────────────────────────────────────
+    const CELL_H = 54;
+    const balStr = `Rs ${Math.abs(finalBalance)}${finalBalance > 0 ? ' DR' : finalBalance < 0 ? ' CR' : ''}`;
+    const dueCount = transactions.filter(tx => tx.type === 'due').length;
+    const payCount = transactions.filter(tx => tx.type === 'payment').length;
+    const cards = [
+      { label: 'Profile Name', value: selected.name },
+      { label: 'Phone', value: selected.phone || '\u2014' },
+      { label: 'Current Balance', value: balStr },
+      { label: 'Due Entries', value: dueCount },
+      { label: 'Payments', value: payCount },
+    ];
+    const cardW = CW / cards.length;
+    fill(PX, y, CW, CELL_H, '#ffffff');
+    cards.forEach((c, j) => {
+      const cx = PX + cardW * j;
+      if (j > 0) { doc.setDrawColor('#e2e8f0'); doc.setLineWidth(0.5); doc.line(cx, y + 8, cx, y + CELL_H - 8); }
+      t(c.label.toUpperCase(), cx + 8, y + 10, 7.5, '#94a3b8', true);
+      t(truncate(String(c.value), cardW - 16), cx + 8, y + 26, 13, '#1e293b', true);
+    });
+    hline(y + CELL_H);
+    y += CELL_H;
+
+    // ── sub-label ──────────────────────────────────────────────
+    fill(PX, y, CW, 24, '#f8fafc');
+    hline(y + 24);
+    t('TRANSACTIONS', PX + 10, y + 8, 8, '#64748b', true);
+    y += 24;
+
+    // ── transaction table ──────────────────────────────────────
+    const HEADERS = ['Date', 'Type', 'Amount', 'Note', 'Running Balance'];
+    const COL_HDR_H = 22, DATA_ROW_H = 18;
+    const colW = CW / HEADERS.length;
+
+    const drawHeaders = (atY) => {
+      fill(PX, atY, CW, COL_HDR_H, '#f8fafc');
+      HEADERS.forEach((h, i) => t(h.toUpperCase(), PX + colW * i + 8, atY + 7, 7.5, '#94a3b8', true));
+      hline(atY + COL_HDR_H);
+      return atY + COL_HDR_H;
+    };
+
+    y = drawHeaders(y);
+
+    if (txWithBalance.length === 0) {
+      fill(PX, y, CW, DATA_ROW_H + 6, '#ffffff');
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor('#94a3b8');
+      doc.text('No data available', PX + CW / 2, y + 7, { baseline: 'top', align: 'center' });
+      y += DATA_ROW_H + 6;
+      hline(y);
+    } else {
+      txWithBalance.forEach((tx, idx) => {
+        if (y + DATA_ROW_H > PH - 30) {
+          doc.addPage();
+          fill(0, 0, PW, PH, '#f1f5f9');
+          y = 30;
+          y = drawHeaders(y);
+        }
+        fill(PX, y, CW, DATA_ROW_H, idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+        const runBalStr = `Rs ${Math.abs(tx.runningBalance)}${tx.runningBalance > 0 ? ' DR' : tx.runningBalance < 0 ? ' CR' : ''}`;
+        const cells = [tx.date, tx.type, `Rs ${Number(tx.amount).toLocaleString()}`, tx.note || '\u2014', runBalStr];
+        cells.forEach((cell, i) => {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor('#334155');
+          doc.text(truncate(String(cell ?? ''), colW - 16), PX + colW * i + 8, y + 5, { baseline: 'top' });
+        });
+        y += DATA_ROW_H;
+      });
+      hline(y);
+    }
+
+    // ── footer page ────────────────────────────────────────────
+    doc.addPage();
+    fill(0, 0, PW, PH, '#ffffff');
+    hline(36);
+    const dt = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+               ' at ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    t(`Generated on ${dt} \u2014 Confidential`, PX + CW / 2, 46, 8.5, '#94a3b8', false, { align: 'center' });
+
+    const safeName = String(selected.name || 'khata').replace(/[^a-z0-9_-]+/gi, '_');
+    doc.save(`${safeName}_transactions.pdf`);
   };
 
   const handleProfileCreated = async (profile) => {
@@ -194,7 +290,7 @@ export default function KhataPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={downloadSelectedProfileCsv}
+                    onClick={downloadSelectedProfilePdf}
                     className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition-colors flex items-center gap-1.5"
                   >
                     <Download className="w-3 h-3" />

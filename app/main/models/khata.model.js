@@ -59,7 +59,7 @@ function getTransactionsByKhataId(khataId) {
   return db.prepare(`
     SELECT * FROM khata_transactions
     WHERE khataId = ?
-    ORDER BY date DESC, createdAt DESC
+    ORDER BY date ASC, createdAt ASC
   `).all(khataId);
 }
 

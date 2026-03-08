@@ -65,6 +65,7 @@ export default function KhataPage() {
     return { ...t, runningBalance: running };
   });
   const finalBalance = txWithBalance[txWithBalance.length - 1]?.runningBalance ?? 0;
+  const txWithBalanceDesc = [...txWithBalance].reverse();
 
   const downloadSelectedProfilePdf = () => {
     if (!selected) return;
@@ -96,7 +97,7 @@ export default function KhataPage() {
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     fill(PX, 30, CW, 90, '#1e293b');
-    t('Restaurant Report', PX + 16, 44, 18, '#ffffff', true);
+    t(activeBranch?.name ?? "Hamza & Brother's Food Chain", PX + 16, 44, 18, '#ffffff', true);
     t(selected.name, PX + 16, 66, 9, '#94a3b8');
     doc.setFillColor('#334155');
     doc.roundedRect(PX + 16, 86, 170, 20, 10, 10, 'F');
@@ -113,25 +114,42 @@ export default function KhataPage() {
     t('Khata', PX + 36, y + 11, 13, '#ffffff', true);
     y += 34;
 
-    // ── summary cards ──────────────────────────────────────────
-    const CELL_H = 54;
-    const balStr = `Rs ${Math.abs(finalBalance)}${finalBalance > 0 ? ' DR' : finalBalance < 0 ? ' CR' : ''}`;
-    const dueCount = transactions.filter(tx => tx.type === 'due').length;
-    const payCount = transactions.filter(tx => tx.type === 'payment').length;
-    const cards = [
+    // ── profile info row ───────────────────────────────────────
+    const INFO_H = 40;
+    const balStr = `Rs ${Math.abs(finalBalance).toLocaleString()} ${finalBalance >= 0 ? '(-)' : '(+)'} `;
+    const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const infoCards = [
       { label: 'Profile Name', value: selected.name },
-      { label: 'Phone', value: selected.phone || '\u2014' },
-      { label: 'Current Balance', value: balStr },
-      { label: 'Due Entries', value: dueCount },
-      { label: 'Payments', value: payCount },
+      { label: 'Phone',        value: selected.phone || '\u2014' },
+      { label: 'Date',         value: dateLabel },
     ];
-    const cardW = CW / cards.length;
-    fill(PX, y, CW, CELL_H, '#ffffff');
-    cards.forEach((c, j) => {
+    const infoW = CW / infoCards.length;
+    fill(PX, y, CW, INFO_H, '#ffffff');
+    infoCards.forEach((c, j) => {
+      const cx = PX + infoW * j;
+      if (j > 0) { doc.setDrawColor('#e2e8f0'); doc.setLineWidth(0.5); doc.line(cx, y + 6, cx, y + INFO_H - 6); }
+      t(c.label.toUpperCase(), cx + 8, y + 7, 7, '#94a3b8', true);
+      t(truncate(String(c.value), infoW - 16), cx + 8, y + 20, 12, '#1e293b', true);
+    });
+    hline(y + INFO_H);
+    y += INFO_H;
+
+    // ── summary bar (Due / Payment / Net Balance) ──────────────
+    const totalDue     = transactions.filter(tx => tx.type === 'due').reduce((s, tx) => s + Number(tx.amount), 0);
+    const totalPayment = transactions.filter(tx => tx.type === 'payment').reduce((s, tx) => s + Number(tx.amount), 0);
+    const CELL_H = 46;
+    const summaryCards = [
+      { label: 'Total Due',     value: `Rs ${totalDue.toLocaleString()}`,     color: '#ef4444' },
+      { label: 'Total Payment', value: `Rs ${totalPayment.toLocaleString()}`, color: '#22c55e' },
+      { label: 'Net Balance',   value: balStr,                                color: finalBalance > 0 ? '#ef4444' : finalBalance < 0 ? '#22c55e' : '#64748b' },
+    ];
+    const cardW = CW / summaryCards.length;
+    fill(PX, y, CW, CELL_H, '#f8fafc');
+    summaryCards.forEach((c, j) => {
       const cx = PX + cardW * j;
-      if (j > 0) { doc.setDrawColor('#e2e8f0'); doc.setLineWidth(0.5); doc.line(cx, y + 8, cx, y + CELL_H - 8); }
-      t(c.label.toUpperCase(), cx + 8, y + 10, 7.5, '#94a3b8', true);
-      t(truncate(String(c.value), cardW - 16), cx + 8, y + 26, 13, '#1e293b', true);
+      if (j > 0) { doc.setDrawColor('#e2e8f0'); doc.setLineWidth(0.5); doc.line(cx, y + 6, cx, y + CELL_H - 6); }
+      t(c.label.toUpperCase(), cx + 8, y + 8, 7, '#94a3b8', true);
+      t(truncate(String(c.value), cardW - 16), cx + 8, y + 22, 13, c.color, true);
     });
     hline(y + CELL_H);
     y += CELL_H;
@@ -143,13 +161,15 @@ export default function KhataPage() {
     y += 24;
 
     // ── transaction table ──────────────────────────────────────
-    const HEADERS = ['Date', 'Type', 'Amount', 'Note', 'Running Balance'];
-    const COL_HDR_H = 22, DATA_ROW_H = 18;
-    const colW = CW / HEADERS.length;
+    const HEADERS = ['Date', 'Due', 'Payment', 'Note', 'Balance'];
+    const COL_HDR_H = 22, ROW_PAD = 5, LINE_H = 10;
+    // fixed col widths: Date, Due, Payment, Note (flexible), Balance
+    const colWidths = [65, 70, 70, CW - 65 - 70 - 70 - 75, 75];
+    const colX = colWidths.reduce((acc, w, i) => { acc.push(i === 0 ? PX : acc[i - 1] + colWidths[i - 1]); return acc; }, []);
 
     const drawHeaders = (atY) => {
       fill(PX, atY, CW, COL_HDR_H, '#f8fafc');
-      HEADERS.forEach((h, i) => t(h.toUpperCase(), PX + colW * i + 8, atY + 7, 7.5, '#94a3b8', true));
+      HEADERS.forEach((h, i) => t(h.toUpperCase(), colX[i] + 6, atY + 7, 7.5, '#94a3b8', true));
       hline(atY + COL_HDR_H);
       return atY + COL_HDR_H;
     };
@@ -157,27 +177,41 @@ export default function KhataPage() {
     y = drawHeaders(y);
 
     if (txWithBalance.length === 0) {
-      fill(PX, y, CW, DATA_ROW_H + 6, '#ffffff');
+      fill(PX, y, CW, LINE_H + 10, '#ffffff');
       doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor('#94a3b8');
       doc.text('No data available', PX + CW / 2, y + 7, { baseline: 'top', align: 'center' });
-      y += DATA_ROW_H + 6;
+      y += LINE_H + 10;
       hline(y);
     } else {
-      txWithBalance.forEach((tx, idx) => {
-        if (y + DATA_ROW_H > PH - 30) {
+      [...txWithBalance].reverse().forEach((tx, idx) => {
+        const noteW = colWidths[3] - 12;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+        const noteLines = doc.splitTextToSize(tx.note || '\u2014', noteW);
+        const rowH = Math.max(LINE_H, noteLines.length * LINE_H) + ROW_PAD * 2;
+
+        if (y + rowH > PH - 30) {
           doc.addPage();
           fill(0, 0, PW, PH, '#f1f5f9');
           y = 30;
           y = drawHeaders(y);
         }
-        fill(PX, y, CW, DATA_ROW_H, idx % 2 === 0 ? '#ffffff' : '#f8fafc');
-        const runBalStr = `Rs ${Math.abs(tx.runningBalance)}${tx.runningBalance > 0 ? ' DR' : tx.runningBalance < 0 ? ' CR' : ''}`;
-        const cells = [tx.date, tx.type, `Rs ${Number(tx.amount).toLocaleString()}`, tx.note || '\u2014', runBalStr];
-        cells.forEach((cell, i) => {
+
+        fill(PX, y, CW, rowH, idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+        const runBalStr = `Rs ${Math.abs(tx.runningBalance).toLocaleString()} ${tx.runningBalance >= 0 ? '(-)' : '(+)'}`;
+        const dueStr  = tx.type === 'due'     ? `Rs ${Number(tx.amount).toLocaleString()}` : '\u2014';
+        const payStr  = tx.type === 'payment' ? `Rs ${Number(tx.amount).toLocaleString()}` : '\u2014';
+        const simpleCells = [tx.date, dueStr, payStr, null, runBalStr];
+
+        simpleCells.forEach((cell, i) => {
+          if (cell === null) return; // note handled separately
           doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor('#334155');
-          doc.text(truncate(String(cell ?? ''), colW - 16), PX + colW * i + 8, y + 5, { baseline: 'top' });
+          doc.text(truncate(String(cell ?? ''), colWidths[i] - 12), colX[i] + 6, y + ROW_PAD, { baseline: 'top' });
         });
-        y += DATA_ROW_H;
+        // note — wrapped
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor('#334155');
+        doc.text(noteLines, colX[3] + 6, y + ROW_PAD, { baseline: 'top' });
+
+        y += rowH;
       });
       hline(y);
     }
@@ -282,10 +316,10 @@ export default function KhataPage() {
                   <h2 className="text-white font-semibold">{selected.name}</h2>
                   <p className={`text-xs mt-0.5 font-medium ${finalBalance > 0 ? 'text-red-400' : finalBalance < 0 ? 'text-green-400' : 'text-slate-500'}`}>
                     {finalBalance > 0
-                      ? `Owes Rs ${finalBalance.toLocaleString()}`
+                      ? `Main Laina ha == Rs ${finalBalance.toLocaleString()}`
                       : finalBalance < 0
-                      ? `Credit Rs ${Math.abs(finalBalance).toLocaleString()}`
-                      : 'Settled'}
+                      ? `Main daina ha == Rs ${Math.abs(finalBalance).toLocaleString()}`
+                      : 'Clear'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -302,14 +336,39 @@ export default function KhataPage() {
                 </div>
               </div>
 
+              {/* ── Summary bar ── */}
+              {(() => {
+                const totalDue     = transactions.filter(tx => tx.type === 'due').reduce((s, tx) => s + Number(tx.amount), 0);
+                const totalPayment = transactions.filter(tx => tx.type === 'payment').reduce((s, tx) => s + Number(tx.amount), 0);
+                return (
+                  <div className="grid grid-cols-3 border-b border-slate-700 divide-x divide-slate-700">
+                    <div className="px-4 py-2.5 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase font-medium tracking-wide">Total Due</p>
+                      <p className="text-sm font-semibold text-red-400 mt-0.5">Rs {totalDue.toLocaleString()}</p>
+                    </div>
+                    <div className="px-4 py-2.5 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase font-medium tracking-wide">Total Payment</p>
+                      <p className="text-sm font-semibold text-green-400 mt-0.5">Rs {totalPayment.toLocaleString()}</p>
+                    </div>
+                    <div className="px-4 py-2.5 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase font-medium tracking-wide">Net Balance</p>
+                      <p className={`text-sm font-semibold mt-0.5 ${finalBalance > 0 ? 'text-red-400' : finalBalance < 0 ? 'text-green-400' : 'text-slate-400'}`}>
+                        Rs {Math.abs(finalBalance).toLocaleString()}
+                        <span className="text-[10px] ml-1">{finalBalance > 0 ? '(-)' : finalBalance < 0 ? '(+)' : ''}</span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Transaction table */}
               <div className="flex-1 overflow-auto">
                 <table className="w-full min-w-[620px] text-sm">
                   <thead className="sticky top-0 bg-slate-800">
                     <tr className="border-b border-slate-700">
                       <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Date</th>
-                      <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Type</th>
-                      <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Amount</th>
+                      <th className="text-left px-4 py-2.5 text-red-400 font-medium text-xs uppercase">Due</th>
+                      <th className="text-left px-4 py-2.5 text-green-400 font-medium text-xs uppercase">Payment</th>
                       <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase hidden sm:table-cell">Note</th>
                       <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Balance</th>
                       <th className="px-4 py-2.5 w-8"></th>
@@ -318,19 +377,19 @@ export default function KhataPage() {
                   <tbody>
                     {txLoading
                       ? [1,2].map((i) => <tr key={i}><td colSpan={6} className="px-4 py-2"><div className="h-4 bg-slate-700/50 rounded animate-pulse" /></td></tr>)
-                      : txWithBalance.map((t) => (
+                      : txWithBalanceDesc.map((t) => (
                           <tr key={t.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                             <td className="px-4 py-2.5 text-slate-400 text-xs">{t.date}</td>
-                            <td className="px-4 py-2.5">
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${t.type === 'due' ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'}`}>
-                                {t.type}
-                              </span>
+                            <td className="px-4 py-2.5 text-red-400 font-medium whitespace-nowrap">
+                              {t.type === 'due' ? `Rs ${Number(t.amount).toLocaleString()}` : '—'}
                             </td>
-                            <td className="px-4 py-2.5 text-slate-300 whitespace-nowrap">Rs {Number(t.amount).toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-green-400 font-medium whitespace-nowrap">
+                              {t.type === 'payment' ? `Rs ${Number(t.amount).toLocaleString()}` : '—'}
+                            </td>
                             <td className="px-4 py-2.5 text-slate-500 text-xs hidden sm:table-cell">{t.note || '—'}</td>
                             <td className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap ${t.runningBalance > 0 ? 'text-red-400' : t.runningBalance < 0 ? 'text-green-400' : 'text-slate-500'}`}>
                               Rs {Math.abs(t.runningBalance).toLocaleString()}
-                              {t.runningBalance > 0 ? ' DR' : t.runningBalance < 0 ? ' CR' : ''}
+                              {t.runningBalance > 0 ? '(-)' : t.runningBalance < 0 ? '(+)' : ''}
                             </td>
                             <td className="px-4 py-2.5">
                               <div className="flex items-center gap-2">

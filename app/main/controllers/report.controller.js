@@ -3,8 +3,11 @@ const path = require('path');
 const { app, dialog } = require('electron');
 const PDFDocument = require('pdfkit');
 const reportService = require('../services/report.service');
+const setupController = require('./setup.controller');
 const logger = require('../utils/logger');
 const { formatPkDateTime, extractDatePk } = require('../utils/datetime');
+
+const DEFAULT_BRANCH_NAME = "Hamza & Brother's Food Chain";
 
 const EXPORT_MAX_ROWS = 200000;
 
@@ -38,7 +41,7 @@ function hline(doc, y) {
 }
 
 // Cover header block drawn at top of page 1
-function drawCoverHeader(doc, filename, from, to) {
+function drawCoverHeader(doc, filename, from, to, branchName) {
   const H = 90;
   const y = 30;
   const now = new Date();
@@ -49,7 +52,7 @@ function drawCoverHeader(doc, filename, from, to) {
 
   // Title
   doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold')
-    .text('Restaurant Report', PX + 16, y + 14, { lineBreak: false });
+    .text(branchName || DEFAULT_BRANCH_NAME, PX + 16, y + 14, { lineBreak: false });
 
   // Filename
   doc.fillColor('#94a3b8').fontSize(9).font('Helvetica')
@@ -131,8 +134,10 @@ function drawSubLabel(doc, label, y) {
 }
 
 // Data table with "No data available" empty state
-function drawTable(doc, headers, rows, startY) {
+// Rows auto-expand to fit wrapped text so no content is truncated
+function drawTable(doc, headers, rows, startY, opts = {}) {
   let y = startY;
+  const { autoHeight = true } = opts;
   const colW = CW / headers.length;
 
   const drawColHeaders = (atY) => {
@@ -158,20 +163,35 @@ function drawTable(doc, headers, rows, startY) {
 
   doc.font('Helvetica').fontSize(7.5);
   for (let idx = 0; idx < rows.length; idx++) {
-    if (y + DATA_ROW_H > PAGE_H - 30) {
+    const row = rows[idx];
+
+    let rowH = DATA_ROW_H;
+    if (autoHeight) {
+      doc.font('Helvetica').fontSize(7.5);
+      row.forEach((cell) => {
+        const needed = doc.heightOfString(String(cell ?? ''), { width: colW - 16 }) + 10;
+        if (needed > rowH) rowH = needed;
+      });
+    }
+
+    if (y + rowH > PAGE_H - 30) {
       doc.addPage();
       bgPage(doc);
       y = 30;
       y = drawColHeaders(y);
       doc.font('Helvetica').fontSize(7.5);
     }
-    const row = rows[idx];
-    doc.rect(PX, y, CW, DATA_ROW_H).fillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc').fill();
+
+    doc.rect(PX, y, CW, rowH).fillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc').fill();
     doc.fillColor('#334155');
     row.forEach((cell, i) => {
-      doc.text(String(cell ?? ''), PX + colW * i + 8, y + 5, { width: colW - 16, height: 10, lineBreak: false, ellipsis: true });
+      if (autoHeight) {
+        doc.text(String(cell ?? ''), PX + colW * i + 8, y + 5, { width: colW - 16 });
+      } else {
+        doc.text(String(cell ?? ''), PX + colW * i + 8, y + 5, { width: colW - 16, height: 10, lineBreak: false, ellipsis: true });
+      }
     });
-    y += DATA_ROW_H;
+    y += rowH;
   }
 
   hline(doc, y);
@@ -248,31 +268,31 @@ function drawKhataContent(doc, d, y) {
     ['Total Profiles', 'Outstanding Balance', 'Transactions In Range', 'Due In Range', 'Paid In Range'],
     [d.summary?.totalProfiles || 0, d.summary?.totalOutstandingBalance || 0, d.summary?.transactionsInRange || 0, d.summary?.totalDueInRange || 0, d.summary?.totalPaidInRange || 0], y);
   y = drawSubLabel(doc, 'Khata Profiles', y);
-  y = drawTable(doc, ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance', 'Created At'],
-    (d.profiles || []).map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance, formatPkDateTime(p.createdAt)]), y);
+  y = drawTable(doc, ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance'],
+    (d.profiles || []).map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance]), y);
   y = drawSubLabel(doc, 'Khata Transactions', y);
-  y = drawTable(doc, ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note', 'Created At'],
-    (d.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note, formatPkDateTime(tx.createdAt)]), y);
+  y = drawTable(doc, ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note'],
+    (d.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note]), y);
   return y;
 }
 
 // ── Main report builder ────────────────────────────────────────
 
-function buildPdfReport(doc, type, data, from, to) {
+function buildPdfReport(doc, type, data, from, to, branchName) {
   const filename = `report_${type}_${from}_to_${to}`;
 
   // Page 1: cover header
   bgPage(doc);
-  const contentY = drawCoverHeader(doc, filename, from, to);
+  const contentY = drawCoverHeader(doc, filename, from, to, branchName);
 
   if (type === 'all') {
-    // Sales on page 1 (after header)
-    drawSalesContent(doc, data.sales, contentY);
+    // Profit & Loss on page 1 (after header)
+    drawPLContent(doc, data.pl, contentY);
 
     // Each remaining section on its own page
+    doc.addPage(); bgPage(doc); drawSalesContent(doc, data.sales, 30);
     doc.addPage(); bgPage(doc); drawExpensesContent(doc, data.expense, 30);
     doc.addPage(); bgPage(doc); drawStaffContent(doc, data.staff, 30);
-    doc.addPage(); bgPage(doc); drawPLContent(doc, data.pl, 30);
     doc.addPage(); bgPage(doc); drawDiscountedContent(doc, data.discounted, 30);
     doc.addPage(); bgPage(doc); drawKhataContent(doc, data.khata, 30);
     drawFooterPage(doc);
@@ -375,6 +395,9 @@ async function exportReport(filters = {}) {
       return { success: false, error: 'Invalid report type.' };
     }
 
+    const branchRes = await setupController.getBranchInfo();
+    const branchName = branchRes?.data?.name || DEFAULT_BRANCH_NAME;
+
     const reportData = await buildReportData(mappedType, from, to);
     const estimatedRows = estimateExportRows(mappedType, reportData);
     if (estimatedRows > EXPORT_MAX_ROWS) {
@@ -406,7 +429,7 @@ async function exportReport(filters = {}) {
       doc.pipe(stream);
       stream.once('error', reject);
       stream.once('finish', resolve);
-      buildPdfReport(doc, mappedType, reportData, fromLabel, toLabel);
+      buildPdfReport(doc, mappedType, reportData, fromLabel, toLabel, branchName);
       doc.end();
     });
 

@@ -3,6 +3,7 @@ import { Pencil, Trash2, Plus, Check, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import MenuItemModal from './MenuItemModal';
+import BranchSelector from '../../components/BranchSelector';
 
 export default function MenuPage() {
   const { activeBranch } = useAuth();
@@ -74,10 +75,13 @@ export default function MenuPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-white">Menu</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name} — {items.length} items</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-white">Menu</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name} — {items.length} items</p>
+          </div>
+          <BranchSelector />
         </div>
         <button onClick={() => { setEditing(null); setShowModal(true); }} className="btn-primary text-sm">
           + Add Item

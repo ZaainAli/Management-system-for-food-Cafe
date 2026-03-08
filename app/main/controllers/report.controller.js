@@ -286,13 +286,13 @@ function buildPdfReport(doc, type, data, from, to, branchName) {
   const contentY = drawCoverHeader(doc, filename, from, to, branchName);
 
   if (type === 'all') {
-    // Sales on page 1 (after header)
-    drawSalesContent(doc, data.sales, contentY);
+    // Profit & Loss on page 1 (after header)
+    drawPLContent(doc, data.pl, contentY);
 
     // Each remaining section on its own page
+    doc.addPage(); bgPage(doc); drawSalesContent(doc, data.sales, 30);
     doc.addPage(); bgPage(doc); drawExpensesContent(doc, data.expense, 30);
     doc.addPage(); bgPage(doc); drawStaffContent(doc, data.staff, 30);
-    doc.addPage(); bgPage(doc); drawPLContent(doc, data.pl, 30);
     doc.addPage(); bgPage(doc); drawDiscountedContent(doc, data.discounted, 30);
     doc.addPage(); bgPage(doc); drawKhataContent(doc, data.khata, 30);
     drawFooterPage(doc);

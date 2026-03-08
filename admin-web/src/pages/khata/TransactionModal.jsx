@@ -4,6 +4,12 @@ import { supabase } from '../../lib/supabase';
 
 const today = () => new Date().toISOString().split('T')[0];
 
+const evalAmount = (expr) => {
+  const parts = String(expr).split('+').map(p => parseFloat(p.trim()));
+  if (parts.some(isNaN)) return NaN;
+  return parts.reduce((a, b) => a + b, 0);
+};
+
 export default function TransactionModal({ profileId, branchId, transaction, onClose, onSaved }) {
   const [type, setType]       = useState('due');
   const [amount, setAmount]   = useState('');
@@ -13,6 +19,9 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
   const [saving, setSaving]   = useState(false);
   const amountRef = useRef(null);
   const isEdit = Boolean(transaction?.id);
+
+  const calcResult = evalAmount(amount);
+  const hasExpr = amount.includes('+');
 
   useEffect(() => {
     setType(transaction?.type || 'due');
@@ -24,7 +33,8 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
   }, [transaction]);
 
   const handleSave = async () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    const resolved = evalAmount(amount);
+    if (!amount || isNaN(resolved) || resolved <= 0) {
       setError('Enter a valid amount.'); return;
     }
     setSaving(true); setError('');
@@ -33,7 +43,7 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
       profile_id: profileId,
       branch_id:  branchId,
       type,
-      amount:     parseFloat(Number(amount).toFixed(2)),
+      amount:     parseFloat(resolved.toFixed(2)),
       note:       note.trim() || null,
       date,
     };
@@ -75,13 +85,19 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
         <div className="space-y-3">
           <div>
             <label className="label">Amount (Rs) <span className="text-red-400">*</span></label>
-            <input ref={amountRef} type="number" min="0.01" step="0.01" value={amount}
-              onChange={(e) => setAmount(e.target.value)} className="input-field" placeholder="0.00"
+            <input ref={amountRef} type="text" inputMode="decimal" value={amount}
+              onChange={(e) => setAmount(e.target.value)} className="input-field" placeholder="e.g. 300+200+100"
               autoFocus />
+            {hasExpr && !isNaN(calcResult) && (
+              <p className="text-xs text-green-400 mt-1">= Rs {calcResult.toFixed(2)}</p>
+            )}
+            {hasExpr && isNaN(calcResult) && (
+              <p className="text-xs text-red-400 mt-1">Invalid expression</p>
+            )}
           </div>
           <div>
             <label className="label">Note</label>
-            <input value={note} onChange={(e) => setNote(e.target.value)} className="input-field" placeholder="Optional note" />
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} className="input-field resize-none" placeholder="Optional note" rows={3} />
           </div>
           <div>
             <label className="label">Date</label>

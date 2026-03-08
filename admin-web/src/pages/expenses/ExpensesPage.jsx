@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import ExpenseFormModal from './ExpenseFormModal';
+import BranchSelector from '../../components/BranchSelector';
 
 const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 const SOURCE_COLORS = { manual: 'bg-slate-700 text-slate-300', khata: 'bg-blue-900/40 text-blue-400', salary: 'bg-purple-900/40 text-purple-400' };
@@ -85,10 +86,13 @@ export default function ExpensesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-white">Expenses</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-white">Expenses</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name}</p>
+          </div>
+          <BranchSelector />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">

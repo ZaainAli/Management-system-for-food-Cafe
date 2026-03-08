@@ -9,7 +9,6 @@ import {
   BookOpen,
   User2,
   Users,
-  ChevronDown,
   LogOut,
   ChefHat,
   Menu,
@@ -29,8 +28,7 @@ const navItems = [
 ];
 
 export default function AppLayout({ children }) {
-  const { user, branches, activeBranch, setActiveBranch, logout } = useAuth();
-  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const { user, activeBranch, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -80,53 +78,6 @@ export default function AppLayout({ children }) {
           </div>
         </div>
 
-        {/* Branch Switcher — only when user has access to multiple branches */}
-        {branches.length > 1 && (
-          <div className="relative px-3 py-3 border-b border-slate-700">
-            <button
-              onClick={() => setBranchMenuOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 bg-slate-700/60
-                         rounded-lg text-sm text-slate-200 hover:bg-slate-700 transition-colors"
-            >
-              <span className="truncate">{activeBranch?.name ?? 'Select Branch'}</span>
-              <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0 ml-1" />
-            </button>
-
-            {branchMenuOpen && (
-              <div
-                className="absolute left-3 right-3 top-full mt-1 bg-slate-700 border
-                            border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden"
-              >
-                {branches.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      setActiveBranch(b);
-                      setBranchMenuOpen(false);
-                      setSidebarOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-sm transition-colors
-                      ${activeBranch?.id === b.id
-                        ? 'bg-primary-500/20 text-primary-400'
-                        : 'text-slate-300 hover:bg-slate-600'}`}
-                  >
-                    {b.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Single branch label */}
-        {branches.length === 1 && activeBranch && (
-          <div className="px-4 py-2.5 border-b border-slate-700">
-            <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Branch</p>
-            <p className="text-sm text-primary-400 font-medium truncate mt-0.5">
-              {activeBranch.name}
-            </p>
-          </div>
-        )}
 
         {/* Nav Links */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">

@@ -5,6 +5,7 @@ import { useAuth } from '../../store/AuthContext';
 import { jsPDF } from 'jspdf';
 import TransactionModal from './TransactionModal';
 import ProfileModal from './ProfileModal';
+import BranchSelector from '../../components/BranchSelector';
 
 export default function KhataPage() {
   const { activeBranch } = useAuth();
@@ -252,9 +253,12 @@ export default function KhataPage() {
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-white">Khata (Ledger)</h1>
-        <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-white">Khata (Ledger)</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{activeBranch.name}</p>
+        </div>
+        <BranchSelector />
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 h-auto lg:h-[calc(100vh-10rem)]">

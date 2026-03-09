@@ -35,7 +35,7 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
 
   const handleSave = async () => {
     const resolved = evalAmount(amount);
-    if (!amount || isNaN(resolved) || resolved <= 0) {
+    if (!amount || isNaN(resolved) || resolved < 0) {
       setError('Enter a valid amount.'); return;
     }
     setSaving(true); setError('');

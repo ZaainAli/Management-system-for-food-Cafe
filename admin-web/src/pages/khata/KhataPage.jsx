@@ -25,12 +25,16 @@ export default function KhataPage() {
   const fetchProfiles = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('khata_profiles')
-      .select('id, name, phone, notes')
-      .eq('branch_id', branchId)
-      .order('name');
-    setProfiles(data ?? []);
+    const [{ data: profileData }, { data: txData }] = await Promise.all([
+      supabase.from('khata_profiles').select('id, name, phone, notes').eq('branch_id', branchId).order('name'),
+      supabase.from('khata_transactions').select('profile_id, type, amount').eq('branch_id', branchId),
+    ]);
+    const balanceMap = {};
+    (txData ?? []).forEach((t) => {
+      if (!balanceMap[t.profile_id]) balanceMap[t.profile_id] = 0;
+      balanceMap[t.profile_id] += t.type === 'due' ? Number(t.amount) : -Number(t.amount);
+    });
+    setProfiles((profileData ?? []).map((p) => ({ ...p, balance: balanceMap[p.id] ?? 0 })));
     setLoading(false);
   }, [branchId]);
 
@@ -284,7 +288,7 @@ export default function KhataPage() {
                     className={`flex items-center justify-between px-3 py-2.5 cursor-pointer group transition-colors
                       ${selected?.id === p.id ? 'bg-primary-500/10 border-l-2 border-primary-500' : 'hover:bg-slate-700/50 border-l-2 border-transparent'}`}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className={`text-sm truncate ${selected?.id === p.id ? 'text-primary-400' : 'text-slate-300'}`}>
                         {p.name}
                       </p>
@@ -292,12 +296,19 @@ export default function KhataPage() {
                         {p.phone || 'No phone'}
                       </p>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p); }}
-                      className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {p.balance !== 0 && (
+                        <span className={`text-[11px] font-semibold ${p.balance > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          PKR {Math.abs(p.balance).toLocaleString()} {p.balance > 0 ? '(-)' : '(+)'}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p); }}
+                        className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 ))
             }
@@ -432,7 +443,7 @@ export default function KhataPage() {
           branchId={branchId}
           transaction={editingTx}
           onClose={() => { setShowTxModal(false); setEditingTx(null); }}
-          onSaved={() => fetchTransactions(selected.id)}
+          onSaved={() => { fetchTransactions(selected.id); fetchProfiles(); }}
         />
       )}
 

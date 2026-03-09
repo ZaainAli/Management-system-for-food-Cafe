@@ -6,6 +6,7 @@ import {
 import { TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
+import { formatPkDate, shiftPkDate } from '@/utils/datetime';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -17,20 +18,18 @@ const fmtAxis = (n) => {
   if (abs >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
   return `${v}`;
 };
-const today   = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`; };
-const curMonth = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}`; };
+const today   = () => formatPkDate();
+const curMonth = () => formatPkDate().slice(0, 7);
 const curYear  = () => String(new Date().getFullYear());
 const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => String(new Date().getFullYear() - i));
 const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 
 function getRange(period, selMonth, selYear) {
-  const t   = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  const td  = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  const td  = formatPkDate();
   if (period === 'today') return { from: td, to: td };
   if (period === 'week') {
-    const d = new Date(t); d.setDate(t.getDate() - 6);
-    return { from: d.toISOString().split('T')[0], to: td };
+    return { from: shiftPkDate(td, -6), to: td };
   }
   if (period === 'month') {
     const [y, m] = selMonth.split('-').map(Number);

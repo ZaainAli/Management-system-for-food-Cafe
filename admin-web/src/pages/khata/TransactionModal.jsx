@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { formatPkDate } from '@/utils/datetime';
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => formatPkDate();
 
 const evalAmount = (expr) => {
   const parts = String(expr).split('+').map(p => parseFloat(p.trim()));

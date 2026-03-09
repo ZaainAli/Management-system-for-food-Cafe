@@ -4,17 +4,16 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
 import ExpenseFormModal from './ExpenseFormModal';
 import BranchSelector from '../../components/BranchSelector';
+import { formatPkDate, shiftPkDate } from '@/utils/datetime';
 
 const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 const SOURCE_COLORS = { manual: 'bg-slate-700 text-slate-300', khata: 'bg-blue-900/40 text-blue-400', salary: 'bg-purple-900/40 text-purple-400' };
 
 function todayStr() {
-  const t = new Date(), pad = (n) => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  return formatPkDate();
 }
 function curMonth() {
-  const t = new Date(), pad = (n) => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${pad(t.getMonth()+1)}`;
+  return formatPkDate().slice(0, 7);
 }
 function curYear() { return String(new Date().getFullYear()); }
 const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => String(new Date().getFullYear() - i));
@@ -23,7 +22,7 @@ function getRange(period, selMonth, selYear, customFrom, customTo) {
   const today = todayStr();
   const pad   = (n) => String(n).padStart(2, '0');
   if (period === 'today')  return { from: today, to: today };
-  if (period === 'week')   { const d = new Date(); d.setDate(d.getDate()-6); return { from: d.toISOString().split('T')[0], to: today }; }
+  if (period === 'week')   return { from: shiftPkDate(today, -6), to: today };
   if (period === 'month')  {
     const [y, m] = selMonth.split('-').map(Number);
     return { from: `${selMonth}-01`, to: `${selMonth}-${pad(new Date(y, m, 0).getDate())}` };

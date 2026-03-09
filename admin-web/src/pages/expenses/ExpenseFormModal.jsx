@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { formatPkDate } from '@/utils/datetime';
 
 const CATEGORIES = ['Other', 'Utilities', 'Rent', 'Raw Material', 'Salary', 'Khata Payment'];
 const SOURCE_TYPES = ['manual', 'khata', 'salary'];
 
-const today = () => {
-  const t = new Date(), p = n => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
-};
+const today = () => formatPkDate();
 
 export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }) {
   const [form, setForm] = useState({ category: '', description: '', amount: '', date: today(), source_type: 'manual' });

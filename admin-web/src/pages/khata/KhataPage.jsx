@@ -6,6 +6,7 @@ import { jsPDF } from 'jspdf';
 import TransactionModal from './TransactionModal';
 import ProfileModal from './ProfileModal';
 import BranchSelector from '../../components/BranchSelector';
+import { formatPkDateForView } from '@/utils/datetime';
 
 export default function KhataPage() {
   const { activeBranch } = useAuth();
@@ -24,12 +25,16 @@ export default function KhataPage() {
   const fetchProfiles = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('khata_profiles')
-      .select('id, name, phone, notes')
-      .eq('branch_id', branchId)
-      .order('name');
-    setProfiles(data ?? []);
+    const [{ data: profileData }, { data: txData }] = await Promise.all([
+      supabase.from('khata_profiles').select('id, name, phone, notes').eq('branch_id', branchId).order('name'),
+      supabase.from('khata_transactions').select('profile_id, type, amount').eq('branch_id', branchId),
+    ]);
+    const balanceMap = {};
+    (txData ?? []).forEach((t) => {
+      if (!balanceMap[t.profile_id]) balanceMap[t.profile_id] = 0;
+      balanceMap[t.profile_id] += t.type === 'due' ? Number(t.amount) : -Number(t.amount);
+    });
+    setProfiles((profileData ?? []).map((p) => ({ ...p, balance: balanceMap[p.id] ?? 0 })));
     setLoading(false);
   }, [branchId]);
 
@@ -165,7 +170,7 @@ export default function KhataPage() {
     const HEADERS = ['Date', 'Due', 'Payment', 'Note', 'Balance'];
     const COL_HDR_H = 22, ROW_PAD = 5, LINE_H = 10;
     // fixed col widths: Date, Due, Payment, Note (flexible), Balance
-    const colWidths = [65, 70, 70, CW - 65 - 70 - 70 - 75, 75];
+    const colWidths = [85, 70, 70, CW - 85 - 70 - 70 - 75, 75];
     const colX = colWidths.reduce((acc, w, i) => { acc.push(i === 0 ? PX : acc[i - 1] + colWidths[i - 1]); return acc; }, []);
 
     const drawHeaders = (atY) => {
@@ -201,7 +206,7 @@ export default function KhataPage() {
         const runBalStr = `Rs ${Math.abs(tx.runningBalance).toLocaleString()} ${tx.runningBalance >= 0 ? '(-)' : '(+)'}`;
         const dueStr  = tx.type === 'due'     ? `Rs ${Number(tx.amount).toLocaleString()}` : '\u2014';
         const payStr  = tx.type === 'payment' ? `Rs ${Number(tx.amount).toLocaleString()}` : '\u2014';
-        const simpleCells = [tx.date, dueStr, payStr, null, runBalStr];
+        const simpleCells = [formatPkDateForView(tx.date), dueStr, payStr, null, runBalStr];
 
         simpleCells.forEach((cell, i) => {
           if (cell === null) return; // note handled separately
@@ -283,7 +288,7 @@ export default function KhataPage() {
                     className={`flex items-center justify-between px-3 py-2.5 cursor-pointer group transition-colors
                       ${selected?.id === p.id ? 'bg-primary-500/10 border-l-2 border-primary-500' : 'hover:bg-slate-700/50 border-l-2 border-transparent'}`}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className={`text-sm truncate ${selected?.id === p.id ? 'text-primary-400' : 'text-slate-300'}`}>
                         {p.name}
                       </p>
@@ -291,12 +296,19 @@ export default function KhataPage() {
                         {p.phone || 'No phone'}
                       </p>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p); }}
-                      className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {p.balance !== 0 && (
+                        <span className={`text-[11px] font-semibold ${p.balance > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          PKR {Math.abs(p.balance).toLocaleString()} {p.balance > 0 ? '(-)' : '(+)'}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p); }}
+                        className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 ))
             }
@@ -373,7 +385,7 @@ export default function KhataPage() {
                       <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Date</th>
                       <th className="text-left px-4 py-2.5 text-red-400 font-medium text-xs uppercase">Due</th>
                       <th className="text-left px-4 py-2.5 text-green-400 font-medium text-xs uppercase">Payment</th>
-                      <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase hidden sm:table-cell">Note</th>
+                      <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Note</th>
                       <th className="text-left px-4 py-2.5 text-slate-400 font-medium text-xs uppercase">Balance</th>
                       <th className="px-4 py-2.5 w-8"></th>
                     </tr>
@@ -383,14 +395,14 @@ export default function KhataPage() {
                       ? [1,2].map((i) => <tr key={i}><td colSpan={6} className="px-4 py-2"><div className="h-4 bg-slate-700/50 rounded animate-pulse" /></td></tr>)
                       : txWithBalanceDesc.map((t) => (
                           <tr key={t.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                            <td className="px-4 py-2.5 text-slate-400 text-xs">{t.date}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">{formatPkDateForView(t.date)}</td>
                             <td className="px-4 py-2.5 text-red-400 font-medium whitespace-nowrap">
                               {t.type === 'due' ? `Rs ${Number(t.amount).toLocaleString()}` : '—'}
                             </td>
                             <td className="px-4 py-2.5 text-green-400 font-medium whitespace-nowrap">
                               {t.type === 'payment' ? `Rs ${Number(t.amount).toLocaleString()}` : '—'}
                             </td>
-                            <td className="px-4 py-2.5 text-slate-500 text-xs hidden sm:table-cell">{t.note || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500 text-xs">{t.note || '—'}</td>
                             <td className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap ${t.runningBalance > 0 ? 'text-red-400' : t.runningBalance < 0 ? 'text-green-400' : 'text-slate-500'}`}>
                               Rs {Math.abs(t.runningBalance).toLocaleString()}
                               {t.runningBalance > 0 ? '(-)' : t.runningBalance < 0 ? '(+)' : ''}
@@ -431,7 +443,7 @@ export default function KhataPage() {
           branchId={branchId}
           transaction={editingTx}
           onClose={() => { setShowTxModal(false); setEditingTx(null); }}
-          onSaved={() => fetchTransactions(selected.id)}
+          onSaved={() => { fetchTransactions(selected.id); fetchProfiles(); }}
         />
       )}
 

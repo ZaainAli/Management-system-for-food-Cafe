@@ -3,9 +3,10 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, ShoppingBag, BookOpen } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../store/AuthContext';
+import { formatPkDate, shiftPkDate } from '@/utils/datetime';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -17,20 +18,18 @@ const fmtAxis = (n) => {
   if (abs >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
   return `${v}`;
 };
-const today   = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`; };
-const curMonth = () => { const t = new Date(), p = (n) => String(n).padStart(2,'0'); return `${t.getFullYear()}-${p(t.getMonth()+1)}`; };
+const today   = () => formatPkDate();
+const curMonth = () => formatPkDate().slice(0, 7);
 const curYear  = () => String(new Date().getFullYear());
 const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => String(new Date().getFullYear() - i));
 const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 
 function getRange(period, selMonth, selYear) {
-  const t   = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  const td  = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  const td  = formatPkDate();
   if (period === 'today') return { from: td, to: td };
   if (period === 'week') {
-    const d = new Date(t); d.setDate(t.getDate() - 6);
-    return { from: d.toISOString().split('T')[0], to: td };
+    return { from: shiftPkDate(td, -6), to: td };
   }
   if (period === 'month') {
     const [y, m] = selMonth.split('-').map(Number);
@@ -85,9 +84,11 @@ export default function ReportsPage() {
   const [customFrom, setCustomFrom]     = useState(today());
   const [customTo, setCustomTo]         = useState(today());
   const [branchFilter, setBranchFilter] = useState('all'); // 'all' | branch_id
-  const [salesRows, setSalesRows]       = useState([]);
-  const [expRows, setExpRows]           = useState([]);
-  const [loading, setLoading]           = useState(true);
+  const [salesRows, setSalesRows]         = useState([]);
+  const [expRows, setExpRows]             = useState([]);
+  const [khataRows, setKhataRows]         = useState([]);
+  const [allKhataRows, setAllKhataRows]   = useState([]);
+  const [loading, setLoading]             = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -109,16 +110,37 @@ export default function ReportsPage() {
       .gte('date', from)
       .lte('date', to);
 
+    let khataQ = supabase
+      .from('khata_transactions')
+      .select('type, amount')
+      .gte('date', from)
+      .lte('date', to);
+
+    // All-time khata (no date filter) for Total Due
+    let allKhataQ = supabase
+      .from('khata_transactions')
+      .select('type, amount');
+
     if (branchFilter !== 'all') {
-      salesQ = salesQ.eq('branch_id', branchFilter);
-      expQ   = expQ.eq('branch_id', branchFilter);
+      salesQ    = salesQ.eq('branch_id', branchFilter);
+      expQ      = expQ.eq('branch_id', branchFilter);
+      khataQ    = khataQ.eq('branch_id', branchFilter);
+      allKhataQ = allKhataQ.eq('branch_id', branchFilter);
     }
 
-    const [salesRes, expRes] = await Promise.all([salesQ, expQ]);
+    const [salesRes, expRes, khataRes, allKhataRes] = await Promise.all([salesQ, expQ, khataQ, allKhataQ]);
+
+    if (salesRes.error)    console.error('sales fetch error:', salesRes.error);
+    if (expRes.error)      console.error('expenses fetch error:', expRes.error);
+    if (khataRes.error)    console.error('khata fetch error:', khataRes.error);
+    if (allKhataRes.error) console.error('all khata fetch error:', allKhataRes.error);
+
     setSalesRows(salesRes.data ?? []);
     setExpRows(expRes.data ?? []);
+    setKhataRows(khataRes.data ?? []);
+    setAllKhataRows(allKhataRes.data ?? []);
     setLoading(false);
-  }, [period, selMonth, selYear, customFrom, customTo, branchFilter, activeBranch]);
+  }, [period, selMonth, selYear, customFrom, customTo, branchFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -128,7 +150,15 @@ export default function ReportsPage() {
   const totalExpenses = salesRows.reduce((s, r) => s + Number(r.total_expenses), 0);
   const netProfit     = totalRevenue - totalExpenses;
   const totalBills    = salesRows.reduce((s, r) => s + Number(r.bill_count), 0);
-
+  const khataTotalDue = khataRows
+    .filter((r) => r.type === 'due')
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+  const khataTotalPayment = khataRows
+    .filter((r) => r.type === 'payment')
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+  const allTimeDue     = allKhataRows.filter((r) => r.type === 'due').reduce((s, r) => s + Number(r.amount || 0), 0);
+  const allTimePayment = allKhataRows.filter((r) => r.type === 'payment').reduce((s, r) => s + Number(r.amount || 0), 0);
+  const khataTotalBalance = allTimeDue - allTimePayment;
   // Daily trend chart data
   const dailyMap = {};
   salesRows.forEach((r) => {
@@ -257,7 +287,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 mb-5">
         <StatCard label="Revenue"   value={totalRevenue}  Icon={TrendingUp}   colorClass="bg-green-700"    loading={loading} />
         <StatCard label="Expenses"  value={totalExpenses} Icon={TrendingDown} colorClass="bg-red-700"      loading={loading} />
         <StatCard label="Net Profit" value={netProfit}    Icon={DollarSign}   colorClass="bg-primary-600"  loading={loading} />
@@ -270,6 +300,38 @@ export default function ReportsPage() {
             <p className={`text-lg sm:text-xl font-bold mt-0.5 break-words ${loading ? 'text-slate-700' : 'text-white'}`}>
               {loading ? '—' : totalBills.toLocaleString()}
             </p>
+          </div>
+        </div>
+        <div className="card flex flex-col gap-3">
+          {/* header row */}
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-purple-700">
+              <BookOpen className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-slate-400 text-xs uppercase tracking-wide">Khata</p>
+            </div>
+          </div>
+          {/* due / payment row */}
+          <div className="flex flex-col gap-2">
+            <div className="bg-slate-800/60 rounded-lg px-2.5 py-2">
+              <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-0.5">Total Due</p>
+              <p className={`text-sm font-bold ${loading ? 'text-slate-700' : khataTotalBalance > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {loading ? '—' : fmt(khataTotalBalance)}
+              </p>
+            </div>
+            <div className="bg-slate-800/60 rounded-lg px-2.5 py-2">
+              <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-0.5">Due</p>
+              <p className={`text-sm font-bold ${loading ? 'text-slate-700' : 'text-red-400'}`}>
+                {loading ? '—' : fmt(khataTotalDue)}
+              </p>
+            </div>
+            <div className="bg-slate-800/60 rounded-lg px-2.5 py-2">
+              <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-0.5">Payment</p>
+              <p className={`text-sm font-bold ${loading ? 'text-slate-700' : 'text-green-400'}`}>
+                {loading ? '—' : fmt(khataTotalPayment)}
+              </p>
+            </div>
           </div>
         </div>
       </div>

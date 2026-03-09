@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { formatPkDate } from '@/utils/datetime';
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => formatPkDate();
 
 const evalAmount = (expr) => {
   const parts = String(expr).split('+').map(p => parseFloat(p.trim()));
@@ -34,7 +35,7 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
 
   const handleSave = async () => {
     const resolved = evalAmount(amount);
-    if (!amount || isNaN(resolved) || resolved <= 0) {
+    if (!amount || isNaN(resolved) || resolved < 0) {
       setError('Enter a valid amount.'); return;
     }
     setSaving(true); setError('');

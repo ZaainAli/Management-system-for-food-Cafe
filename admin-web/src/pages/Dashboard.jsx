@@ -2,18 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Store } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 import { supabase } from '../lib/supabase';
+import { formatPkDate, shiftPkDate } from '@/utils/datetime';
 
 const fmt = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 
 // ── Helpers ───────────────────────────────────────────────────
 
 function todayStr() {
-  const t = new Date(), p = (n) => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+  return formatPkDate();
 }
 function currentMonth() {
-  const t = new Date(), p = (n) => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth() + 1)}`;
+  return formatPkDate().slice(0, 7);
 }
 function currentYear() { return String(new Date().getFullYear()); }
 
@@ -26,8 +25,7 @@ function getRange(period, selMonth, selYear, customFrom, customTo) {
   const today = todayStr();
   if (period === 'today') return { from: today, to: today };
   if (period === 'week') {
-    const d = new Date(); d.setDate(d.getDate() - 6);
-    return { from: d.toISOString().split('T')[0], to: today };
+    return { from: shiftPkDate(today, -6), to: today };
   }
   if (period === 'month') {
     const [y, m] = selMonth.split('-').map(Number);

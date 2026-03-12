@@ -78,7 +78,7 @@ function StatCard({ label, value, Icon, colorClass, loading }) {
 
 export default function ReportsPage() {
   const { activeBranch, branches } = useAuth();
-  const [period, setPeriod]             = useState('month');
+  const [period, setPeriod]             = useState('today');
   const [selMonth, setSelMonth]         = useState(curMonth());
   const [selYear, setSelYear]           = useState(curYear());
   const [customFrom, setCustomFrom]     = useState(today());

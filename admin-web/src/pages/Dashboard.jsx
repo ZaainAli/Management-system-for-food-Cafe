@@ -78,7 +78,7 @@ export default function Dashboard() {
   const [loading, setLoading]     = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
-  const [period, setPeriod]             = useState('month');
+  const [period, setPeriod]             = useState('today');
   const [selMonth, setSelMonth]         = useState(currentMonth());
   const [selYear, setSelYear]           = useState(currentYear());
   const [customFrom, setCustomFrom]     = useState(todayStr());

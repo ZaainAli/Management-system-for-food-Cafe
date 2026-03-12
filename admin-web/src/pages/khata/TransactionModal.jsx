@@ -40,23 +40,107 @@ export default function TransactionModal({ profileId, branchId, profileType, pro
     }
     setSaving(true); setError('');
 
+    const finalAmount = parseFloat(resolved.toFixed(2));
     const payload = {
       profile_id: profileId,
       branch_id:  branchId,
       type,
-      amount:     parseFloat(resolved.toFixed(2)),
+      amount:     finalAmount,
       note:       note.trim() || null,
       date,
     };
 
     const result = isEdit
       ? await supabase.from('khata_transactions').update(payload).eq('id', transaction.id)
-      : await supabase.from('khata_transactions').insert(payload);
+      : await supabase.from('khata_transactions').insert(payload).select('id').single();
 
-    const err = result.error;
+    if (result.error) { setError(result.error.message); setSaving(false); return; }
+    const newTxId = !isEdit ? result.data?.id : null;
 
-    if (err) { setError(err.message); }
-    else { onSaved(); onClose(); }
+    // ── daily_sales side effects for payment transactions ──────
+    if (type === 'payment') {
+      const getDs = (d) => supabase
+        .from('daily_sales').select('id, total_revenue, total_expenses, bill_count')
+        .eq('branch_id', branchId).eq('date', d).maybeSingle()
+        .then(({ data }) => data);
+
+      const upsertDs = async (d, revDelta, expDelta, countDelta) => {
+        const ds = await getDs(d);
+        if (ds) {
+          await supabase.from('daily_sales').update({
+            total_revenue:  Math.max(0, parseFloat((ds.total_revenue  + revDelta).toFixed(2))),
+            total_expenses: Math.max(0, parseFloat((ds.total_expenses + expDelta).toFixed(2))),
+            bill_count:     Math.max(0, ds.bill_count + countDelta),
+          }).eq('id', ds.id);
+        } else if (revDelta > 0 || expDelta > 0) {
+          await supabase.from('daily_sales').insert({
+            branch_id: branchId, date: d,
+            total_revenue:  Math.max(0, revDelta),
+            total_expenses: Math.max(0, expDelta),
+            bill_count:     Math.max(0, countDelta),
+          });
+        }
+      };
+
+      const isCustomer = profileType === 'customer';
+
+      if (!isEdit) {
+        // New payment
+        if (isCustomer) {
+          await upsertDs(date, finalAmount, 0, 1);
+          // Generate a bill in Supabase so desktop pull can update its daily_sales
+          await supabase.from('bills').insert({
+            branch_id:           branchId,
+            bill_number:         `KHATA-${date}-${newTxId.slice(-6).toUpperCase()}`,
+            subtotal:            finalAmount,
+            discount:            0,
+            total:               finalAmount,
+            source_type:         'khata',
+            customer_name:       profileName,
+            khata_transaction_id: newTxId,
+            date,
+          });
+        } else {
+          await upsertDs(date, 0, finalAmount, 0);
+          await supabase.from('expenses').insert({
+            branch_id: branchId, category: 'Khata Payment',
+            description: note.trim() || null, amount: finalAmount,
+            date, source_type: 'khata', source_record_id: newTxId,
+          });
+        }
+      } else {
+        // Edit: reverse old, apply new
+        const oldAmount = parseFloat(Number(transaction.amount).toFixed(2));
+        const oldDate   = transaction.date;
+
+        if (isCustomer) {
+          if (oldDate === date) {
+            await upsertDs(date, finalAmount - oldAmount, 0, 0);
+          } else {
+            await upsertDs(oldDate, -oldAmount, 0, -1);
+            await upsertDs(date,    finalAmount, 0,  1);
+          }
+        } else {
+          if (oldDate === date) {
+            await upsertDs(date, 0, finalAmount - oldAmount, 0);
+          } else {
+            await upsertDs(oldDate, 0, -oldAmount,   0);
+            await upsertDs(date,    0,  finalAmount,  0);
+          }
+          // Update linked expense
+          const { data: linkedExp } = await supabase
+            .from('expenses').select('id')
+            .eq('source_record_id', transaction.id).maybeSingle();
+          if (linkedExp) {
+            await supabase.from('expenses').update({
+              amount: finalAmount, date, description: note.trim() || null,
+            }).eq('id', linkedExp.id);
+          }
+        }
+      }
+    }
+
+    onSaved(); onClose();
     setSaving(false);
   };
 

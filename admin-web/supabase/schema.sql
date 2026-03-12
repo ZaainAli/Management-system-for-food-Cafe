@@ -58,13 +58,17 @@ create table if not exists menu_items (
 
 -- Bills per branch
 create table if not exists bills (
-  id          uuid primary key default uuid_generate_v4(),
-  branch_id   uuid not null references branches(id) on delete cascade,
-  bill_number text,
-  subtotal    numeric(10,2) not null default 0,
-  discount    numeric(10,2) not null default 0,
-  total       numeric(10,2) not null default 0,
-  created_at  timestamptz not null default now()
+  id                   uuid primary key default uuid_generate_v4(),
+  branch_id            uuid not null references branches(id) on delete cascade,
+  bill_number          text,
+  subtotal             numeric(10,2) not null default 0,
+  discount             numeric(10,2) not null default 0,
+  total                numeric(10,2) not null default 0,
+  created_at           timestamptz not null default now(),
+  source_type          text not null default 'pos' check (source_type in ('pos','khata')),
+  customer_name        text,
+  khata_transaction_id uuid,
+  date                 date not null default current_date
 );
 
 -- Bill line items
@@ -95,8 +99,9 @@ create table if not exists expenses (
   description text,
   amount      numeric(10,2) not null default 0,
   date        date not null default current_date,
-  source_type text not null default 'manual'
-              check (source_type in ('manual','khata','salary'))
+  source_type      text not null default 'manual'
+                   check (source_type in ('manual','khata','salary')),
+  source_record_id uuid
 );
 
 -- Khata (ledger) profiles per branch
@@ -483,32 +488,12 @@ create policy "daily_sales_write" on daily_sales for all
   using (is_branch_member(branch_id));
 
 -- ============================================================
--- DELETED ITEMS (trash bin — auto-expire after 30 days)
+-- MIGRATIONS (safe to re-run)
 -- ============================================================
-create table if not exists deleted_items (
-  id           uuid primary key default uuid_generate_v4(),
-  branch_id    uuid not null references branches(id) on delete cascade,
-  item_type    text not null,  -- 'khata_transaction' | 'khata_profile' | 'expense'
-  item_id      text not null,
-  item_data    jsonb not null,
-  deleted_by   text not null default 'electron', -- 'electron' | 'web'
-  deleted_at   timestamptz not null default now(),
-  expires_at   timestamptz not null default (now() + interval '30 days')
-);
+alter table expenses add column if not exists source_record_id uuid;
 
-create index if not exists idx_deleted_items_branch_id  on deleted_items(branch_id);
-create index if not exists idx_deleted_items_expires_at on deleted_items(expires_at);
-
-alter table deleted_items enable row level security;
-
-drop policy if exists "deleted_items_select" on deleted_items;
-create policy "deleted_items_select" on deleted_items for select
-  using (is_branch_member(branch_id));
-
-drop policy if exists "deleted_items_write" on deleted_items;
-create policy "deleted_items_write" on deleted_items for all
-  using (is_branch_member(branch_id));
-
--- Auto-cleanup: delete expired rows daily (requires pg_cron extension)
--- select cron.schedule('cleanup-deleted-items', '0 2 * * *',
---   $$delete from deleted_items where expires_at < now()$$);
+-- Bills: khata web-generated bill support
+alter table bills add column if not exists source_type          text not null default 'pos';
+alter table bills add column if not exists customer_name        text;
+alter table bills add column if not exists khata_transaction_id uuid;
+alter table bills add column if not exists date                 date not null default current_date;

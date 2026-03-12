@@ -74,6 +74,11 @@ function createWindow() {
   // Pull latest data from Supabase into SQLite (non-blocking)
   pullAllFromSupabase().catch(() => {});
 
+  // Periodic sync: re-pull every 5 minutes so web changes (khata bills, etc.) appear automatically
+  setInterval(() => {
+    pullAllFromSupabase().catch(() => {});
+  }, 5 * 60 * 1000);
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     logger.info('Main window ready and shown');

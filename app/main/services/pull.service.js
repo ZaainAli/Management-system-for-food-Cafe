@@ -208,6 +208,38 @@ function upsertSalaryRecords(db, rows, employeeMap) {
   logger.info(`[pull] salary_records: upserted ${rows.length} rows`);
 }
 
+function upsertKhataBills(db, rows) {
+  const checkStmt = db.prepare('SELECT id FROM bills WHERE id = ?');
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO bills
+      (id, tableId, customerName, subtotal, tax, discount, total, paymentMethod, status, createdAt)
+    VALUES (?, NULL, ?, ?, 0, ?, ?, 'khata', 'completed', ?)
+  `);
+  const salesStmt = db.prepare(`
+    INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+    VALUES (?, ?, 1, 0, ?)
+    ON CONFLICT(date) DO UPDATE SET
+      totalRevenue = MAX(totalRevenue + excluded.totalRevenue, 0),
+      totalBills   = MAX(totalBills   + excluded.totalBills,   0),
+      updatedAt    = excluded.updatedAt
+  `);
+  const now = new Date().toISOString();
+  let inserted = 0;
+  const run = db.transaction(() => {
+    for (const r of rows) {
+      const existing = checkStmt.get(r.id);
+      if (!existing) {
+        insertStmt.run(r.id, r.customer_name || '', r.total, r.discount || 0, r.total, r.created_at || now);
+        const date = r.date || (r.created_at ? r.created_at.slice(0, 10) : now.slice(0, 10));
+        salesStmt.run(date, r.total, now);
+        inserted++;
+      }
+    }
+  });
+  run();
+  logger.info(`[pull] khata_bills: upserted ${inserted} new rows (of ${rows.length})`);
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 function getConfiguredBranchId() {
@@ -242,7 +274,7 @@ async function pullAllFromSupabase() {
 
   try {
     // Fetch all tables in parallel (order-independent fetches)
-    const [cats, items, expenses, kProfiles, kTxs, employees, salaries] = await Promise.all([
+    const [cats, items, expenses, kProfiles, kTxs, employees, salaries, khataBillsRaw] = await Promise.all([
       fetchAll(client, 'menu_categories',    branchId),
       fetchAll(client, 'menu_items',         branchId),
       fetchAll(client, 'expenses',           branchId),
@@ -250,6 +282,7 @@ async function pullAllFromSupabase() {
       fetchAll(client, 'khata_transactions', branchId),
       fetchAll(client, 'employees',          branchId),
       fetchAll(client, 'salary_records',     branchId),
+      client.from('bills').select('*').eq('branch_id', branchId).eq('source_type', 'khata').then(({ data }) => data || []),
     ]);
 
     // Build employee name map for salary records
@@ -257,13 +290,14 @@ async function pullAllFromSupabase() {
     for (const e of employees) employeeMap[e.id] = e.name;
 
     // Upsert in FK-safe order
-    if (cats.length)       upsertMenuCategories(db, cats);
-    if (items.length)      upsertMenuItems(db, items);
-    if (expenses.length)   upsertExpenses(db, expenses);
-    if (kProfiles.length)  upsertKhataProfiles(db, kProfiles);
-    if (kTxs.length)       upsertKhataTransactions(db, kTxs);
-    if (employees.length)  upsertEmployees(db, employees);
-    if (salaries.length)   upsertSalaryRecords(db, salaries, employeeMap);
+    if (cats.length)            upsertMenuCategories(db, cats);
+    if (items.length)           upsertMenuItems(db, items);
+    if (expenses.length)        upsertExpenses(db, expenses);
+    if (kProfiles.length)       upsertKhataProfiles(db, kProfiles);
+    if (kTxs.length)            upsertKhataTransactions(db, kTxs);
+    if (employees.length)       upsertEmployees(db, employees);
+    if (salaries.length)        upsertSalaryRecords(db, salaries, employeeMap);
+    if (khataBillsRaw.length)   upsertKhataBills(db, khataBillsRaw);
 
     logger.info('[pull] Startup pull complete');
   } catch (err) {

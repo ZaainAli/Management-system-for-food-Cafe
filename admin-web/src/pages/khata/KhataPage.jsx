@@ -254,7 +254,12 @@ export default function KhataPage() {
     });
 
     if (tx.type === 'payment') {
-      await supabase.from('expenses').delete().eq('source_record_id', tx.id).eq('branch_id', branchId);
+      if (selected.profile_type === 'customer') {
+        // Delete the khata bill so desktop pull won't re-add it
+        await supabase.from('bills').delete().eq('khata_transaction_id', tx.id);
+      } else {
+        await supabase.from('expenses').delete().eq('source_record_id', tx.id).eq('branch_id', branchId);
+      }
       const { data: ds } = await supabase
         .from('daily_sales').select('id, total_revenue, total_expenses, bill_count')
         .eq('branch_id', branchId).eq('date', tx.date).maybeSingle();

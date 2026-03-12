@@ -69,9 +69,9 @@ async function pushDailySales({ date, totalRevenue, totalBills, totalExpenses })
   await upsert('daily_sales', {
     branch_id:      getBranchId(),
     date,
-    total_revenue:  totalRevenue,
-    bill_count:     totalBills,
-    total_expenses: totalExpenses,
+    total_revenue:  Math.max(0, totalRevenue  || 0),
+    bill_count:     Math.max(0, totalBills    || 0),
+    total_expenses: Math.max(0, totalExpenses || 0),
   }, 'branch_id,date');
 }
 
@@ -124,11 +124,12 @@ async function deleteMenuItem(id) {
 
 async function pushKhataProfile(profile) {
   await upsert('khata_profiles', {
-    id:        profile.id,
-    branch_id: getBranchId(),
-    name:      profile.name,
-    phone:     profile.phone || null,
-    notes:     profile.businessDetails || null,
+    id:           profile.id,
+    branch_id:    getBranchId(),
+    name:         profile.name,
+    phone:        profile.phone || null,
+    notes:        profile.businessDetails || null,
+    profile_type: profile.profileType || 'supplier',
   }, 'id');
 }
 
@@ -184,6 +185,36 @@ async function pushSalaryRecord(record) {
   }, 'id');
 }
 
+async function pushDeletedItem({ branchId, itemType, itemId, itemData }) {
+  const client = getClient();
+  const resolvedBranchId = branchId || getBranchId();
+  console.log(`[trash] pushDeletedItem called — type=${itemType} id=${itemId} branchId=${resolvedBranchId} hasClient=${!!client}`);
+  if (!client || !resolvedBranchId) {
+    console.error(`[trash] skipped — missing client or branchId`);
+    return;
+  }
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const { error } = await client.from('deleted_items').insert({
+      branch_id:  resolvedBranchId,
+      item_type:  itemType,
+      item_id:    String(itemId),
+      item_data:  itemData,
+      deleted_by: 'electron',
+      expires_at: expiresAt,
+    });
+    if (error) {
+      console.error(`[trash] insert failed:`, error.message, error.details, error.hint);
+      logger.error(`[sync] deleted_items insert failed:`, error.message);
+    } else {
+      console.log(`[trash] insert success — type=${itemType} id=${itemId}`);
+    }
+  } catch (err) {
+    console.error(`[trash] insert exception:`, err.message);
+    logger.error(`[sync] deleted_items insert error:`, err.message);
+  }
+}
+
 module.exports = {
   pushDailySales,
   pushExpense,
@@ -197,4 +228,5 @@ module.exports = {
   deleteKhataTransaction,
   pushEmployee,
   pushSalaryRecord,
+  pushDeletedItem,
 };

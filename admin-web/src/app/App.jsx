@@ -13,6 +13,7 @@ import MenuPage     from '../pages/menu/MenuPage';
 import ExpensesPage from '../pages/expenses/ExpensesPage';
 import KhataPage    from '../pages/khata/KhataPage';
 import StaffPage    from '../pages/staff/StaffPage';
+import TrashPage    from '../pages/trash/TrashPage';
 
 function ProtectedPage({ children }) {
   return (
@@ -43,6 +44,7 @@ export default function App() {
       <Route path="/khata"    element={<ProtectedPage><KhataPage /></ProtectedPage>} />
       <Route path="/staff"    element={<ProtectedPage><StaffPage /></ProtectedPage>} />
       <Route path="/users"    element={<ProtectedPage><UsersPage /></ProtectedPage>} />
+      <Route path="/trash"    element={<ProtectedPage><TrashPage /></ProtectedPage>} />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />

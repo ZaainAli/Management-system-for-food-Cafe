@@ -74,9 +74,27 @@ export default function ExpensesPage() {
 
   const visible = catFilter === 'all' ? expenses : expenses.filter((e) => e.category === catFilter);
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (expense) => {
     if (!confirm('Delete this expense?')) return;
-    await supabase.from('expenses').delete().eq('id', id);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('deleted_items').insert({
+      branch_id:  branchId,
+      item_type:  'expense',
+      item_id:    expense.id,
+      item_data:  expense,
+      deleted_by: 'web',
+      expires_at: expiresAt,
+    });
+    await supabase.from('expenses').delete().eq('id', expense.id);
+    // Reverse daily_sales
+    const { data: ds } = await supabase
+      .from('daily_sales').select('id, total_expenses')
+      .eq('branch_id', branchId).eq('date', expense.date).maybeSingle();
+    if (ds) {
+      await supabase.from('daily_sales').update({
+        total_expenses: Math.max(0, parseFloat((ds.total_expenses - expense.amount).toFixed(2))),
+      }).eq('id', ds.id);
+    }
     fetchExpenses();
   };
 
@@ -190,7 +208,7 @@ export default function ExpensesPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 justify-end">
                         <button onClick={() => { setEditing(e); setShowModal(true); }} className="text-slate-400 hover:text-white transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => handleDelete(e.id)} className="text-slate-400 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDelete(e)} className="text-slate-400 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </td>
                   </tr>

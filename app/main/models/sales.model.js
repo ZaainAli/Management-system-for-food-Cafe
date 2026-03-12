@@ -8,9 +8,9 @@ function upsertDailySales({ date, revenueDelta = 0, billsDelta = 0, expensesDelt
     INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(date) DO UPDATE SET
-      totalRevenue = totalRevenue + excluded.totalRevenue,
-      totalBills = totalBills + excluded.totalBills,
-      totalExpenses = totalExpenses + excluded.totalExpenses,
+      totalRevenue = MAX(totalRevenue + excluded.totalRevenue, 0),
+      totalBills = MAX(totalBills + excluded.totalBills, 0),
+      totalExpenses = MAX(totalExpenses + excluded.totalExpenses, 0),
       updatedAt = excluded.updatedAt
   `).run(date, revenueDelta, billsDelta, expensesDelta, now);
 

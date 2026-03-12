@@ -26,7 +26,7 @@ export default function KhataPage() {
     if (!branchId) return;
     setLoading(true);
     const [{ data: profileData }, { data: txData }] = await Promise.all([
-      supabase.from('khata_profiles').select('id, name, phone, notes').eq('branch_id', branchId).order('name'),
+      supabase.from('khata_profiles').select('id, name, phone, notes, profile_type').eq('branch_id', branchId).order('name'),
       supabase.from('khata_transactions').select('profile_id, type, amount').eq('branch_id', branchId),
     ]);
     const balanceMap = {};
@@ -240,15 +240,59 @@ export default function KhataPage() {
   };
 
   // ── Delete transaction ────────────────────────────────────────
-  const handleDeleteTx = async (id) => {
+  const handleDeleteTx = async (tx) => {
     if (!confirm('Delete this transaction?')) return;
-    await supabase.from('khata_transactions').delete().eq('id', id);
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('deleted_items').insert({
+      branch_id:  branchId,
+      item_type:  'khata_transaction',
+      item_id:    tx.id,
+      item_data:  { ...tx, profile_type: selected.profile_type, profile_name: selected.name, profile_id: selected.id },
+      deleted_by: 'web',
+      expires_at: expiresAt,
+    });
+
+    if (tx.type === 'payment') {
+      await supabase.from('expenses').delete().eq('source_record_id', tx.id).eq('branch_id', branchId);
+      const { data: ds } = await supabase
+        .from('daily_sales').select('id, total_revenue, total_expenses, bill_count')
+        .eq('branch_id', branchId).eq('date', tx.date).maybeSingle();
+      if (ds) {
+        if (selected.profile_type === 'customer') {
+          await supabase.from('daily_sales').update({
+            total_revenue: Math.max(0, parseFloat((ds.total_revenue - tx.amount).toFixed(2))),
+            bill_count:    Math.max(0, ds.bill_count - 1),
+          }).eq('id', ds.id);
+        } else {
+          await supabase.from('daily_sales').update({
+            total_expenses: Math.max(0, parseFloat((ds.total_expenses - tx.amount).toFixed(2))),
+          }).eq('id', ds.id);
+        }
+      }
+    }
+
+    await supabase.from('khata_transactions').delete().eq('id', tx.id);
     fetchTransactions(selected.id);
+    fetchProfiles();
   };
 
   // ── Delete profile ────────────────────────────────────────────
   const handleDeleteProfile = async (p) => {
     if (!confirm(`Delete profile "${p.name}" and all its transactions?`)) return;
+    // Fetch all transactions before deleting
+    const { data: txs } = await supabase
+      .from('khata_transactions').select('*')
+      .eq('profile_id', p.id).eq('branch_id', branchId);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('deleted_items').insert({
+      branch_id:  branchId,
+      item_type:  'khata_profile',
+      item_id:    p.id,
+      item_data:  { ...p, transactions: txs ?? [] },
+      deleted_by: 'web',
+      expires_at: expiresAt,
+    });
     await supabase.from('khata_profiles').delete().eq('id', p.id);
     if (selected?.id === p.id) { setSelected(null); setTransactions([]); }
     fetchProfiles();
@@ -292,9 +336,12 @@ export default function KhataPage() {
                       <p className={`text-sm truncate ${selected?.id === p.id ? 'text-primary-400' : 'text-slate-300'}`}>
                         {p.name}
                       </p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {p.phone || 'No phone'}
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${p.profile_type === 'customer' ? 'bg-emerald-700/50 text-emerald-300' : 'bg-blue-700/50 text-blue-300'}`}>
+                          {p.profile_type === 'customer' ? 'Customer' : 'Supplier'}
+                        </span>
+                        <span className="text-[11px] text-slate-500 truncate">{p.phone || 'No phone'}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {p.balance !== 0 && (
@@ -416,7 +463,7 @@ export default function KhataPage() {
                                 >
                                   <Pencil className="w-3 h-3" />
                                 </button>
-                                <button onClick={() => handleDeleteTx(t.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                                <button onClick={() => handleDeleteTx(t)} className="text-slate-600 hover:text-red-400 transition-colors">
                                   <Trash2 className="w-3 h-3" />
                                 </button>
                               </div>
@@ -441,6 +488,8 @@ export default function KhataPage() {
         <TransactionModal
           profileId={selected.id}
           branchId={branchId}
+          profileType={selected.profile_type}
+          profileName={selected.name}
           transaction={editingTx}
           onClose={() => { setShowTxModal(false); setEditingTx(null); }}
           onSaved={() => { fetchTransactions(selected.id); fetchProfiles(); }}

@@ -5,7 +5,7 @@ import { getPkToday } from '../../utils/datetime';
 
 const today = () => getPkToday();
 
-const emptyProfileForm = { name: '', phone: '', businessDetails: '' };
+const emptyProfileForm = { name: '', phone: '', businessDetails: '', profileType: 'supplier' };
 const emptyTxForm    = { id: '', type: 'due', amount: '', date: today(), note: '', paymentSource: 'today_sale' };
 const emptyAddTxForm = { type: 'due', amount: '', date: today(), note: '', paymentSource: 'today_sale' };
 
@@ -365,7 +365,12 @@ export default function KhataPage() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-white font-medium">{profile.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-white font-medium">{profile.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${profile.profileType === 'customer' ? 'bg-emerald-700/50 text-emerald-300' : 'bg-blue-700/50 text-blue-300'}`}>
+                      {profile.profileType === 'customer' ? 'Customer' : 'Supplier'}
+                    </span>
+                  </div>
                   <div className="text-xs text-slate-400">{profile.phone || 'No phone'}</div>
                 </div>
                 <div className={`text-xs font-semibold ${profile.balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
@@ -539,6 +544,30 @@ export default function KhataPage() {
             {error && <div className="mb-3 text-red-300 text-sm">{error}</div>}
             <div className="space-y-3">
               <div>
+                <label className="label">Profile Type</label>
+                <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setProfileForm({ ...profileForm, profileType: 'supplier' })}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors ${profileForm.profileType === 'supplier' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                  >
+                    Supplier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProfileForm({ ...profileForm, profileType: 'customer' })}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors ${profileForm.profileType === 'customer' ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                  >
+                    Customer
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {profileForm.profileType === 'customer'
+                    ? 'Customer: payments will be added to Sales.'
+                    : 'Supplier: payments will be added to Expenses.'}
+                </p>
+              </div>
+              <div>
                 <label className="label">Name (Unique)</label>
                 <input className="input-field" value={profileForm.name}
                   onChange={e => setProfileForm({ ...profileForm, name: e.target.value })} />
@@ -603,12 +632,16 @@ export default function KhataPage() {
               </div>
               {addTxForm.type === 'payment' && (
                 <div>
-                  <label className="label">Payment Source</label>
-                  <select className="input-field" value={addTxForm.paymentSource}
-                    onChange={e => setAddTxForm({ ...addTxForm, paymentSource: e.target.value })}>
-                    <option value="today_sale">Today Sale</option>
-                    <option value="net_profit">Net Profit</option>
-                  </select>
+                  <label className="label">Payment</label>
+                  {activeProfile?.profileType === 'customer' ? (
+                    <div className="input-field text-slate-400 cursor-not-allowed select-none">Added in Today Sale</div>
+                  ) : (
+                    <select className="input-field" value={addTxForm.paymentSource}
+                      onChange={e => setAddTxForm({ ...addTxForm, paymentSource: e.target.value })}>
+                      <option value="today_sale">Today Sale</option>
+                      <option value="net_profit">Net Profit</option>
+                    </select>
+                  )}
                 </div>
               )}
               <div>

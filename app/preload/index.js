@@ -109,6 +109,11 @@ const setupAPI = {
   saveSupabaseConfig: (payload) => ipcRenderer.invoke('setup:saveSupabaseConfig', payload),
 };
 
+// ─── Sync API ───────────────────────────────────────────────
+const syncAPI = {
+  pull: () => ipcRenderer.invoke('sync:pull'),
+};
+
 // ─── Window API ─────────────────────────────────────────────
 const windowAPI = {
   minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -132,4 +137,5 @@ contextBridge.exposeInMainWorld('api', {
   user: userAPI,
   khata: khataAPI,
   window: windowAPI,
+  sync: syncAPI,
 });

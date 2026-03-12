@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-const emptyForm = { name: '', phone: '', notes: '' };
+const emptyForm = { name: '', phone: '', notes: '', profile_type: 'supplier' };
 
 export default function ProfileModal({ branchId, onClose, onSaved }) {
   const [form, setForm] = useState(emptyForm);
@@ -31,8 +31,9 @@ export default function ProfileModal({ branchId, onClose, onSaved }) {
     const payload = {
       branch_id: branchId,
       name,
-      phone: form.phone.trim() || null,
-      notes: form.notes.trim() || null,
+      phone:        form.phone.trim() || null,
+      notes:        form.notes.trim() || null,
+      profile_type: form.profile_type,
     };
 
     const { data, error: insertError } = await supabase
@@ -81,6 +82,26 @@ export default function ProfileModal({ branchId, onClose, onSaved }) {
         )}
 
         <div className="space-y-3">
+          <div>
+            <label className="label">Profile Type</label>
+            <div className="flex rounded-lg overflow-hidden border border-slate-700">
+              <button type="button"
+                onClick={() => setForm((f) => ({ ...f, profile_type: 'supplier' }))}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${form.profile_type === 'supplier' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                Supplier
+              </button>
+              <button type="button"
+                onClick={() => setForm((f) => ({ ...f, profile_type: 'customer' }))}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${form.profile_type === 'customer' ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                Customer
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {form.profile_type === 'customer'
+                ? 'Customer: payments will be added to Sales.'
+                : 'Supplier: payments will be added to Expenses.'}
+            </p>
+          </div>
           <div>
             <label className="label">Name (Unique)</label>
             <input

@@ -11,7 +11,7 @@ const evalAmount = (expr) => {
   return parts.reduce((a, b) => a + b, 0);
 };
 
-export default function TransactionModal({ profileId, branchId, transaction, onClose, onSaved }) {
+export default function TransactionModal({ profileId, branchId, profileType, profileName, transaction, onClose, onSaved }) {
   const [type, setType]       = useState('due');
   const [amount, setAmount]   = useState('');
   const [note, setNote]       = useState('');
@@ -104,6 +104,16 @@ export default function TransactionModal({ profileId, branchId, transaction, onC
             <label className="label">Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input-field" />
           </div>
+          {type === 'payment' && (
+            <div>
+              <label className="label">Payment</label>
+              {profileType === 'customer' ? (
+                <div className="input-field text-slate-400 cursor-not-allowed select-none">Added in Today Sale</div>
+              ) : (
+                <div className="input-field text-slate-400 cursor-not-allowed select-none">Today Sale</div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 mt-5">

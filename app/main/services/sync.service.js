@@ -69,9 +69,9 @@ async function pushDailySales({ date, totalRevenue, totalBills, totalExpenses })
   await upsert('daily_sales', {
     branch_id:      getBranchId(),
     date,
-    total_revenue:  totalRevenue,
-    bill_count:     totalBills,
-    total_expenses: totalExpenses,
+    total_revenue:  Math.max(0, totalRevenue  || 0),
+    bill_count:     Math.max(0, totalBills    || 0),
+    total_expenses: Math.max(0, totalExpenses || 0),
   }, 'branch_id,date');
 }
 
@@ -124,11 +124,12 @@ async function deleteMenuItem(id) {
 
 async function pushKhataProfile(profile) {
   await upsert('khata_profiles', {
-    id:        profile.id,
-    branch_id: getBranchId(),
-    name:      profile.name,
-    phone:     profile.phone || null,
-    notes:     profile.businessDetails || null,
+    id:           profile.id,
+    branch_id:    getBranchId(),
+    name:         profile.name,
+    phone:        profile.phone || null,
+    notes:        profile.businessDetails || null,
+    profile_type: profile.profileType || 'supplier',
   }, 'id');
 }
 

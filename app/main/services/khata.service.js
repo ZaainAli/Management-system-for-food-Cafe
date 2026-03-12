@@ -2,6 +2,9 @@ const { v4: uuidv4 } = require('uuid');
 const khataModel = require('../models/khata.model');
 const expenseService = require('./expense.service');
 const expenseModel = require('../models/expense.model');
+const billModel = require('../models/bill.model');
+const salesModel = require('../models/sales.model');
+const billingService = require('./billing.service');
 const syncService = require('./sync.service');
 const { formatPkDate } = require('../utils/datetime');
 
@@ -32,6 +35,7 @@ async function addProfile(payload) {
     name: payload.name.trim(),
     phone: payload.phone ? String(payload.phone).trim() : '',
     businessDetails: payload.businessDetails ? String(payload.businessDetails).trim() : '',
+    profileType: payload.profileType === 'customer' ? 'customer' : 'supplier',
     createdAt: new Date().toISOString(),
   };
   const created = khataModel.insertProfile(profile);
@@ -90,7 +94,27 @@ async function addPayment(payload) {
   const created = khataModel.insertTransaction(tx);
   syncService.pushKhataTransaction(created).catch(() => {});
 
-  if (source === 'today_sale') {
+  if (profile.profileType === 'customer') {
+    // Seller paid us back → record as a sale/bill
+    const dateStr = tx.date.replace(/-/g, '_');
+    const billCount = billModel.getTodayBillCount(dateStr);
+    const bill = {
+      id: `${dateStr}-khata-${profile.name}-${created.id}`,
+      tableId: null,
+      customerName: profile.name,
+      subtotal: amount,
+      tax: 0,
+      discount: 0,
+      total: amount,
+      paymentMethod: 'cash',
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      items: [],
+    };
+    billModel.insertBill(bill);
+    salesModel.addBillToDailySales({ date: tx.date, total: amount });
+  } else if (source === 'today_sale') {
+    // Buyer payment from today's sale → record as expense
     await expenseService.add({
       description: `Khata Payment: ${profile.name}`,
       amount,
@@ -148,11 +172,31 @@ async function deleteTransaction(payload) {
   const tx = khataModel.getTransactionById(id);
   if (!tx) throw new Error('Transaction not found');
 
-  const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
-  if (linkedExpense) {
-    const unlinked = { ...linkedExpense, sourceType: 'manual', sourceEntityId: null, sourceEntityName: '', sourceRecordId: null, updatedAt: new Date().toISOString() };
-    expenseModel.update(unlinked);
-    syncService.pushExpense(unlinked).catch(() => {});
+  if (tx.type === 'payment') {
+    const profile = khataModel.getProfileById(tx.khataId);
+
+    if (profile?.profileType === 'customer') {
+      // Cancel the linked bill → shows in cancelled tab + subtracts from revenue
+      const dateStr = tx.date.replace(/-/g, '_');
+      const billId = `${dateStr}-khata-${profile.name}-${tx.id}`;
+      const bill = billModel.getBillById(billId);
+      if (bill && bill.status !== 'cancelled') {
+        await billingService.cancelBill({
+          billId,
+          billAmount: tx.amount,
+          returnAmount: 0,
+          reason: `Khata transaction deleted: ${profile.name}`,
+        });
+      }
+    } else {
+      // Supplier: unlink the expense record
+      const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+      if (linkedExpense) {
+        const unlinked = { ...linkedExpense, sourceType: 'manual', sourceEntityId: null, sourceEntityName: '', sourceRecordId: null, updatedAt: new Date().toISOString() };
+        expenseModel.update(unlinked);
+        syncService.pushExpense(unlinked).catch(() => {});
+      }
+    }
   }
 
   khataModel.removeTransaction(id);

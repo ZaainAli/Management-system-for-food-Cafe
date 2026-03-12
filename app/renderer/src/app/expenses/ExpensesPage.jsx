@@ -271,7 +271,7 @@ export default function ExpensesPage() {
                     className="input-field"
                   >
                     <option value="">Select khata profile</option>
-                    {khataProfiles.map(p => (
+                    {khataProfiles.filter(p => p.profileType !== 'customer').map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>

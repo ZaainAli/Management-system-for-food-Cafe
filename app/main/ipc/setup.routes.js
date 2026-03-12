@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const setupController = require('../controllers/setup.controller');
+const { pullAllFromSupabase } = require('../services/pull.service');
 
 function registerSetupRoutes() {
   ipcMain.handle('setup:getBranchId', async () => {
@@ -20,6 +21,15 @@ function registerSetupRoutes() {
 
   ipcMain.handle('setup:saveSupabaseConfig', async (_event, payload) => {
     return setupController.saveSupabaseConfig(payload);
+  });
+
+  ipcMain.handle('sync:pull', async () => {
+    try {
+      await pullAllFromSupabase();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 }
 

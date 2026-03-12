@@ -38,9 +38,9 @@ function getProfileByName(name) {
 function insertProfile(profile) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO khata_profiles (id, name, phone, businessDetails, createdAt)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(profile.id, profile.name, profile.phone, profile.businessDetails, profile.createdAt);
+    INSERT INTO khata_profiles (id, name, phone, businessDetails, profileType, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(profile.id, profile.name, profile.phone, profile.businessDetails, profile.profileType || 'supplier', profile.createdAt);
   return profile;
 }
 

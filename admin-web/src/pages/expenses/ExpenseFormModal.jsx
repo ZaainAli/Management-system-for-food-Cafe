@@ -38,8 +38,9 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       setLoadingProfiles(true);
       supabase
         .from('khata_profiles')
-        .select('id, name')
+        .select('id, name, profile_type')
         .eq('branch_id', branchId)
+        .eq('profile_type', 'supplier')
         .order('name')
         .then(({ data }) => { setKhataProfiles(data ?? []); setLoadingProfiles(false); });
     } else if (form.source_type === 'salary') {

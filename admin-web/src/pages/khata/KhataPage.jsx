@@ -26,7 +26,7 @@ export default function KhataPage() {
     if (!branchId) return;
     setLoading(true);
     const [{ data: profileData }, { data: txData }] = await Promise.all([
-      supabase.from('khata_profiles').select('id, name, phone, notes').eq('branch_id', branchId).order('name'),
+      supabase.from('khata_profiles').select('id, name, phone, notes, profile_type').eq('branch_id', branchId).order('name'),
       supabase.from('khata_transactions').select('profile_id, type, amount').eq('branch_id', branchId),
     ]);
     const balanceMap = {};
@@ -292,9 +292,12 @@ export default function KhataPage() {
                       <p className={`text-sm truncate ${selected?.id === p.id ? 'text-primary-400' : 'text-slate-300'}`}>
                         {p.name}
                       </p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {p.phone || 'No phone'}
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${p.profile_type === 'customer' ? 'bg-emerald-700/50 text-emerald-300' : 'bg-blue-700/50 text-blue-300'}`}>
+                          {p.profile_type === 'customer' ? 'Customer' : 'Supplier'}
+                        </span>
+                        <span className="text-[11px] text-slate-500 truncate">{p.phone || 'No phone'}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {p.balance !== 0 && (
@@ -441,6 +444,8 @@ export default function KhataPage() {
         <TransactionModal
           profileId={selected.id}
           branchId={branchId}
+          profileType={selected.profile_type}
+          profileName={selected.name}
           transaction={editingTx}
           onClose={() => { setShowTxModal(false); setEditingTx(null); }}
           onSaved={() => { fetchTransactions(selected.id); fetchProfiles(); }}

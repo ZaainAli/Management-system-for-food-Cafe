@@ -285,6 +285,12 @@ function runMigrations(db) {
     logger.info('Migration: Added sourceRecordId column to expenses table');
   }
 
+  const khataProfileCols = db.prepare("PRAGMA table_info(khata_profiles)").all().map(c => c.name);
+  if (!khataProfileCols.includes('profileType')) {
+    db.prepare("ALTER TABLE khata_profiles ADD COLUMN profileType TEXT NOT NULL DEFAULT 'supplier'").run();
+    logger.info('Migration: Added profileType column to khata_profiles table');
+  }
+
   const attendanceCols = db.prepare("PRAGMA table_info(attendance)").all().map(c => c.name);
   if (!attendanceCols.includes('hoursWorked')) {
     db.prepare('ALTER TABLE attendance ADD COLUMN hoursWorked REAL NOT NULL DEFAULT 0').run();
@@ -296,6 +302,18 @@ function runMigrations(db) {
     db.prepare('ALTER TABLE discounted_bills ADD COLUMN tableNum INTEGER').run();
     logger.info('Migration: Added tableNum column to discounted_bills table');
   }
+
+  // Clamp negative daily_sales values (one-time fix)
+  db.prepare(`
+    UPDATE daily_sales
+    SET totalExpenses = 0
+    WHERE totalExpenses < 0
+  `).run();
+  db.prepare(`
+    UPDATE daily_sales
+    SET totalRevenue = 0
+    WHERE totalRevenue < 0
+  `).run();
 
   // Backfill daily_sales once (if empty)
   const dailySalesCount = db.prepare('SELECT COUNT(*) as count FROM daily_sales').get();

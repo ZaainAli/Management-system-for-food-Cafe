@@ -101,11 +101,12 @@ create table if not exists expenses (
 
 -- Khata (ledger) profiles per branch
 create table if not exists khata_profiles (
-  id        uuid primary key default uuid_generate_v4(),
-  branch_id uuid not null references branches(id) on delete cascade,
-  name      text not null,
-  phone     text,
-  notes     text
+  id           uuid primary key default uuid_generate_v4(),
+  branch_id    uuid not null references branches(id) on delete cascade,
+  name         text not null,
+  phone        text,
+  notes        text,
+  profile_type text not null default 'supplier' check (profile_type in ('supplier','customer'))
 );
 
 -- Khata transactions (due / payment)

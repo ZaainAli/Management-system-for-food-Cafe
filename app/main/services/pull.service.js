@@ -118,17 +118,18 @@ function upsertExpenses(db, rows) {
 
 function upsertKhataProfiles(db, rows) {
   const stmt = db.prepare(`
-    INSERT INTO khata_profiles (id, name, phone, businessDetails, createdAt)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO khata_profiles (id, name, phone, businessDetails, profileType, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name            = excluded.name,
       phone           = excluded.phone,
-      businessDetails = excluded.businessDetails
+      businessDetails = excluded.businessDetails,
+      profileType     = excluded.profileType
   `);
   const now = new Date().toISOString();
   const run = db.transaction(() => {
     for (const r of rows) {
-      stmt.run(r.id, r.name, r.phone || '', r.notes || '', now);
+      stmt.run(r.id, r.name, r.phone || '', r.notes || '', r.profile_type || 'supplier', now);
     }
   });
   run();

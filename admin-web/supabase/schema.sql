@@ -481,3 +481,34 @@ create policy "daily_sales_select" on daily_sales for select
 drop policy if exists "daily_sales_write" on daily_sales;
 create policy "daily_sales_write" on daily_sales for all
   using (is_branch_member(branch_id));
+
+-- ============================================================
+-- DELETED ITEMS (trash bin — auto-expire after 30 days)
+-- ============================================================
+create table if not exists deleted_items (
+  id           uuid primary key default uuid_generate_v4(),
+  branch_id    uuid not null references branches(id) on delete cascade,
+  item_type    text not null,  -- 'khata_transaction' | 'khata_profile' | 'expense'
+  item_id      text not null,
+  item_data    jsonb not null,
+  deleted_by   text not null default 'electron', -- 'electron' | 'web'
+  deleted_at   timestamptz not null default now(),
+  expires_at   timestamptz not null default (now() + interval '30 days')
+);
+
+create index if not exists idx_deleted_items_branch_id  on deleted_items(branch_id);
+create index if not exists idx_deleted_items_expires_at on deleted_items(expires_at);
+
+alter table deleted_items enable row level security;
+
+drop policy if exists "deleted_items_select" on deleted_items;
+create policy "deleted_items_select" on deleted_items for select
+  using (is_branch_member(branch_id));
+
+drop policy if exists "deleted_items_write" on deleted_items;
+create policy "deleted_items_write" on deleted_items for all
+  using (is_branch_member(branch_id));
+
+-- Auto-cleanup: delete expired rows daily (requires pg_cron extension)
+-- select cron.schedule('cleanup-deleted-items', '0 2 * * *',
+--   $$delete from deleted_items where expires_at < now()$$);

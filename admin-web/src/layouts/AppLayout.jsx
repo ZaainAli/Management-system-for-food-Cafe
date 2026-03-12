@@ -13,6 +13,7 @@ import {
   ChefHat,
   Menu,
   X,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 
@@ -25,6 +26,7 @@ const navItems = [
   { path: '/khata',     label: 'Khata',     Icon: BookOpen,        end: false },
   { path: '/staff',     label: 'Staff',     Icon: User2,           end: false },
   { path: '/users',     label: 'Users',     Icon: Users,           end: false },
+  { path: '/trash',     label: 'Trash',     Icon: Trash2,          end: false },
 ];
 
 export default function AppLayout({ children }) {

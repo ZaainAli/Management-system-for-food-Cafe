@@ -185,6 +185,36 @@ async function pushSalaryRecord(record) {
   }, 'id');
 }
 
+async function pushDeletedItem({ branchId, itemType, itemId, itemData }) {
+  const client = getClient();
+  const resolvedBranchId = branchId || getBranchId();
+  console.log(`[trash] pushDeletedItem called — type=${itemType} id=${itemId} branchId=${resolvedBranchId} hasClient=${!!client}`);
+  if (!client || !resolvedBranchId) {
+    console.error(`[trash] skipped — missing client or branchId`);
+    return;
+  }
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const { error } = await client.from('deleted_items').insert({
+      branch_id:  resolvedBranchId,
+      item_type:  itemType,
+      item_id:    String(itemId),
+      item_data:  itemData,
+      deleted_by: 'electron',
+      expires_at: expiresAt,
+    });
+    if (error) {
+      console.error(`[trash] insert failed:`, error.message, error.details, error.hint);
+      logger.error(`[sync] deleted_items insert failed:`, error.message);
+    } else {
+      console.log(`[trash] insert success — type=${itemType} id=${itemId}`);
+    }
+  } catch (err) {
+    console.error(`[trash] insert exception:`, err.message);
+    logger.error(`[sync] deleted_items insert error:`, err.message);
+  }
+}
+
 module.exports = {
   pushDailySales,
   pushExpense,
@@ -198,4 +228,5 @@ module.exports = {
   deleteKhataTransaction,
   pushEmployee,
   pushSalaryRecord,
+  pushDeletedItem,
 };

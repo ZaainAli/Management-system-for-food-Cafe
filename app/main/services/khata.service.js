@@ -199,6 +199,13 @@ async function deleteTransaction(payload) {
     }
   }
 
+  // Snapshot to trash before deleting
+  syncService.pushDeletedItem({
+    itemType: 'khata_transaction',
+    itemId: tx.id,
+    itemData: tx,
+  }).catch(() => {});
+
   khataModel.removeTransaction(id);
   syncService.deleteKhataTransaction(id).catch(() => {});
   return { id };
@@ -209,6 +216,14 @@ async function deleteProfile(payload) {
   if (!id) throw new Error('Khata profile id is required');
   const profile = khataModel.getProfileById(id);
   if (!profile) throw new Error('Khata profile not found');
+
+  // Snapshot profile + all transactions to trash
+  const transactions = khataModel.getTransactionsByKhataId(id);
+  syncService.pushDeletedItem({
+    itemType: 'khata_profile',
+    itemId: profile.id,
+    itemData: { ...profile, transactions },
+  }).catch(() => {});
 
   expenseModel.unlinkKhataBySourceEntity(id, new Date().toISOString());
 

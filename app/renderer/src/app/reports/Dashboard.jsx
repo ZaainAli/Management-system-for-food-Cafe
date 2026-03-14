@@ -38,14 +38,23 @@ export default function Dashboard() {
   const [selYear, setSelYear]   = useState(curYear());
   const [loading, setLoading]   = useState(true);
 
+  const fetchStats = async () => {
+    setLoading(true);
+    const { from, to } = computeRange(period, selMonth, selYear);
+    const res = await window.api.report.getDashboardStats({ from, to });
+    if (res.success) setStats(res.data);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const { from, to } = computeRange(period, selMonth, selYear);
-      const res = await window.api.report.getDashboardStats({ from, to });
-      if (res.success) setStats(res.data);
-      setLoading(false);
-    })();
+    fetchStats();
+  }, [period, selMonth, selYear]);
+
+  // Re-fetch when the startup pull from Supabase completes
+  useEffect(() => {
+    if (!window.api?.sync?.onPulled) return;
+    const cleanup = window.api.sync.onPulled(() => { fetchStats(); });
+    return cleanup;
   }, [period, selMonth, selYear]);
 
   const fmt = (n) => `PKR ${Number(n).toLocaleString()}`;

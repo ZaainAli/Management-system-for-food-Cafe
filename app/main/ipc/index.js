@@ -8,6 +8,7 @@ const { registerWindowRoutes } = require('./window.routes');
 const { registerUserRoutes } = require('./user.routes');
 const { registerKhataRoutes } = require('./khata.routes');
 const { registerSetupRoutes } = require('./setup.routes');
+const { registerSyncRoutes } = require('./sync.routes');
 
 function registerIPCHandlers() {
   registerSetupRoutes();
@@ -20,6 +21,7 @@ function registerIPCHandlers() {
   registerWindowRoutes();
   registerUserRoutes();
   registerKhataRoutes();
+  registerSyncRoutes();
 }
 
 module.exports = { registerIPCHandlers };

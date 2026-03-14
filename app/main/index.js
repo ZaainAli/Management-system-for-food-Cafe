@@ -72,7 +72,12 @@ function createWindow() {
   registerIPCHandlers();
 
   // Pull latest data from Supabase into SQLite (non-blocking)
-  pullAllFromSupabase().catch(() => {});
+  // After pull completes, notify renderer so pages like Dashboard can re-fetch
+  pullAllFromSupabase().then(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sync:pulled');
+    }
+  }).catch(() => {});
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

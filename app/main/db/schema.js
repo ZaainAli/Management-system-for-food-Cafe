@@ -297,6 +297,16 @@ function runMigrations(db) {
     logger.info('Migration: Added hoursWorked column to attendance table');
   }
 
+  const salaryCols = db.prepare("PRAGMA table_info(salary_records)").all().map(c => c.name);
+  if (!salaryCols.includes('type')) {
+    db.prepare("ALTER TABLE salary_records ADD COLUMN type TEXT NOT NULL DEFAULT 'salary'").run();
+    logger.info('Migration: Added type column to salary_records table');
+  }
+  if (!salaryCols.includes('paymentSource')) {
+    db.prepare("ALTER TABLE salary_records ADD COLUMN paymentSource TEXT NOT NULL DEFAULT 'manual'").run();
+    logger.info('Migration: Added paymentSource column to salary_records table');
+  }
+
   const discountedBillCols = db.prepare("PRAGMA table_info(discounted_bills)").all().map(c => c.name);
   if (!discountedBillCols.includes('tableNum')) {
     db.prepare('ALTER TABLE discounted_bills ADD COLUMN tableNum INTEGER').run();

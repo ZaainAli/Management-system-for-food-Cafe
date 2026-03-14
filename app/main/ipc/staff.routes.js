@@ -47,6 +47,22 @@ function registerStaffRoutes() {
     });
   });
 
+  ipcMain.handle('staff:updateSalaryRecord', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager'], async () => {
+        return staffController.updateSalaryRecord(payload);
+      });
+    });
+  });
+
+  ipcMain.handle('staff:deleteSalaryRecord', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager'], async () => {
+        return staffController.deleteSalaryRecord(payload);
+      });
+    });
+  });
+
   // Attendance
   ipcMain.handle('staff:markAttendance', async (_event, attendance) => {
     return requireAuth(async () => {

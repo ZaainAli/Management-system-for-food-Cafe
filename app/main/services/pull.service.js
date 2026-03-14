@@ -338,16 +338,23 @@ function upsertSalaryRecords(db, rows, employeeMap) {
       payDate  = excluded.payDate
   `);
   const now = new Date().toISOString();
+  const cloudIds = rows.map(r => r.id);
   const run = db.transaction(() => {
     for (const r of rows) {
       const empName = employeeMap[r.employee_id] || '';
-      // Supabase stores 'YYYY-MM'; use first day of that month as payDate
       const payDate = r.month ? `${r.month}-01` : now.slice(0, 10);
       stmt.run(r.id, r.employee_id, empName, r.amount, payDate, r.paid_at || now);
     }
+    // Remove local records that no longer exist in Supabase (e.g. deleted remotely or locally)
+    if (cloudIds.length > 0) {
+      const placeholders = cloudIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM salary_records WHERE id NOT IN (${placeholders})`).run(...cloudIds);
+    } else {
+      db.prepare('DELETE FROM salary_records').run();
+    }
   });
   run();
-  logger.info(`[pull] salary_records: upserted ${rows.length} rows`);
+  logger.info(`[pull] salary_records: upserted ${rows.length} rows, removed orphans`);
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────

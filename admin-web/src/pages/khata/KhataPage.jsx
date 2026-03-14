@@ -45,7 +45,7 @@ export default function KhataPage() {
     setTxLoading(true);
     const { data } = await supabase
       .from('khata_transactions')
-      .select('id, type, amount, note, date')
+      .select('id, type, amount, note, date, payment_source, expense_id')
       .eq('profile_id', profileId)
       .order('date', { ascending: true });
     setTransactions(data ?? []);

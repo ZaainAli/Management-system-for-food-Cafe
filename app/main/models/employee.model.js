@@ -71,9 +71,12 @@ function remove(id) {
 function insertSalaryRecord(record) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO salary_records (id, employeeId, employeeName, amount, payDate, notes, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(record.id, record.employeeId, record.employeeName, record.amount, record.payDate, record.notes, record.createdAt);
+    INSERT INTO salary_records (id, employeeId, employeeName, amount, payDate, notes, type, paymentSource, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    record.id, record.employeeId, record.employeeName, record.amount, record.payDate,
+    record.notes, record.type || 'salary', record.paymentSource || 'manual', record.createdAt
+  );
   return record;
 }
 
@@ -179,9 +182,9 @@ function updateSalaryRecord(record) {
   const db = getDb();
   db.prepare(`
     UPDATE salary_records
-    SET amount = ?, payDate = ?, notes = ?, employeeName = ?
+    SET amount = ?, payDate = ?, notes = ?, employeeName = ?, type = ?
     WHERE id = ?
-  `).run(record.amount, record.payDate, record.notes || '', record.employeeName, record.id);
+  `).run(record.amount, record.payDate, record.notes || '', record.employeeName, record.type || 'salary', record.id);
   return record;
 }
 

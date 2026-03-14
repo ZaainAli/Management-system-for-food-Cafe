@@ -45,7 +45,7 @@ export default function AttendancePage() {
     const nextDraft = {};
     employees.forEach((emp) => {
       const record = attendanceByEmployee[emp.id];
-      const status = record?.status || 'absent';
+      const status = record?.status || 'present';
       const hoursWorked = record?.hoursWorked ?? (status === 'present' ? DEFAULT_HOURS : 0);
       nextDraft[emp.id] = { status, hoursWorked };
     });
@@ -55,12 +55,12 @@ export default function AttendancePage() {
   const rows = useMemo(() => {
     return employees.map((emp) => {
       const record = attendanceByEmployee[emp.id];
-      const originalStatus = record?.status || 'absent';
+      const originalStatus = record?.status || 'present';
       const originalHours = record?.hoursWorked ?? (originalStatus === 'present' ? DEFAULT_HOURS : 0);
       const draft = draftByEmployee[emp.id] || { status: originalStatus, hoursWorked: originalHours };
       const normalizedOriginalHours = originalStatus === 'present' ? Number(originalHours) || 0 : 0;
       const normalizedDraftHours = draft.status === 'present' ? Number(draft.hoursWorked) || 0 : 0;
-      const isDirty = draft.status !== originalStatus || normalizedDraftHours !== normalizedOriginalHours;
+      const isDirty = !record || draft.status !== originalStatus || normalizedDraftHours !== normalizedOriginalHours;
       return { emp, draft, isDirty };
     });
   }, [employees, attendanceByEmployee, draftByEmployee]);
@@ -126,6 +126,7 @@ export default function AttendancePage() {
           <input
             type="date"
             value={selectedDate}
+            max={getPkToday()}
             onChange={(e) => {
               setSelectedDate(e.target.value);
               setError('');
@@ -190,7 +191,7 @@ export default function AttendancePage() {
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs ${isDirty ? 'text-amber-400' : 'text-slate-500'}`}>
-                    {isDirty ? 'Unsaved changes' : 'Saved'}
+                    {isDirty ? (attendanceByEmployee[emp.id] ? 'Unsaved changes' : 'Not saved') : 'Saved'}
                   </span>
                 </td>
               </tr>

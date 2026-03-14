@@ -54,7 +54,7 @@ export default function ExpensesPage() {
     const { from, to } = getRange(period, selMonth, selYear, customFrom, customTo);
     const { data } = await supabase
       .from('expenses')
-      .select('id, category, description, amount, date, source_type')
+      .select('id, category, description, amount, date, source_type, source_entity_id, source_record_id')
       .eq('branch_id', branchId)
       .gte('date', from).lte('date', to)
       .order('date', { ascending: false });

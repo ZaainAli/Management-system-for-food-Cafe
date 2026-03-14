@@ -88,7 +88,7 @@ function upsertMenuItems(db, rows) {
 }
 
 function upsertExpenses(db, rows) {
-  const stmt = db.prepare(`
+  const upsert = db.prepare(`
     INSERT INTO expenses (id, description, amount, category, date, sourceType, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -98,22 +98,29 @@ function upsertExpenses(db, rows) {
       date        = excluded.date,
       sourceType  = excluded.sourceType
   `);
-  const now = new Date().toISOString();
+  // Delete local expenses that no longer exist in Supabase
+  const cloudIds = rows.map(r => r.id);
   const run = db.transaction(() => {
     for (const r of rows) {
-      stmt.run(
+      upsert.run(
         r.id,
         r.description || r.category,   // description is required in SQLite
         r.amount,
         r.category,
         r.date,
         r.source_type || 'manual',
-        now
+        r.created_at || new Date().toISOString()
       );
+    }
+    if (cloudIds.length > 0) {
+      const placeholders = cloudIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM expenses WHERE id NOT IN (${placeholders})`).run(...cloudIds);
+    } else {
+      db.prepare('DELETE FROM expenses').run();
     }
   });
   run();
-  logger.info(`[pull] expenses: upserted ${rows.length} rows`);
+  logger.info(`[pull] expenses: upserted ${rows.length} rows, removed orphans`);
 }
 
 function upsertKhataProfiles(db, rows) {

@@ -27,8 +27,8 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       : { category: CATEGORIES[0], description: '', amount: '', date: today(), source_type: 'manual' }
     );
     setError('');
-    setSelectedProfileId('');
-    setSelectedEmployeeId('');
+    setSelectedProfileId(expense?.source_entity_id ?? '');
+    setSelectedEmployeeId(expense?.source_entity_id ?? '');
     setTimeout(() => firstRef.current?.focus(), 50);
   }, [expense]);
 
@@ -82,28 +82,106 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
 
     const result = expense?.id
       ? await supabase.from('expenses').update(payload).eq('id', expense.id)
-      : await supabase.from('expenses').insert(payload);
+      : await supabase.from('expenses').insert(payload).select('id');
 
     if (result.error) { setError(result.error.message); setSaving(false); return; }
 
-    // Side-effects for new expenses only
+    // Update daily_sales total_expenses
     if (!expense?.id) {
+      // New expense: add amount to daily_sales
+      const amt = parseFloat(Number(form.amount).toFixed(2));
+      const { data: ds } = await supabase
+        .from('daily_sales').select('id, total_expenses')
+        .eq('branch_id', branchId).eq('date', form.date).maybeSingle();
+      if (ds) {
+        await supabase.from('daily_sales').update({
+          total_expenses: parseFloat((ds.total_expenses + amt).toFixed(2)),
+        }).eq('id', ds.id);
+      } else {
+        await supabase.from('daily_sales').insert({
+          branch_id: branchId, date: form.date,
+          total_revenue: 0, total_expenses: amt, bill_count: 0,
+        });
+      }
+    } else {
+      // Edit: adjust daily_sales by the delta
+      const oldAmt = parseFloat(Number(expense.amount).toFixed(2));
+      const newAmt = parseFloat(Number(form.amount).toFixed(2));
+      const oldDate = expense.date;
+      const newDate = form.date;
+
+      if (oldDate === newDate) {
+        const delta = newAmt - oldAmt;
+        if (delta !== 0) {
+          const { data: ds } = await supabase
+            .from('daily_sales').select('id, total_expenses')
+            .eq('branch_id', branchId).eq('date', newDate).maybeSingle();
+          if (ds) {
+            await supabase.from('daily_sales').update({
+              total_expenses: parseFloat((ds.total_expenses + delta).toFixed(2)),
+            }).eq('id', ds.id);
+          }
+        }
+      } else {
+        // Date changed: subtract from old date, add to new date
+        const { data: oldDs } = await supabase
+          .from('daily_sales').select('id, total_expenses')
+          .eq('branch_id', branchId).eq('date', oldDate).maybeSingle();
+        if (oldDs) {
+          await supabase.from('daily_sales').update({
+            total_expenses: parseFloat((oldDs.total_expenses - oldAmt).toFixed(2)),
+          }).eq('id', oldDs.id);
+        }
+        const { data: newDs } = await supabase
+          .from('daily_sales').select('id, total_expenses')
+          .eq('branch_id', branchId).eq('date', newDate).maybeSingle();
+        if (newDs) {
+          await supabase.from('daily_sales').update({
+            total_expenses: parseFloat((newDs.total_expenses + newAmt).toFixed(2)),
+          }).eq('id', newDs.id);
+        } else {
+          await supabase.from('daily_sales').insert({
+            branch_id: branchId, date: newDate,
+            total_revenue: 0, total_expenses: newAmt, bill_count: 0,
+          });
+        }
+      }
+    }
+
+    // Side-effects: create or update linked records
+    if (!expense?.id) {
+      // New expense
       if (form.source_type === 'khata' && selectedProfileId) {
-        await supabase.from('khata_transactions').insert({
+        const { data: txData } = await supabase.from('khata_transactions').insert({
           profile_id: selectedProfileId,
           branch_id:  branchId,
           type:       'payment',
           amount:     parseFloat(Number(form.amount).toFixed(2)),
           note:       form.description.trim() || form.category.trim(),
           date:       form.date,
-        });
+        }).select('id').single();
+        if (txData?.id && result.data?.[0]?.id) {
+          await supabase.from('expenses').update({
+            source_entity_id: selectedProfileId,
+            source_record_id: txData.id,
+          }).eq('id', result.data[0].id);
+        }
       } else if (form.source_type === 'salary' && selectedEmployeeId) {
         await supabase.from('salary_records').insert({
           employee_id: selectedEmployeeId,
           amount:      parseFloat(Number(form.amount).toFixed(2)),
-          month:       form.date.slice(0, 7),   // YYYY-MM
+          month:       form.date.slice(0, 7),
           paid_at:     new Date().toISOString(),
         });
+      }
+    } else {
+      // Edit existing expense — update the linked khata transaction if present
+      if (expense.source_type === 'khata' && expense.source_record_id) {
+        await supabase.from('khata_transactions').update({
+          amount: parseFloat(Number(form.amount).toFixed(2)),
+          note:   form.description.trim() || form.category.trim(),
+          date:   form.date,
+        }).eq('id', expense.source_record_id);
       }
     }
 

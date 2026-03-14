@@ -7,12 +7,12 @@ function findAll(filters = {}) {
   const conditions = [];
 
   if (filters.from) {
-    conditions.push('(date >= ? OR createdAt >= ?)');
-    params.push(filters.from, filters.from);
+    conditions.push('date >= ?');
+    params.push(filters.from);
   }
   if (filters.to) {
-    conditions.push('(date <= ? OR createdAt <= ?)');
-    params.push(filters.to, filters.to);
+    conditions.push('date <= ?');
+    params.push(filters.to);
   }
   if (filters.category) {
     conditions.push('category = ?');
@@ -40,12 +40,12 @@ function getCategoryTotals(filters = {}) {
   const conditions = [];
 
   if (filters.from) {
-    conditions.push('(date >= ? OR createdAt >= ?)');
-    params.push(filters.from, filters.from);
+    conditions.push('date >= ?');
+    params.push(filters.from);
   }
   if (filters.to) {
-    conditions.push('(date <= ? OR createdAt <= ?)');
-    params.push(filters.to, filters.to);
+    conditions.push('date <= ?');
+    params.push(filters.to);
   }
 
   if (conditions.length > 0) {
@@ -68,12 +68,12 @@ function getDailyTotals(filters = {}) {
   const conditions = [];
 
   if (filters.from) {
-    conditions.push('(date >= ? OR createdAt >= ?)');
-    params.push(filters.from, filters.from);
+    conditions.push('date >= ?');
+    params.push(filters.from);
   }
   if (filters.to) {
-    conditions.push('(date <= ? OR createdAt <= ?)');
-    params.push(filters.to, filters.to);
+    conditions.push('date <= ?');
+    params.push(filters.to);
   }
 
   if (conditions.length > 0) {
@@ -91,12 +91,12 @@ function getTotalAmount(filters = {}) {
   const conditions = [];
 
   if (filters.from) {
-    conditions.push('(date >= ? OR createdAt >= ?)');
-    params.push(filters.from, filters.from);
+    conditions.push('date >= ?');
+    params.push(filters.from);
   }
   if (filters.to) {
-    conditions.push('(date <= ? OR createdAt <= ?)');
-    params.push(filters.to, filters.to);
+    conditions.push('date <= ?');
+    params.push(filters.to);
   }
 
   if (conditions.length > 0) {

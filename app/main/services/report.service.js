@@ -49,10 +49,11 @@ function getDateRange(period = 'today') {
 async function getDashboardStats(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'today');
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
+  const expTotals = expenseModel.getTotalAmount({ from: fromDate, to: toDate });
   const employees = await employeeModel.findAll({});
 
   const totalRevenue = totals.totalRevenue || 0;
-  const totalExpenses = totals.totalExpenses || 0;
+  const totalExpenses = expTotals.totalExpenses || 0;
   const totalBills = totals.totalBills || 0;
   const totalEmployees = employees.length;
   const averageBill = totalBills > 0 ? totalRevenue / totalBills : 0;
@@ -138,8 +139,9 @@ async function getStaffReport(filters = {}) {
 async function getProfitLoss(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
+  const expTotals = expenseModel.getTotalAmount({ from: fromDate, to: toDate });
   const totalRevenue = totals.totalRevenue || 0;
-  const totalExpenses = totals.totalExpenses || 0;
+  const totalExpenses = expTotals.totalExpenses || 0;
 
   return {
     totalRevenue: parseFloat(totalRevenue.toFixed(2)),

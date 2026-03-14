@@ -76,6 +76,8 @@ async function add(expense) {
       amount,
       payDate: date,
       notes: notes || expense.description,
+      type: 'salary',
+      paymentSource: 'today_sale',
       createdAt: new Date().toISOString(),
     };
     employeeModel.insertSalaryRecord(salaryRecord);

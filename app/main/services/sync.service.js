@@ -187,6 +187,10 @@ async function pushSalaryRecord(record) {
   }, 'id');
 }
 
+async function deleteSalaryRecord(id) {
+  await del('salary_records', id);
+}
+
 async function pushDeletedItem({ branchId, itemType, itemId, itemData }) {
   const client = getClient();
   const resolvedBranchId = branchId || getBranchId();
@@ -230,5 +234,6 @@ module.exports = {
   deleteKhataTransaction,
   pushEmployee,
   pushSalaryRecord,
+  deleteSalaryRecord,
   pushDeletedItem,
 };

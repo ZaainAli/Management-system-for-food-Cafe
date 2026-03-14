@@ -127,6 +127,7 @@ async function deleteSalaryRecord(id) {
   }
 
   employeeModel.removeSalaryRecord(id);
+  syncService.deleteSalaryRecord(id).catch(() => {});
 }
 
 module.exports = { addSalaryRecord, getSalaryHistory, updateSalaryRecord, deleteSalaryRecord };

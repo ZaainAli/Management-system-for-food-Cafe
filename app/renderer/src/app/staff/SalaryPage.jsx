@@ -21,6 +21,12 @@ function isDateInMonth(dateString, monthValue) {
   return typeof dateString === 'string' && dateString.slice(0, 7) === monthValue;
 }
 
+function getPrevMonth(monthValue) {
+  const [year, month] = monthValue.split('-').map(Number);
+  if (month === 1) return `${year - 1}-12`;
+  return `${year}-${String(month - 1).padStart(2, '0')}`;
+}
+
 const TYPE_LABELS = { salary: 'Salary', bonus: 'Bonus', advance: 'Advance' };
 const TYPE_COLORS = { salary: 'text-blue-400', bonus: 'text-emerald-400', advance: 'text-amber-400' };
 
@@ -42,6 +48,9 @@ export default function SalaryPage() {
     from: '', to: '', presentDays: 0, absentDays: 0,
     totalHours: 0, hourlyRate: 0, calculatedSalary: 0,
   });
+  // Previous month due (remaining owed to employee from last month)
+  const [prevMonthCalcSalary, setPrevMonthCalcSalary] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -67,6 +76,18 @@ export default function SalaryPage() {
     const hourlyRate = round2((Number(employee.monthlySalary) || 0) / 30 / 12);
     const calculatedSalary = round2(hourlyRate * totalHours);
     setAttendanceSummary({ from: range.from, to: range.to, presentDays, absentDays, totalHours, hourlyRate, calculatedSalary });
+    return calculatedSalary;
+  };
+
+  const refreshPrevMonthSummary = async (employee, currentMonth) => {
+    const prev = getPrevMonth(currentMonth);
+    const range = getMonthRange(prev);
+    if (!employee || !range) { setPrevMonthCalcSalary(0); return; }
+    const res = await window.api.staff.getAttendance({ employeeId: employee.id, from: range.from, to: range.to });
+    const records = res.success ? (res.data || []) : [];
+    const totalHours = round2(records.reduce((sum, r) => sum + (Number(r.hoursWorked) || 0), 0));
+    const hourlyRate = round2((Number(employee.monthlySalary) || 0) / 30 / 12);
+    setPrevMonthCalcSalary(round2(hourlyRate * totalHours));
   };
 
   const refreshHistory = async (employee) => {
@@ -83,7 +104,11 @@ export default function SalaryPage() {
         setEmp(found || null);
         if (found) {
           const now = toMonthValue(getPkToday());
-          await Promise.all([refreshHistory(found), refreshAttendanceSummary(found, now)]);
+          await Promise.all([
+            refreshHistory(found),
+            refreshAttendanceSummary(found, now),
+            refreshPrevMonthSummary(found, now),
+          ]);
         }
       }
       setLoading(false);
@@ -92,7 +117,12 @@ export default function SalaryPage() {
 
   const onSalaryMonthChange = async (monthValue) => {
     setSalaryMonth(monthValue);
-    if (emp) await refreshAttendanceSummary(emp, monthValue);
+    if (emp) {
+      await Promise.all([
+        refreshAttendanceSummary(emp, monthValue),
+        refreshPrevMonthSummary(emp, monthValue),
+      ]);
+    }
   };
 
   const useCalculatedMonthSalary = () => {
@@ -164,17 +194,59 @@ export default function SalaryPage() {
     setDeleteLoading(false);
   };
 
-  const salaryPaidSummary = useMemo(() => {
-    const monthPaid = round2(
-      salaryHistory
-        .filter((rec) => isDateInMonth(rec.payDate, salaryMonth))
-        .reduce((sum, rec) => sum + (Number(rec.amount) || 0), 0)
+  // ── Summary calculations ─────────────────────────────────────
+  const monthlySummary = useMemo(() => {
+    const monthRecords = salaryHistory.filter((rec) => isDateInMonth(rec.payDate, salaryMonth));
+
+    // Salary paid this month (only 'salary' type — bonus is excluded)
+    const salaryPaid = round2(
+      monthRecords.filter(r => r.type === 'salary' || !r.type)
+        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
     );
-    const monthSalary = Number(attendanceSummary.calculatedSalary) || 0;
-    const advance = round2(Math.max(0, monthPaid - monthSalary));
-    const remaining = round2(Math.max(0, monthSalary - monthPaid));
-    return { monthPaid, advance, remaining };
-  }, [salaryHistory, salaryMonth, attendanceSummary.calculatedSalary]);
+
+    // Total advance given this month
+    const advancePaid = round2(
+      monthRecords.filter(r => r.type === 'advance')
+        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    );
+
+    // Total advance given all time (so employee knows their full advance debt)
+    const totalAdvanceAllTime = round2(
+      salaryHistory.filter(r => r.type === 'advance')
+        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    );
+
+    // Total due this month = salary paid + advance (bonus excluded)
+    const totalDue = round2(salaryPaid + advancePaid);
+
+    // Last month due: what we still owed employee last month
+    const prevMonth = getPrevMonth(salaryMonth);
+    const prevMonthRecords = salaryHistory.filter((rec) => isDateInMonth(rec.payDate, prevMonth));
+    const prevMonthSalaryPaid = round2(
+      prevMonthRecords.filter(r => r.type === 'salary' || !r.type)
+        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    );
+    const prevMonthAdvancePaid = round2(
+      prevMonthRecords.filter(r => r.type === 'advance')
+        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    );
+    const prevMonthTotalDue = round2(prevMonthSalaryPaid + prevMonthAdvancePaid);
+    // lastMonthBalance: positive = advance given last month (they owe us), negative = we underpaid last month (we owe them)
+    const lastMonthBalance = round2(prevMonthTotalDue - prevMonthCalcSalary);
+
+    // Remaining due = (lastMonthBalance + totalDue) - working hours salary
+    // Positive = employee got advance overall (was overpaid)
+    // Negative = employee is underpaid (we owe them)
+    const earned = Number(attendanceSummary.calculatedSalary) || 0;
+    const remainingDue = round2((lastMonthBalance + totalDue) - earned);
+
+    return { salaryPaid, advancePaid, totalAdvanceAllTime, totalDue, lastMonthBalance, remainingDue, earned };
+  }, [salaryHistory, salaryMonth, attendanceSummary.calculatedSalary, prevMonthCalcSalary]);
+
+  // Month's history for display (filter to selected month only)
+  const monthHistory = useMemo(() => {
+    return salaryHistory.filter((rec) => isDateInMonth(rec.payDate, salaryMonth));
+  }, [salaryHistory, salaryMonth]);
 
   if (loading) return <div className="text-slate-400">Loading...</div>;
   if (!emp) return (
@@ -183,6 +255,8 @@ export default function SalaryPage() {
       <button onClick={() => navigate('/staff')} className="btn-secondary text-sm">← Back to Staff</button>
     </div>
   );
+
+  const { salaryPaid, advancePaid, totalAdvanceAllTime, totalDue, lastMonthBalance, remainingDue, earned } = monthlySummary;
 
   return (
     <div>
@@ -209,6 +283,7 @@ export default function SalaryPage() {
               <h2 className="text-white font-semibold text-sm">Attendance Summary</h2>
               <input type="month" value={salaryMonth} onChange={(e) => onSalaryMonthChange(e.target.value)} className="input-field py-1.5 text-xs w-40" />
             </div>
+
             <div className="grid grid-cols-2 gap-2 text-xs mb-3">
               <div className="bg-slate-700/40 rounded p-3">
                 <p className="text-slate-500 mb-1">Present Days</p>
@@ -227,22 +302,66 @@ export default function SalaryPage() {
                 <p className="text-white font-semibold text-base">PKR {attendanceSummary.hourlyRate.toLocaleString()}</p>
               </div>
             </div>
+
             <div className="bg-slate-700/40 rounded p-3 mb-3">
               <p className="text-slate-500 text-xs mb-1">Salary from attendance ({attendanceSummary.from} to {attendanceSummary.to})</p>
-              <p className="text-green-400 font-bold text-lg">PKR {attendanceSummary.calculatedSalary.toLocaleString()}</p>
+              <p className="text-green-400 font-bold text-lg">PKR {earned.toLocaleString()}</p>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
+
+            {/* Last month carry-over banner */}
+            {lastMonthBalance !== 0 && (
+              <div className={`rounded p-2.5 mb-3 flex items-center justify-between ${lastMonthBalance > 0 ? 'bg-amber-400/10 border border-amber-400/30' : 'bg-red-900/20 border border-red-700/30'}`}>
+                <p className={`text-xs ${lastMonthBalance > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {lastMonthBalance > 0 ? 'Advance carried from last month' : 'Pending underpayment from last month'}
+                </p>
+                <p className={`text-xs font-semibold ${lastMonthBalance > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                  PKR {Math.abs(lastMonthBalance).toLocaleString()}
+                </p>
+              </div>
+            )}
+
+            {/* 4-column payment summary */}
+            <div className="grid grid-cols-2 gap-2 text-xs mb-2">
               <div className="bg-slate-700/40 rounded p-3">
                 <p className="text-slate-500 mb-1">Salary Paid</p>
-                <p className="text-green-400 font-semibold">PKR {salaryPaidSummary.monthPaid.toLocaleString()}</p>
+                <p className="text-green-400 font-semibold">PKR {salaryPaid.toLocaleString()}</p>
               </div>
               <div className="bg-slate-700/40 rounded p-3">
                 <p className="text-slate-500 mb-1">Advance</p>
-                <p className="text-amber-400 font-semibold">PKR {salaryPaidSummary.advance.toLocaleString()}</p>
+                <p className="text-amber-400 font-semibold">PKR {advancePaid.toLocaleString()}</p>
+                {totalAdvanceAllTime > advancePaid && (
+                  <p className="text-slate-600 text-xs mt-0.5">Total: PKR {totalAdvanceAllTime.toLocaleString()}</p>
+                )}
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-slate-700/40 rounded p-3">
-                <p className="text-slate-500 mb-1">Remaining</p>
-                <p className="text-white font-semibold">PKR {salaryPaidSummary.remaining.toLocaleString()}</p>
+                <p className="text-slate-500 mb-1 text-xs">Total Due</p>
+                <p className="text-white font-semibold">PKR {totalDue.toLocaleString()}</p>
+                <p className="text-slate-600 text-xs mt-0.5">
+                  {lastMonthBalance !== 0
+                    ? `${lastMonthBalance > 0 ? '+' : ''}${lastMonthBalance.toLocaleString()} last mo.`
+                    : 'Salary + Advance'}
+                </p>
+              </div>
+              {/* Remaining Due — positive = advance given, negative = underpaid */}
+              <div className={`rounded p-3 ${remainingDue > 0 ? 'bg-amber-900/30 border border-amber-700/40' : remainingDue < 0 ? 'bg-red-900/30 border border-red-700/40' : 'bg-slate-700/40'}`}>
+                <p className="text-slate-500 mb-1 text-xs">
+                  {remainingDue > 0 ? 'Employee Got Advance' : remainingDue < 0 ? 'Underpaid' : 'Settled'}
+                </p>
+                <p className={`font-semibold text-sm ${remainingDue > 0 ? 'text-amber-400' : remainingDue < 0 ? 'text-red-400' : 'text-white'}`}>
+                  PKR {Math.abs(remainingDue).toLocaleString()}
+                </p>
+                <div className="text-slate-500 text-xs mt-1 space-y-0.5">
+                  {lastMonthBalance !== 0 && (
+                    <p>{lastMonthBalance > 0 ? 'Adv. carried' : 'Pending'}: PKR {Math.abs(lastMonthBalance).toLocaleString()}</p>
+                  )}
+                  <p>Paid: PKR {totalDue.toLocaleString()} &nbsp;|&nbsp; Earned: PKR {earned.toLocaleString()}</p>
+                  <p className="text-slate-600">
+                    ({lastMonthBalance !== 0 ? `${lastMonthBalance > 0 ? '+' : ''}${lastMonthBalance.toLocaleString()} + ` : ''}
+                    {totalDue.toLocaleString()} − {earned.toLocaleString()} = {remainingDue > 0 ? '+' : ''}{remainingDue.toLocaleString()})
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -256,7 +375,7 @@ export default function SalaryPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label text-xs">Type</label>
-                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
+                  <select value={form.type} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, type: v })); }} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
                     <option value="salary">Salary</option>
                     <option value="bonus">Bonus</option>
                     <option value="advance">Advance</option>
@@ -264,7 +383,7 @@ export default function SalaryPage() {
                 </div>
                 <div>
                   <label className="label text-xs">Payment Source</label>
-                  <select value={form.paymentSource} onChange={(e) => setForm({ ...form, paymentSource: e.target.value })} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
+                  <select value={form.paymentSource} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, paymentSource: v })); }} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
                     <option value="manual">Manual</option>
                     <option value="today_sale">From Today's Sale</option>
                   </select>
@@ -280,31 +399,40 @@ export default function SalaryPage() {
               </button>
               <div>
                 <label className="label text-xs">Amount</label>
-                <input type="number" disabled={!emp.isActive} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="input-field disabled:opacity-50" />
+                <input
+                  type="number"
+                  disabled={!emp.isActive}
+                  value={form.amount}
+                  onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, amount: v })); }}
+                  className="input-field disabled:opacity-50"
+                />
               </div>
               <div>
                 <label className="label text-xs">Pay Date</label>
-                <input type="date" disabled={!emp.isActive} value={form.payDate} onChange={(e) => setForm({ ...form, payDate: e.target.value })} className="input-field disabled:opacity-50" />
+                <input type="date" disabled={!emp.isActive} value={form.payDate} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, payDate: v })); }} className="input-field disabled:opacity-50" />
               </div>
               <div>
                 <label className="label text-xs">Notes</label>
-                <input disabled={!emp.isActive} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input-field disabled:opacity-50" />
+                <input disabled={!emp.isActive} value={form.notes} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, notes: v })); }} className="input-field disabled:opacity-50" />
               </div>
               <button onClick={recordPayment} disabled={!emp.isActive || saving || !form.amount} className="btn-primary w-full disabled:opacity-50">
-                {saving ? 'Recording...' : 'Record Payment'}
+                {saving ? 'Recording...' : `Record Payment${form.amount ? ` — PKR ${Number(form.amount).toLocaleString()}` : ''}`}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Right: Payment History */}
+        {/* Right: Payment History (current month only) */}
         <div className="card">
-          <h2 className="text-white font-semibold text-sm mb-3">Payment History</h2>
-          {salaryHistory.length === 0 ? (
-            <p className="text-slate-600 text-sm text-center py-6">No payment records</p>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-white font-semibold text-sm">Payment History</h2>
+            <span className="text-slate-500 text-xs">{salaryMonth}</span>
+          </div>
+          {monthHistory.length === 0 ? (
+            <p className="text-slate-600 text-sm text-center py-6">No payments this month</p>
           ) : (
             <div className="space-y-2">
-              {salaryHistory.map((rec) => (
+              {monthHistory.map((rec) => (
                 <div key={rec.id} className="bg-slate-700/30 rounded px-3 py-2.5">
                   <div className="flex justify-between items-start">
                     <div>
@@ -313,14 +441,16 @@ export default function SalaryPage() {
                         <span className={`text-xs font-medium ${TYPE_COLORS[rec.type] || 'text-blue-400'}`}>
                           {TYPE_LABELS[rec.type] || 'Salary'}
                         </span>
-                        {rec.paymentSource === 'today_sale' && (
-                          <span className="text-xs text-slate-400 bg-slate-600/50 rounded px-1.5 py-0.5">From Sale</span>
+                        {rec.paymentSource === 'today_sale' ? (
+                          <span className="text-xs text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded px-1.5 py-0.5">From Sale</span>
+                        ) : (
+                          <span className="text-xs text-purple-400 bg-purple-400/10 border border-purple-400/20 rounded px-1.5 py-0.5">Net Profit</span>
                         )}
                       </div>
                       <p className="text-slate-500 text-xs">{rec.payDate}{rec.notes && ` — ${rec.notes}`}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-green-400 text-xs">✓ Paid</span>
+                      <span className="text-green-400 text-xs">✓</span>
                       {canEditDelete && (
                         <>
                           <button onClick={() => openEdit(rec)} className="text-xs text-slate-400 hover:text-white">Edit</button>
@@ -382,14 +512,14 @@ export default function SalaryPage() {
         </div>
       )}
 
-      {/* Delete Confirm Modal */}
+      {/* Delete Confirm */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="card w-72">
             <h2 className="text-white font-semibold mb-2">Delete Payment?</h2>
             <p className="text-slate-400 text-sm mb-1">This will permanently delete the record.</p>
             {salaryHistory.find((r) => r.id === deleteId)?.paymentSource === 'today_sale' && (
-              <p className="text-amber-400 text-xs mb-3">The linked expense entry will also be removed.</p>
+              <p className="text-amber-400 text-xs mt-1">The linked expense entry will also be removed.</p>
             )}
             <div className="flex gap-2 mt-4">
               <button onClick={confirmDelete} disabled={deleteLoading} className="btn-primary flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50">

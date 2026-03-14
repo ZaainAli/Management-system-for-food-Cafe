@@ -100,8 +100,7 @@ export default function KhataPage() {
     if (res.success) {
       setShowAddTxModal(false);
       setAddTxForm(emptyAddTxForm);
-      await fetchProfiles();
-      await fetchActive(activeId);
+      await Promise.all([fetchProfiles(), fetchActive(activeId)]);
     } else {
       setError(res.error || 'Failed to add transaction');
     }
@@ -135,8 +134,7 @@ export default function KhataPage() {
     if (res.success) {
       setShowTxModal(false);
       setTxForm(emptyTxForm);
-      await fetchProfiles();
-      await fetchActive(activeId);
+      await Promise.all([fetchProfiles(), fetchActive(activeId)]);
     } else {
       setError(res.error || 'Failed to update transaction');
     }
@@ -147,8 +145,7 @@ export default function KhataPage() {
     setError(''); setMessage('');
     const res = await window.api.khata.deleteTransaction({ id: txId });
     if (res.success) {
-      await fetchProfiles();
-      await fetchActive(activeId);
+      await Promise.all([fetchProfiles(), fetchActive(activeId)]);
     } else {
       setError(res.error || 'Failed to delete transaction');
     }
@@ -160,8 +157,7 @@ export default function KhataPage() {
     setError(''); setMessage('');
     const res = await window.api.khata.deleteProfile({ id: activeProfile.id });
     if (res.success) {
-      await fetchProfiles();
-      await fetchActive(activeId);
+      await Promise.all([fetchProfiles(), fetchActive(activeId)]);
     } else {
       setError(res.error || 'Failed to delete profile');
     }
@@ -174,8 +170,7 @@ export default function KhataPage() {
     const res = await window.api.khata.clearTransactions({ khataId: activeProfile.id });
     if (res.success) {
       setMessage('All transactions cleared.');
-      await fetchProfiles();
-      await fetchActive(activeId);
+      await Promise.all([fetchProfiles(), fetchActive(activeId)]);
     } else {
       setError(res.error || 'Failed to clear transactions');
     }
@@ -201,6 +196,18 @@ export default function KhataPage() {
       while (s.length > 0 && doc.getTextWidth(s + '...') > maxW) s = s.slice(0, -1);
       return s + '...';
     };
+    const drawTypeTag = (x, y, profileType) => {
+      const isCustomer = profileType === 'customer';
+      const label = isCustomer ? 'Customer' : 'Supplier';
+      const bg    = isCustomer ? '#064e3b' : '#1e3a5f';
+      const fg    = isCustomer ? '#6ee7b7' : '#93c5fd';
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
+      const tw = doc.getTextWidth(label);
+      doc.setFillColor(bg);
+      doc.roundedRect(x, y, tw + 8, 11, 5, 5, 'F');
+      doc.setTextColor(fg);
+      doc.text(label, x + 4, y + 2.5, { baseline: 'top' });
+    };
 
     // page background
     fill(0, 0, PW, PH, '#f1f5f9');
@@ -212,6 +219,9 @@ export default function KhataPage() {
     fill(PX, 30, CW, 90, '#1e293b');
     t(branchName, PX + 16, 44, 18, '#ffffff', true);
     t(activeProfile.name, PX + 16, 66, 9, '#94a3b8');
+    // profile type tag in header
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    drawTypeTag(PX + 16 + doc.getTextWidth(activeProfile.name) + 6, 66, activeProfile.profileType);
     doc.setFillColor('#334155');
     doc.roundedRect(PX + 16, 86, 170, 20, 10, 10, 'F');
     t('Khata Transactions', PX + 24, 92, 8, '#94a3b8');
@@ -242,6 +252,11 @@ export default function KhataPage() {
       if (j > 0) { doc.setDrawColor('#e2e8f0'); doc.setLineWidth(0.5); doc.line(cx, y + 6, cx, y + INFO_H - 6); }
       t(c.label.toUpperCase(), cx + 8, y + 7, 7, '#94a3b8', true);
       t(truncate(String(c.value), infoW - 16), cx + 8, y + 20, 12, '#1e293b', true);
+      if (j === 0) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+        const nameW = doc.getTextWidth(truncate(String(c.value), infoW - 16));
+        drawTypeTag(cx + 8 + nameW + 5, y + 20, activeProfile.profileType);
+      }
     });
     hline(y + INFO_H);
     y += INFO_H;
@@ -275,7 +290,7 @@ export default function KhataPage() {
     const HEADERS = ['Date', 'Due', 'Payment', 'Note', 'Balance'];
     const COL_HDR_H = 22, ROW_PAD = 5, LINE_H = 10;
     const colWidths = [65, 70, 70, CW - 65 - 70 - 70 - 75, 75];
-    const colX = colWidths.reduce((acc, w, i) => { acc.push(i === 0 ? PX : acc[i - 1] + colWidths[i - 1]); return acc; }, []);
+    const colX = colWidths.reduce((acc, _w, i) => { acc.push(i === 0 ? PX : acc[i - 1] + colWidths[i - 1]); return acc; }, []);
 
     const drawHeaders = (atY) => {
       fill(PX, atY, CW, COL_HDR_H, '#f8fafc');

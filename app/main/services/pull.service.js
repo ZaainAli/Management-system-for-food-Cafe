@@ -123,6 +123,27 @@ function upsertExpenses(db, rows) {
   logger.info(`[pull] expenses: upserted ${rows.length} rows, removed orphans`);
 }
 
+/**
+ * Remove the linked bill and adjust daily_sales when a customer payment
+ * transaction is deleted (either directly or via profile deletion).
+ */
+function _removeCustomerPaymentSideEffects(db, tx, profileName, now) {
+  const dateStr = tx.date.replace(/-/g, '_');
+  const billId  = `${dateStr}-khata-${profileName}-${tx.id}`;
+  const bill    = db.prepare('SELECT * FROM bills WHERE id = ?').get(billId);
+  if (bill && bill.status !== 'cancelled') {
+    db.prepare('DELETE FROM bill_items WHERE billId = ?').run(billId);
+    db.prepare('DELETE FROM bills WHERE id = ?').run(billId);
+    db.prepare(`
+      UPDATE daily_sales
+      SET totalRevenue = MAX(totalRevenue - ?, 0),
+          totalBills   = MAX(totalBills - 1, 0),
+          updatedAt    = ?
+      WHERE date = ?
+    `).run(Number(tx.amount), now, tx.date);
+  }
+}
+
 function upsertKhataProfiles(db, rows) {
   const stmt = db.prepare(`
     INSERT INTO khata_profiles (id, name, phone, businessDetails, profileType, createdAt)
@@ -133,10 +154,32 @@ function upsertKhataProfiles(db, rows) {
       businessDetails = excluded.businessDetails,
       profileType     = excluded.profileType
   `);
-  const now = new Date().toISOString();
+  const now     = new Date().toISOString();
+  const cloudIds = rows.map(r => r.id);
+
   const run = db.transaction(() => {
+    // Upsert cloud profiles
     for (const r of rows) {
       stmt.run(r.id, r.name, r.phone || '', r.notes || '', r.profile_type || 'supplier', now);
+    }
+
+    // Delete local profiles that no longer exist in cloud
+    const localProfiles = db.prepare('SELECT * FROM khata_profiles').all();
+    for (const profile of localProfiles) {
+      if (cloudIds.includes(profile.id)) continue;
+
+      // Clean up all customer payment transactions' bills + daily_sales
+      if (profile.profileType === 'customer') {
+        const txs = db.prepare(
+          "SELECT * FROM khata_transactions WHERE khataId = ? AND type = 'payment'"
+        ).all(profile.id);
+        for (const tx of txs) {
+          _removeCustomerPaymentSideEffects(db, tx, profile.name, now);
+        }
+      }
+
+      db.prepare('DELETE FROM khata_transactions WHERE khataId = ?').run(profile.id);
+      db.prepare('DELETE FROM khata_profiles WHERE id = ?').run(profile.id);
     }
   });
   run();
@@ -154,11 +197,103 @@ function upsertKhataTransactions(db, rows) {
       date   = excluded.date
   `);
   const now = new Date().toISOString();
+
+  const insertBill = db.prepare(`
+    INSERT OR IGNORE INTO bills
+      (id, tableId, customerName, subtotal, tax, discount, total, paymentMethod, status, createdAt)
+    VALUES (?, NULL, ?, ?, 0, 0, ?, 'cash', 'completed', ?)
+  `);
+
   const run = db.transaction(() => {
     for (const r of rows) {
+      const existing = db.prepare('SELECT * FROM khata_transactions WHERE id = ?').get(r.id);
+      const profile  = db.prepare('SELECT * FROM khata_profiles WHERE id = ?').get(r.profile_id);
+
+      if (r.type === 'payment' && profile?.profileType === 'customer') {
+        const newAmount = Number(r.amount);
+        const newDate   = r.date;
+        const dateStr   = newDate.replace(/-/g, '_');
+        const billId    = `${dateStr}-khata-${profile.name}-${r.id}`;
+
+        if (!existing) {
+          // NEW transaction from web — create bill + daily_sales entry
+          insertBill.run(billId, profile.name, newAmount, newAmount, now);
+          db.prepare(`
+            INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+            VALUES (?, ?, 1, 0, ?)
+            ON CONFLICT(date) DO UPDATE SET
+              totalRevenue = totalRevenue + ?,
+              totalBills   = totalBills + 1,
+              updatedAt    = ?
+          `).run(newDate, newAmount, now, newAmount, now);
+
+        } else {
+          // EXISTING transaction edited on web — reconcile bill + daily_sales
+          const oldAmount = Number(existing.amount);
+          const oldDate   = existing.date;
+          const amountChanged = oldAmount !== newAmount;
+          const dateChanged   = oldDate !== newDate;
+
+          if (amountChanged || dateChanged) {
+            const oldDateStr = oldDate.replace(/-/g, '_');
+            const oldBillId  = `${oldDateStr}-khata-${profile.name}-${existing.id}`;
+            const bill = db.prepare('SELECT * FROM bills WHERE id = ?').get(oldBillId);
+
+            if (bill && bill.status !== 'cancelled') {
+              if (amountChanged) {
+                db.prepare('UPDATE bills SET subtotal = ?, total = ? WHERE id = ?')
+                  .run(newAmount, newAmount, oldBillId);
+              }
+
+              const effectiveNewAmount = amountChanged ? newAmount : oldAmount;
+
+              if (dateChanged) {
+                db.prepare(`
+                  UPDATE daily_sales
+                  SET totalRevenue = MAX(totalRevenue - ?, 0),
+                      totalBills   = MAX(totalBills - 1, 0),
+                      updatedAt    = ?
+                  WHERE date = ?
+                `).run(oldAmount, now, oldDate);
+                db.prepare(`
+                  INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+                  VALUES (?, ?, 1, 0, ?)
+                  ON CONFLICT(date) DO UPDATE SET
+                    totalRevenue = totalRevenue + ?,
+                    totalBills   = totalBills + 1,
+                    updatedAt    = ?
+                `).run(newDate, effectiveNewAmount, now, effectiveNewAmount, now);
+              } else if (amountChanged) {
+                db.prepare(`
+                  UPDATE daily_sales
+                  SET totalRevenue = MAX(totalRevenue + ?, 0),
+                      updatedAt    = ?
+                  WHERE date = ?
+                `).run(newAmount - oldAmount, now, oldDate);
+              }
+            }
+          }
+        }
+      }
+
       stmt.run(r.id, r.profile_id, r.type, r.amount, r.note || '', r.date, now);
     }
+
+    // Delete local transactions that no longer exist in cloud
+    const cloudTxIds = rows.map(r => r.id);
+    const localTxs   = db.prepare('SELECT * FROM khata_transactions').all();
+    for (const tx of localTxs) {
+      if (cloudTxIds.includes(tx.id)) continue;
+      if (tx.type === 'payment') {
+        const profile = db.prepare('SELECT * FROM khata_profiles WHERE id = ?').get(tx.khataId);
+        if (profile?.profileType === 'customer') {
+          _removeCustomerPaymentSideEffects(db, tx, profile.name, now);
+        }
+      }
+      db.prepare('DELETE FROM khata_transactions WHERE id = ?').run(tx.id);
+    }
   });
+
   run();
   logger.info(`[pull] khata_transactions: upserted ${rows.length} rows`);
 }

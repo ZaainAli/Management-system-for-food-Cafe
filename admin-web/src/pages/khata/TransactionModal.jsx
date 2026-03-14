@@ -60,46 +60,110 @@ export default function TransactionModal({ profileId, branchId, profileType, pro
       payment_source: type === 'payment' ? paymentSource : null,
     };
 
-    const result = isEdit
-      ? await supabase.from('khata_transactions').update(payload).eq('id', transaction.id)
-      : await supabase.from('khata_transactions').insert(payload).select('id').single();
+    const fetchDs = (d, cols = 'id, total_revenue, bill_count') =>
+      supabase.from('daily_sales').select(cols).eq('branch_id', branchId).eq('date', d).maybeSingle();
 
-    if (result.error) { setError(result.error.message); setSaving(false); return; }
+    const txOp = isEdit
+      ? supabase.from('khata_transactions').update(payload).eq('id', transaction.id)
+      : supabase.from('khata_transactions').insert(payload).select('id').single();
 
-    // If new payment from Today Sale → also record as an expense
-    if (!isEdit && type === 'payment' && paymentSource === 'today_sale' && profileType !== 'customer') {
-      const txId = result.data?.id;
-      const { data: expData } = await supabase.from('expenses').insert({
-        branch_id:        branchId,
-        category:         'Khata Payment',
-        description:      note.trim() || profileName || 'Khata Payment',
-        amount:           amt,
-        date,
-        source_type:      'khata',
-        source_entity_id: profileId,
-        source_record_id: txId || null,
-      }).select('id');
+    if (type === 'payment' && profileType === 'customer') {
+      // ── Customer payment ─────────────────────────────────────────────────
+      if (!isEdit) {
+        // Run tx insert + daily_sales fetch in parallel
+        const [result, { data: ds }] = await Promise.all([txOp, fetchDs(date)]);
+        if (result.error) { setError(result.error.message); setSaving(false); return; }
 
-      // Update daily_sales
-      const { data: ds } = await supabase
-        .from('daily_sales').select('id, total_expenses')
-        .eq('branch_id', branchId).eq('date', date).maybeSingle();
-      if (ds) {
-        await supabase.from('daily_sales').update({
-          total_expenses: parseFloat((ds.total_expenses + amt).toFixed(2)),
-        }).eq('id', ds.id);
+        if (ds) {
+          await supabase.from('daily_sales').update({
+            total_revenue: parseFloat((ds.total_revenue + amt).toFixed(2)),
+            bill_count:    ds.bill_count + 1,
+          }).eq('id', ds.id);
+        } else {
+          await supabase.from('daily_sales').insert({
+            branch_id: branchId, date, total_revenue: amt, total_expenses: 0, bill_count: 1,
+          });
+        }
       } else {
-        await supabase.from('daily_sales').insert({
-          branch_id: branchId, date,
-          total_revenue: 0, total_expenses: amt, bill_count: 0,
-        });
-      }
+        const oldAmt      = parseFloat(transaction.amount);
+        const oldDate     = transaction.date;
+        const amountChanged = oldAmt !== amt;
+        const dateChanged   = oldDate !== date;
 
-      // Back-link: save expense id into transaction
-      if (txId && expData?.[0]?.id) {
-        await supabase.from('khata_transactions')
-          .update({ expense_id: expData[0].id })
-          .eq('id', txId);
+        if (!amountChanged && !dateChanged) {
+          // Nothing to reconcile — just save
+          const result = await txOp;
+          if (result.error) { setError(result.error.message); setSaving(false); return; }
+        } else if (dateChanged) {
+          // Run tx update + both daily_sales fetches in parallel
+          const [result, { data: oldDs }, { data: newDs }] = await Promise.all([
+            txOp, fetchDs(oldDate), fetchDs(date),
+          ]);
+          if (result.error) { setError(result.error.message); setSaving(false); return; }
+
+          const effectiveAmt = amountChanged ? amt : oldAmt;
+          await Promise.all([
+            oldDs
+              ? supabase.from('daily_sales').update({
+                  total_revenue: Math.max(0, parseFloat((oldDs.total_revenue - oldAmt).toFixed(2))),
+                  bill_count:    Math.max(0, oldDs.bill_count - 1),
+                }).eq('id', oldDs.id)
+              : Promise.resolve(),
+            newDs
+              ? supabase.from('daily_sales').update({
+                  total_revenue: parseFloat((newDs.total_revenue + effectiveAmt).toFixed(2)),
+                  bill_count:    newDs.bill_count + 1,
+                }).eq('id', newDs.id)
+              : supabase.from('daily_sales').insert({
+                  branch_id: branchId, date, total_revenue: effectiveAmt, total_expenses: 0, bill_count: 1,
+                }),
+          ]);
+        } else {
+          // Same date, only amount changed — run tx update + fetch in parallel
+          const [result, { data: ds }] = await Promise.all([txOp, fetchDs(date, 'id, total_revenue')]);
+          if (result.error) { setError(result.error.message); setSaving(false); return; }
+
+          if (ds) {
+            await supabase.from('daily_sales').update({
+              total_revenue: Math.max(0, parseFloat((ds.total_revenue + (amt - oldAmt)).toFixed(2))),
+            }).eq('id', ds.id);
+          }
+        }
+      }
+    } else {
+      // ── Non-customer payment or due ───────────────────────────────────────
+      const result = await txOp;
+      if (result.error) { setError(result.error.message); setSaving(false); return; }
+
+      // New supplier payment from Today Sale → record expense + update daily_sales
+      if (!isEdit && type === 'payment' && paymentSource === 'today_sale') {
+        const txId = result.data?.id;
+        const [{ data: expData }, { data: ds }] = await Promise.all([
+          supabase.from('expenses').insert({
+            branch_id:        branchId,
+            category:         'Khata Payment',
+            description:      note.trim() || profileName || 'Khata Payment',
+            amount:           amt,
+            date,
+            source_type:      'khata',
+            source_entity_id: profileId,
+            source_record_id: txId || null,
+          }).select('id'),
+          fetchDs(date, 'id, total_expenses'),
+        ]);
+
+        await Promise.all([
+          ds
+            ? supabase.from('daily_sales').update({
+                total_expenses: parseFloat((ds.total_expenses + amt).toFixed(2)),
+              }).eq('id', ds.id)
+            : supabase.from('daily_sales').insert({
+                branch_id: branchId, date, total_revenue: 0, total_expenses: amt, bill_count: 0,
+              }),
+          txId && expData?.[0]?.id
+            ? supabase.from('khata_transactions').update({ expense_id: expData[0].id }).eq('id', txId)
+            : Promise.resolve(),
+        ]);
       }
     }
 

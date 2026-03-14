@@ -63,6 +63,8 @@ const staffAPI = {
   update: (payload) => ipcRenderer.invoke('staff:update', payload),
   addSalaryRecord: (salary) => ipcRenderer.invoke('staff:addSalaryRecord', salary),
   getSalaryHistory: (payload) => ipcRenderer.invoke('staff:getSalaryHistory', payload),
+  updateSalaryRecord: (payload) => ipcRenderer.invoke('staff:updateSalaryRecord', payload),
+  deleteSalaryRecord: (payload) => ipcRenderer.invoke('staff:deleteSalaryRecord', payload),
   markAttendance: (attendance) => ipcRenderer.invoke('staff:markAttendance', attendance),
   getAttendance: (filters) => ipcRenderer.invoke('staff:getAttendance', filters),
 };

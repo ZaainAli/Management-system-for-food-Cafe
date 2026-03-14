@@ -88,8 +88,30 @@ async function getAttendance(filters = {}) {
   }
 }
 
+async function updateSalaryRecord(payload) {
+  try {
+    const record = await salaryService.updateSalaryRecord(payload);
+    logger.info(`Salary record updated: ${payload.id}`);
+    return { success: true, data: record };
+  } catch (err) {
+    logger.error('staff:updateSalaryRecord failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function deleteSalaryRecord({ id }) {
+  try {
+    await salaryService.deleteSalaryRecord(id);
+    logger.info(`Salary record deleted: ${id}`);
+    return { success: true };
+  } catch (err) {
+    logger.error('staff:deleteSalaryRecord failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   getAll, getById, add, update,
-  addSalaryRecord, getSalaryHistory,
+  addSalaryRecord, getSalaryHistory, updateSalaryRecord, deleteSalaryRecord,
   markAttendance, getAttendance,
 };

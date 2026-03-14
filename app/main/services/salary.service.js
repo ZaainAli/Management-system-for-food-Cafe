@@ -90,6 +90,7 @@ async function updateSalaryRecord({ id, amount, payDate, notes, type }) {
   };
 
   employeeModel.updateSalaryRecord(updated);
+  syncService.pushSalaryRecord(updated).catch(() => {});
 
   // Sync linked expense if exists
   const linkedExpense = expenseModel.findBySourceRecordId(id, 'salary');

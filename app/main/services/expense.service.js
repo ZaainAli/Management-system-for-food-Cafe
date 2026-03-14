@@ -51,7 +51,7 @@ async function add(expense) {
       khataId: profile.id,
       type: 'payment',
       amount,
-      paymentSource: 'net_profit',
+      paymentSource: 'today_sale',
       note: notes || expense.description,
       date,
       createdAt: new Date().toISOString(),
@@ -135,14 +135,15 @@ async function update({ id, ...updates }) {
     const nextAmount = normalizeAmount(updates.amount !== undefined ? updates.amount : expense.amount);
     const nextDate = updates.date || expense.date;
     const nextNote = updates.notes !== undefined ? updates.notes : expense.notes;
-    khataModel.updateTransaction({
+    const updatedTx = {
       ...tx,
       amount: nextAmount,
       date: nextDate,
       note: nextNote || updates.description || expense.description,
-      paymentSource: 'net_profit',
       type: 'payment',
-    });
+    };
+    khataModel.updateTransaction(updatedTx);
+    syncService.pushKhataTransaction(updatedTx).catch(() => {});
   }
 
   if (currentSourceType === 'salary') {

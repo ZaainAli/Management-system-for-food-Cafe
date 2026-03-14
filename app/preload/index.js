@@ -114,6 +114,10 @@ const setupAPI = {
 // ─── Sync API ───────────────────────────────────────────────
 const syncAPI = {
   pull: () => ipcRenderer.invoke('sync:pull'),
+  onPulled: (callback) => {
+    ipcRenderer.on('sync:pulled', callback);
+    return () => ipcRenderer.removeListener('sync:pulled', callback);
+  },
 };
 
 // ─── Window API ─────────────────────────────────────────────

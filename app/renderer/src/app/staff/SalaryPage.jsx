@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../store/AuthContext';
 import { getPkToday, monthBounds } from '../../utils/datetime';
+import { generateSalaryPdf } from './generateSalaryPdf';
 
 function getMonthRange(monthValue) {
   const range = monthBounds(monthValue);
@@ -267,11 +268,19 @@ export default function SalaryPage() {
           <h1 className="text-xl font-bold text-white">Salary — {emp.name}</h1>
           <span className="text-slate-500 text-sm">Monthly: <span className="text-green-400 font-medium">PKR {Number(emp.monthlySalary || 0).toLocaleString()}</span></span>
         </div>
-        {!emp.isActive && (
-          <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-2 py-1">
-            Non-active — salary cannot be issued
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => generateSalaryPdf({ emp, salaryMonth, attendanceSummary, monthlySummary, monthHistory, lastMonthBalance })}
+            className="btn-secondary text-sm"
+          >
+            ↓ Download PDF
+          </button>
+          {!emp.isActive && (
+            <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-2 py-1">
+              Non-active — salary cannot be issued
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -321,48 +330,48 @@ export default function SalaryPage() {
             )}
 
             {/* 4-column payment summary */}
-            <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-              <div className="bg-slate-700/40 rounded p-3">
-                <p className="text-slate-500 mb-1">Salary Paid</p>
-                <p className="text-green-400 font-semibold">PKR {salaryPaid.toLocaleString()}</p>
+            <div className="grid grid-cols-4 gap-2 text-xs items-stretch">
+              <div className="bg-slate-700/40 rounded p-3 flex flex-col justify-between min-h-[60px]">
+                <p className="text-slate-500">Salary Paid</p>
+                <p className="text-green-400 font-semibold mt-1">PKR {salaryPaid.toLocaleString()}</p>
+                <p className="text-transparent text-xs mt-0.5 select-none">—</p>
               </div>
-              <div className="bg-slate-700/40 rounded p-3">
-                <p className="text-slate-500 mb-1">Advance</p>
-                <p className="text-amber-400 font-semibold">PKR {advancePaid.toLocaleString()}</p>
-                {totalAdvanceAllTime > advancePaid && (
-                  <p className="text-slate-600 text-xs mt-0.5">Total: PKR {totalAdvanceAllTime.toLocaleString()}</p>
-                )}
+              <div className="bg-slate-700/40 rounded p-3 flex flex-col justify-between min-h-[60px]">
+                <p className="text-slate-500">Advance</p>
+                <p className="text-amber-400 font-semibold mt-1">PKR {advancePaid.toLocaleString()}</p>
+                <p className="text-slate-600 text-xs mt-0.5">
+                  {totalAdvanceAllTime > advancePaid ? `Total: PKR ${totalAdvanceAllTime.toLocaleString()}` : '—'}
+                </p>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-slate-700/40 rounded p-3">
-                <p className="text-slate-500 mb-1 text-xs">Total Due</p>
-                <p className="text-white font-semibold">PKR {totalDue.toLocaleString()}</p>
+              <div className="bg-slate-700/40 rounded p-3 flex flex-col justify-between min-h-[60px]">
+                <p className="text-slate-500">Total Due</p>
+                <p className="text-white font-semibold mt-1">PKR {totalDue.toLocaleString()}</p>
                 <p className="text-slate-600 text-xs mt-0.5">
                   {lastMonthBalance !== 0
                     ? `${lastMonthBalance > 0 ? '+' : ''}${lastMonthBalance.toLocaleString()} last mo.`
-                    : 'Salary + Advance'}
+                    : '—'}
                 </p>
               </div>
-              {/* Remaining Due — positive = advance given, negative = underpaid */}
-              <div className={`rounded p-3 ${remainingDue > 0 ? 'bg-amber-900/30 border border-amber-700/40' : remainingDue < 0 ? 'bg-red-900/30 border border-red-700/40' : 'bg-slate-700/40'}`}>
-                <p className="text-slate-500 mb-1 text-xs">
-                  {remainingDue > 0 ? 'Employee Got Advance' : remainingDue < 0 ? 'Underpaid' : 'Settled'}
+              <div className={`rounded p-3 flex flex-col justify-between min-h-[60px] ${remainingDue > 0 ? 'bg-amber-900/30 border border-amber-700/40' : remainingDue < 0 ? 'bg-red-900/30 border border-red-700/40' : 'bg-slate-700/40'}`}>
+                <p className="text-slate-500">
+                  {remainingDue > 0 ? 'Got Advance' : remainingDue < 0 ? 'Underpaid' : 'Settled'}
                 </p>
-                <p className={`font-semibold text-sm ${remainingDue > 0 ? 'text-amber-400' : remainingDue < 0 ? 'text-red-400' : 'text-white'}`}>
+                <p className={`font-semibold mt-1 ${remainingDue > 0 ? 'text-amber-400' : remainingDue < 0 ? 'text-red-400' : 'text-white'}`}>
                   PKR {Math.abs(remainingDue).toLocaleString()}
                 </p>
-                <div className="text-slate-500 text-xs mt-1 space-y-0.5">
-                  {lastMonthBalance !== 0 && (
-                    <p>{lastMonthBalance > 0 ? 'Adv. carried' : 'Pending'}: PKR {Math.abs(lastMonthBalance).toLocaleString()}</p>
-                  )}
-                  <p>Paid: PKR {totalDue.toLocaleString()} &nbsp;|&nbsp; Earned: PKR {earned.toLocaleString()}</p>
-                  <p className="text-slate-600">
-                    ({lastMonthBalance !== 0 ? `${lastMonthBalance > 0 ? '+' : ''}${lastMonthBalance.toLocaleString()} + ` : ''}
-                    {totalDue.toLocaleString()} − {earned.toLocaleString()} = {remainingDue > 0 ? '+' : ''}{remainingDue.toLocaleString()})
-                  </p>
-                </div>
+                <p className="text-transparent text-xs mt-0.5 select-none">—</p>
               </div>
+            </div>
+
+            {/* Calculation breakdown */}
+            <div className="bg-slate-800/60 rounded p-2.5 text-xs text-slate-500 mt-2">
+              <span>
+                {lastMonthBalance !== 0 && `Last mo. (${lastMonthBalance > 0 ? '+' : ''}${lastMonthBalance.toLocaleString()}) + `}
+                Paid ({totalDue.toLocaleString()}) − Earned ({earned.toLocaleString()}) ={' '}
+                <span className={remainingDue > 0 ? 'text-amber-400' : remainingDue < 0 ? 'text-red-400' : 'text-white'}>
+                  {remainingDue > 0 ? '+' : ''}{remainingDue.toLocaleString()}
+                </span>
+              </span>
             </div>
           </div>
 

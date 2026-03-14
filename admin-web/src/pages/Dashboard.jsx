@@ -75,6 +75,7 @@ function StatCard({ label, value, sub, Icon, colorClass }) {
 export default function Dashboard() {
   const { branches } = useAuth();
   const [rows, setRows]           = useState([]);
+  const [expRows, setExpRows]     = useState([]);
   const [loading, setLoading]     = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
@@ -92,32 +93,43 @@ export default function Dashboard() {
     setLoading(true);
     setFetchError(null);
     const ids = branches.map((b) => b.id);
-    supabase
-      .from('daily_sales')
-      .select('branch_id, total_revenue, total_expenses, bill_count')
-      .in('branch_id', ids)
-      .gte('date', from)
-      .lte('date', to)
-      .then(({ data, error }) => {
-        if (error) { setFetchError(error.message); }
-        else        { setRows(data ?? []); }
-        setLoading(false);
-      });
+    Promise.all([
+      supabase
+        .from('daily_sales')
+        .select('branch_id, total_revenue, bill_count')
+        .in('branch_id', ids)
+        .gte('date', from)
+        .lte('date', to),
+      supabase
+        .from('expenses')
+        .select('branch_id, amount')
+        .in('branch_id', ids)
+        .gte('date', from)
+        .lte('date', to),
+    ]).then(([salesRes, expRes]) => {
+      if (salesRes.error) { setFetchError(salesRes.error.message); }
+      else                { setRows(salesRes.data ?? []); }
+      if (!expRes.error)  { setExpRows(expRes.data ?? []); }
+      setLoading(false);
+    });
   }, [branches, period, selMonth, selYear, customFrom, customTo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ── Aggregations ──────────────────────────────────────────────
-  const totalRevenue  = rows.reduce((s, r) => s + Number(r.total_revenue),  0);
-  const totalExpenses = rows.reduce((s, r) => s + Number(r.total_expenses), 0);
-  const totalBills    = rows.reduce((s, r) => s + Number(r.bill_count),     0);
+  const totalRevenue  = rows.reduce((s, r) => s + Number(r.total_revenue), 0);
+  const totalExpenses = expRows.reduce((s, r) => s + Number(r.amount), 0);
+  const totalBills    = rows.reduce((s, r) => s + Number(r.bill_count), 0);
 
   const bmap = {};
   rows.forEach((r) => {
     if (!bmap[r.branch_id]) bmap[r.branch_id] = { revenue: 0, expenses: 0, bills: 0 };
-    bmap[r.branch_id].revenue  += Number(r.total_revenue);
-    bmap[r.branch_id].expenses += Number(r.total_expenses);
-    bmap[r.branch_id].bills    += Number(r.bill_count);
+    bmap[r.branch_id].revenue += Number(r.total_revenue);
+    bmap[r.branch_id].bills   += Number(r.bill_count);
+  });
+  expRows.forEach((r) => {
+    if (!bmap[r.branch_id]) bmap[r.branch_id] = { revenue: 0, expenses: 0, bills: 0 };
+    bmap[r.branch_id].expenses += Number(r.amount);
   });
   const branchStats = branches.map((b) => ({
     id: b.id, name: b.name,

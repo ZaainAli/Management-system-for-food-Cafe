@@ -106,7 +106,7 @@ export default function ReportsPage() {
 
     let expQ = supabase
       .from('expenses')
-      .select('category, amount')
+      .select('category, amount, date, branch_id')
       .gte('date', from)
       .lte('date', to);
 
@@ -147,7 +147,7 @@ export default function ReportsPage() {
   // ── Aggregations ─────────────────────────────────────────────
 
   const totalRevenue  = salesRows.reduce((s, r) => s + Number(r.total_revenue), 0);
-  const totalExpenses = salesRows.reduce((s, r) => s + Number(r.total_expenses), 0);
+  const totalExpenses = expRows.reduce((s, r) => s + Number(r.amount), 0);
   const netProfit     = totalRevenue - totalExpenses;
   const totalBills    = salesRows.reduce((s, r) => s + Number(r.bill_count), 0);
   const khataTotalDue = khataRows
@@ -159,14 +159,17 @@ export default function ReportsPage() {
   const allTimeDue     = allKhataRows.filter((r) => r.type === 'due').reduce((s, r) => s + Number(r.amount || 0), 0);
   const allTimePayment = allKhataRows.filter((r) => r.type === 'payment').reduce((s, r) => s + Number(r.amount || 0), 0);
   const khataTotalBalance = allTimeDue - allTimePayment;
-  // Daily trend chart data
+  // Daily trend chart data — revenue/bills from daily_sales, expenses from expenses table
   const dailyMap = {};
   salesRows.forEach((r) => {
     if (!dailyMap[r.date]) dailyMap[r.date] = { date: r.date, revenue: 0, expenses: 0, profit: 0 };
-    dailyMap[r.date].revenue  += Number(r.total_revenue);
-    dailyMap[r.date].expenses += Number(r.total_expenses);
-    dailyMap[r.date].profit   += Number(r.total_revenue) - Number(r.total_expenses);
+    dailyMap[r.date].revenue += Number(r.total_revenue);
   });
+  expRows.forEach((r) => {
+    if (!dailyMap[r.date]) dailyMap[r.date] = { date: r.date, revenue: 0, expenses: 0, profit: 0 };
+    dailyMap[r.date].expenses += Number(r.amount);
+  });
+  Object.values(dailyMap).forEach((d) => { d.profit = d.revenue - d.expenses; });
   const dailyData = Object.values(dailyMap);
   const avgDailyExpense = dailyData.length > 0 ? totalExpenses / dailyData.length : 0;
   const billsByDate = salesRows.reduce((acc, row) => {
@@ -190,9 +193,12 @@ export default function ReportsPage() {
   const branchSalesMap = {};
   salesRows.forEach((r) => {
     if (!branchSalesMap[r.branch_id]) branchSalesMap[r.branch_id] = { revenue: 0, expenses: 0, bills: 0 };
-    branchSalesMap[r.branch_id].revenue  += Number(r.total_revenue);
-    branchSalesMap[r.branch_id].expenses += Number(r.total_expenses);
-    branchSalesMap[r.branch_id].bills    += Number(r.bill_count);
+    branchSalesMap[r.branch_id].revenue += Number(r.total_revenue);
+    branchSalesMap[r.branch_id].bills   += Number(r.bill_count);
+  });
+  expRows.forEach((r) => {
+    if (!branchSalesMap[r.branch_id]) branchSalesMap[r.branch_id] = { revenue: 0, expenses: 0, bills: 0 };
+    branchSalesMap[r.branch_id].expenses += Number(r.amount);
   });
   const branchBreakdown = branches.map((b) => ({
     id:       b.id,

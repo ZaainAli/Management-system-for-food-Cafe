@@ -57,6 +57,7 @@ async function add(expense) {
       createdAt: new Date().toISOString(),
     };
     khataModel.insertTransaction(tx);
+    syncService.pushKhataTransaction(tx).catch(() => {});
     sourceEntityId = profile.id;
     sourceEntityName = profile.name;
     sourceRecordId = tx.id;

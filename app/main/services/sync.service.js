@@ -79,13 +79,15 @@ async function pushDailySales({ date, totalRevenue, totalBills, totalExpenses })
 
 async function pushExpense(expense) {
   await upsert('expenses', {
-    id:          expense.id,
-    branch_id:   getBranchId(),
-    category:    expense.category,
-    description: expense.description || null,
-    amount:      expense.amount,
-    date:        expense.date,
-    source_type: expense.sourceType || 'manual',
+    id:               expense.id,
+    branch_id:        getBranchId(),
+    category:         expense.category,
+    description:      expense.description || null,
+    amount:           expense.amount,
+    date:             expense.date,
+    source_type:      expense.sourceType || 'manual',
+    source_entity_id: expense.sourceEntityId || null,
+    source_record_id: expense.sourceRecordId || null,
   }, 'id');
 }
 

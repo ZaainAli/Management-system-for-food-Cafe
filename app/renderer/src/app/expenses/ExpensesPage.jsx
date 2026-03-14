@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getPkToday, monthBounds, shiftDate } from '../../utils/datetime';
+import { useAuth } from '../../store/AuthContext';
 
 function localToday() {
   return getPkToday();
@@ -41,6 +42,7 @@ function getDateRange(period, selMonth, selYear, customFrom, customTo) {
 }
 
 export default function ExpensesPage() {
+  const { permissions } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState('All');
@@ -51,6 +53,8 @@ export default function ExpensesPage() {
   const [khataProfiles, setKhataProfiles] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [formError, setFormError] = useState('');
+  const [permError, setPermError] = useState('');
+  const permErrorTimer = useRef(null);
   const [period, setPeriod]         = useState('today');
   const [selMonth, setSelMonth]     = useState(curMonth());
   const [selYear, setSelYear]       = useState(curYear());
@@ -78,6 +82,12 @@ export default function ExpensesPage() {
 
   useEffect(() => { fetchData(); }, [activeCategory, period, selMonth, selYear, customFrom, customTo]);
 
+  const showPermError = (msg) => {
+    setPermError(msg);
+    clearTimeout(permErrorTimer.current);
+    permErrorTimer.current = setTimeout(() => setPermError(''), 3000);
+  };
+
   const openAdd = () => {
     setFormError('');
     setForm({ ...emptyForm, date: localToday() });
@@ -85,6 +95,10 @@ export default function ExpensesPage() {
     setShowModal(true);
   };
   const openEdit = (exp) => {
+    if (!permissions.canManageExpenses) {
+      showPermError('Access denied: Only managers and admins can edit expenses.');
+      return;
+    }
     setFormError('');
     setForm({
       description: exp.description,
@@ -128,6 +142,10 @@ export default function ExpensesPage() {
   };
 
   const handleDelete = async (id) => {
+    if (!permissions.canManageExpenses) {
+      showPermError('Access denied: Only managers and admins can delete expenses.');
+      return;
+    }
     if (!confirm('Delete this expense?')) return;
     await window.api.expense.delete({ id });
     await fetchData();
@@ -143,6 +161,14 @@ export default function ExpensesPage() {
         <h1 className="text-xl font-bold text-white">Expenses</h1>
         <button onClick={openAdd} className="btn-primary text-sm">+ Add Expense</button>
       </div>
+
+      {/* Permission Error */}
+      {permError && (
+        <div className="bg-red-900/30 border border-red-700/50 text-red-300 text-sm rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+          {permError}
+        </div>
+      )}
 
       {/* Summary Bar */}
       <div className="card mb-4 flex items-center justify-between">

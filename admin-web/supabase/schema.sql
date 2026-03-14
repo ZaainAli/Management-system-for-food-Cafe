@@ -95,8 +95,10 @@ create table if not exists expenses (
   description text,
   amount      numeric(10,2) not null default 0,
   date        date not null default current_date,
-  source_type text not null default 'manual'
-              check (source_type in ('manual','khata','salary'))
+  source_type      text not null default 'manual'
+                   check (source_type in ('manual','khata','salary')),
+  source_entity_id uuid,          -- khata_profile.id or employee.id
+  source_record_id uuid           -- khata_transaction.id or salary_record.id
 );
 
 -- Khata (ledger) profiles per branch
@@ -114,10 +116,12 @@ create table if not exists khata_transactions (
   id         uuid primary key default uuid_generate_v4(),
   profile_id uuid not null references khata_profiles(id) on delete cascade,
   branch_id  uuid not null references branches(id) on delete cascade,
-  type       text not null check (type in ('due','payment')),
-  amount     numeric(10,2) not null default 0,
-  note       text,
-  date       date not null default current_date
+  type           text not null check (type in ('due','payment')),
+  amount         numeric(10,2) not null default 0,
+  note           text,
+  date           date not null default current_date,
+  payment_source text check (payment_source in ('today_sale','net_profit')),
+  expense_id     uuid
 );
 
 -- Employees per branch

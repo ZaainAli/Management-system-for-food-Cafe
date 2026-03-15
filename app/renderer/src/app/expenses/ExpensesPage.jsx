@@ -98,7 +98,7 @@ export default function ExpensesPage() {
     if (!permissions.canManageExpenses) {
       showPermError('Access denied: Only managers and admins can edit expenses.');
       return;
-    }
+    } 
     setFormError('');
     setForm({
       description: exp.description,
@@ -115,7 +115,7 @@ export default function ExpensesPage() {
 
   const handleSave = async () => {
     setFormError('');
-    const description = form.description?.trim() || form.category;
+    const description = form.description?.trim() || "khata payment(app:exp)";
     if (!form.amount || Number(form.amount) <= 0) {
       setFormError('Amount must be greater than 0.');
       return;

@@ -3,6 +3,7 @@ const { pullAllFromSupabase } = require('../services/pull.service');
 const logger = require('../utils/logger');
 
 function registerSyncRoutes() {
+  ipcMain.removeHandler('sync:pull');
   ipcMain.handle('sync:pull', async (event) => {
     try {
       await pullAllFromSupabase();

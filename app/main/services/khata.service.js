@@ -1,6 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
 const khataModel = require('../models/khata.model');
-const expenseService = require('./expense.service');
 const expenseModel = require('../models/expense.model');
 const billModel = require('../models/bill.model');
 const salesModel = require('../models/sales.model');
@@ -114,14 +113,24 @@ async function addPayment(payload) {
     billModel.insertBill(bill);
     salesModel.addBillToDailySales({ date: tx.date, total: amount });
   } else if (source === 'today_sale') {
-    // Buyer payment from today's sale → record as expense
-    await expenseService.add({
+    // Buyer payment from today's sale → record as linked expense
+    const expense = {
+      id: uuidv4(),
       description: `Khata Payment: ${profile.name}`,
       amount,
       category: 'Khata Payment',
       date: tx.date,
+      sourceType: 'khata',
+      sourceEntityId: profile.id,
+      sourceEntityName: profile.name,
+      sourceRecordId: tx.id,
       notes: tx.note || '',
-    });
+      createdAt: new Date().toISOString(),
+    };
+    expenseModel.insert(expense);
+    salesModel.addExpenseToDailySales({ date: expense.date, amountDelta: expense.amount });
+    syncService.pushExpense(expense).catch(() => {});
+    syncService.pushKhataTransaction({ ...created, expenseId: expense.id }).catch(() => {});
   }
 
   return created;
@@ -131,11 +140,6 @@ async function updateTransaction(payload) {
   if (!payload?.id) throw new Error('Transaction id is required');
   const tx = khataModel.getTransactionById(payload.id);
   if (!tx) throw new Error('Transaction not found');
-
-  const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
-  if (linkedExpense) {
-    throw new Error('This transaction is linked to an expense. Edit it from Expenses tab.');
-  }
 
   const nextAmount = payload.amount !== undefined ? normalizeAmount(payload.amount) : tx.amount;
   const nextDate = payload.date || tx.date;
@@ -162,7 +166,28 @@ async function updateTransaction(payload) {
     paymentSource: nextPaymentSource,
   };
   const saved = khataModel.updateTransaction(updated);
-  syncService.pushKhataTransaction(saved).catch(() => {});
+
+  // Update the linked expense if one exists
+  const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+  if (linkedExpense) {
+    const amountChanged = tx.amount !== nextAmount;
+    const dateChanged = tx.date !== nextDate;
+    if (amountChanged || dateChanged) {
+      const updatedExpense = {
+        ...linkedExpense,
+        amount: nextAmount,
+        date: nextDate,
+        updatedAt: new Date().toISOString(),
+      };
+      expenseModel.update(updatedExpense);
+      // Adjust daily_sales: reverse old, apply new
+      salesModel.addExpenseToDailySales({ date: tx.date, amountDelta: -tx.amount });
+      salesModel.addExpenseToDailySales({ date: nextDate, amountDelta: nextAmount });
+      syncService.pushExpense(updatedExpense).catch(() => {});
+    }
+  }
+
+  syncService.pushKhataTransaction({ ...saved, expenseId: linkedExpense?.id || null }).catch(() => {});
   return saved;
 }
 

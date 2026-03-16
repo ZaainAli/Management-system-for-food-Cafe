@@ -42,59 +42,96 @@ async function fetchAll(client, table, branchId) {
   return data || [];
 }
 
+function _extractQueuedId(payloadRaw) {
+  if (!payloadRaw) return null;
+  try {
+    const payload = JSON.parse(payloadRaw);
+    if (payload == null) return null;
+    if (typeof payload === 'string' || typeof payload === 'number') return String(payload);
+    if (typeof payload === 'object' && payload.id) return String(payload.id);
+  } catch {}
+  return null;
+}
+
+function getPendingIdsByTable(db) {
+  try {
+    const rows = db.prepare('SELECT tableName, payload FROM sync_queue').all();
+    const pending = new Map();
+    for (const row of rows) {
+      const id = _extractQueuedId(row.payload);
+      if (!id) continue;
+      if (!pending.has(row.tableName)) pending.set(row.tableName, new Set());
+      pending.get(row.tableName).add(id);
+    }
+    return pending;
+  } catch {
+    return new Map();
+  }
+}
+
 async function pushLocalToSupabase(db) {
-  logger.info('[pull] Pushing local changes to Supabase before pull...');
+  logger.info('[pull] Flushing local sync queue to Supabase...');
+
+  // Flush any queued offline sync jobs first (best-effort)
+  try {
+    const result = await syncService.flushSyncQueue({ limit: 200 });
+    if (result?.success) {
+      logger.info(`[pull] sync queue flushed: processed=${result.processed || 0}`);
+    }
+  } catch (err) {
+    logger.warn('[pull] sync queue flush failed:', err.message);
+  }
 
   // push dailysales 
-  const dailySales = db.prepare('SELECT date, totalRevenue, totalBills, totalExpenses FROM daily_sales').all();
-  for (const row of dailySales) {
-    await syncService.pushDailySales({
-      date: row.date,
-      totalRevenue: row.totalRevenue,
-      totalBills: row.totalBills,
-      totalExpenses: row.totalExpenses,
-    });
-  }
+// const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+// const dailySales = db.prepare('SELECT date, totalRevenue, totalBills, totalExpenses FROM daily_sales WHERE date = ?').all(today);  for (const row of dailySales) {
+//     await syncService.pushDailySales({
+//       date: row.date,
+//       totalRevenue: row.totalRevenue,
+//       totalBills: row.totalBills,
+//       totalExpenses: row.totalExpenses,
+//     });
+//   }
 
 
-  const expenses = db.prepare('SELECT * FROM expenses').all();
-  for (const expense of expenses) {
-    await syncService.pushExpense(expense);
-  }
+  // const expenses = db.prepare('SELECT * FROM expenses').all();
+  // for (const expense of expenses) {
+  //   await syncService.pushExpense(expense);
+  // }
 
-  const khataProfiles = db.prepare('SELECT * FROM khata_profiles').all();
-  for (const profile of khataProfiles) {
-    await syncService.pushKhataProfile(profile);
-  }
+  // const khataProfiles = db.prepare('SELECT * FROM khata_profiles').all();
+  // for (const profile of khataProfiles) {
+  //   await syncService.pushKhataProfile(profile);
+  // }
 
-  const khataTransactions = db.prepare('SELECT * FROM khata_transactions').all();
-  for (const tx of khataTransactions) {
-    await syncService.pushKhataTransaction({
-      ...tx,
-      expenseId: tx.expenseId || null,
-    });
-  }
+  // const khataTransactions = db.prepare('SELECT * FROM khata_transactions').all();
+  // for (const tx of khataTransactions) {
+  //   await syncService.pushKhataTransaction({
+  //     ...tx,
+  //     expenseId: tx.expenseId || null,
+  //   });
+  // }
 
-  const employees = db.prepare('SELECT * FROM employees').all();
-  for (const employee of employees) {
-    await syncService.pushEmployee(employee);
-  }
+  // const employees = db.prepare('SELECT * FROM employees').all();
+  // for (const employee of employees) {
+  //   await syncService.pushEmployee(employee);
+  // }
 
-  const salaryRecords = db.prepare('SELECT * FROM salary_records').all();
-  for (const record of salaryRecords) {
-    await syncService.pushSalaryRecord({
-      ...record,
-      payDate: record.payDate,
-      createdAt: record.createdAt,
-    });
-  }
+  // const salaryRecords = db.prepare('SELECT * FROM salary_records').all();
+  // for (const record of salaryRecords) {
+  //   await syncService.pushSalaryRecord({
+  //     ...record,
+  //     payDate: record.payDate,
+  //     createdAt: record.createdAt,
+  //   });
+  // }
 
   logger.info('[pull] Local push complete');
 }
 
 // ─── Table-specific upsert helpers ───────────────────────────────────────────
 
-function upsertMenuCategories(db, rows) {
+function upsertMenuCategories(db, rows, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO menu_categories (id, name, createdAt)
     VALUES (?, ?, ?)
@@ -102,16 +139,20 @@ function upsertMenuCategories(db, rows) {
       name      = excluded.name
   `);
   const now = new Date().toISOString();
+  let upserted = 0;
+  let skipped = 0;
   const run = db.transaction(() => {
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       stmt.run(r.id, r.name, now);
+      upserted += 1;
     }
   });
   run();
-  logger.info(`[pull] menu_categories: upserted ${rows.length} rows`);
+  logger.info(`[pull] menu_categories: upserted ${upserted} rows${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
-function upsertMenuItems(db, rows) {
+function upsertMenuItems(db, rows, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO menu_items (id, name, price, categoryId, isAvailable, createdAt)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -122,8 +163,11 @@ function upsertMenuItems(db, rows) {
       isAvailable = excluded.isAvailable
   `);
   const now = new Date().toISOString();
+  let upserted = 0;
+  let skipped = 0;
   const run = db.transaction(() => {
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       stmt.run(
         r.id,
         r.name,
@@ -132,13 +176,14 @@ function upsertMenuItems(db, rows) {
         r.available ? 1 : 0,
         now
       );
+      upserted += 1;
     }
   });
   run();
-  logger.info(`[pull] menu_items: upserted ${rows.length} rows`);
+  logger.info(`[pull] menu_items: upserted ${upserted} rows${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
-function upsertExpenses(db, rows) {
+function upsertExpenses(db, rows, pendingIds = new Set()) {
   const upsert = db.prepare(`
     INSERT INTO expenses (id, description, amount, category, date, sourceType, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -149,10 +194,12 @@ function upsertExpenses(db, rows) {
       date        = excluded.date,
       sourceType  = excluded.sourceType
   `);
-  // Delete local expenses that no longer exist in Supabase
-  const cloudIds = rows.map(r => r.id);
+  let upserted = 0;
+  let skipped = 0;
+  const cloudIds = [];
   const run = db.transaction(() => {
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       upsert.run(
         r.id,
         r.description || r.category,   // description is required in SQLite
@@ -162,16 +209,19 @@ function upsertExpenses(db, rows) {
         r.source_type || 'manual',
         r.created_at || new Date().toISOString()
       );
+      cloudIds.push(r.id);
+      upserted += 1;
     }
-    if (cloudIds.length > 0) {
-      const placeholders = cloudIds.map(() => '?').join(',');
-      db.prepare(`DELETE FROM expenses WHERE id NOT IN (${placeholders})`).run(...cloudIds);
+    const keepIds = [...new Set([...cloudIds, ...pendingIds])];
+    if (keepIds.length > 0) {
+      const placeholders = keepIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM expenses WHERE id NOT IN (${placeholders})`).run(...keepIds);
     } else {
       db.prepare('DELETE FROM expenses').run();
     }
   });
   run();
-  logger.info(`[pull] expenses: upserted ${rows.length} rows, removed orphans`);
+  logger.info(`[pull] expenses: upserted ${upserted} rows, removed orphans${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
 /**
@@ -195,7 +245,7 @@ function _removeCustomerPaymentSideEffects(db, tx, profileName, now) {
   }
 }
 
-function upsertKhataProfiles(db, rows) {
+function upsertKhataProfiles(db, rows, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO khata_profiles (id, name, phone, businessDetails, profileType, createdAt)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -207,17 +257,22 @@ function upsertKhataProfiles(db, rows) {
   `);
   const now     = new Date().toISOString();
   const cloudIds = rows.map(r => r.id);
+  const cloudIdSet = new Set(cloudIds);
+  let upserted = 0;
+  let skipped = 0;
 
   const run = db.transaction(() => {
     // Upsert cloud profiles
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       stmt.run(r.id, r.name, r.phone || '', r.notes || '', r.profile_type || 'supplier', now);
+      upserted += 1;
     }
 
     // Delete local profiles that no longer exist in cloud
     const localProfiles = db.prepare('SELECT * FROM khata_profiles').all();
     for (const profile of localProfiles) {
-      if (cloudIds.includes(profile.id)) continue;
+      if (cloudIdSet.has(profile.id) || pendingIds.has(profile.id)) continue;
 
       // Clean up all customer payment transactions' bills + daily_sales
       if (profile.profileType === 'customer') {
@@ -234,10 +289,10 @@ function upsertKhataProfiles(db, rows) {
     }
   });
   run();
-  logger.info(`[pull] khata_profiles: upserted ${rows.length} rows`);
+  logger.info(`[pull] khata_profiles: upserted ${upserted} rows${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
-function upsertKhataTransactions(db, rows) {
+function upsertKhataTransactions(db, rows, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO khata_transactions (id, khataId, type, amount, note, date, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -248,6 +303,10 @@ function upsertKhataTransactions(db, rows) {
       date   = excluded.date
   `);
   const now = new Date().toISOString();
+  const cloudTxIds = rows.map(r => r.id);
+  const cloudTxIdSet = new Set(cloudTxIds);
+  let upserted = 0;
+  let skipped = 0;
 
   const insertBill = db.prepare(`
     INSERT OR IGNORE INTO bills
@@ -257,6 +316,7 @@ function upsertKhataTransactions(db, rows) {
 
   const run = db.transaction(() => {
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       const existing = db.prepare('SELECT * FROM khata_transactions WHERE id = ?').get(r.id);
       const profile  = db.prepare('SELECT * FROM khata_profiles WHERE id = ?').get(r.profile_id);
 
@@ -328,13 +388,13 @@ function upsertKhataTransactions(db, rows) {
       }
 
       stmt.run(r.id, r.profile_id, r.type, r.amount, r.note || '', r.date, now);
+      upserted += 1;
     }
 
     // Delete local transactions that no longer exist in cloud
-    const cloudTxIds = rows.map(r => r.id);
     const localTxs   = db.prepare('SELECT * FROM khata_transactions').all();
     for (const tx of localTxs) {
-      if (cloudTxIds.includes(tx.id)) continue;
+      if (cloudTxIdSet.has(tx.id) || pendingIds.has(tx.id)) continue;
       if (tx.type === 'payment') {
         const profile = db.prepare('SELECT * FROM khata_profiles WHERE id = ?').get(tx.khataId);
         if (profile?.profileType === 'customer') {
@@ -346,10 +406,10 @@ function upsertKhataTransactions(db, rows) {
   });
 
   run();
-  logger.info(`[pull] khata_transactions: upserted ${rows.length} rows`);
+  logger.info(`[pull] khata_transactions: upserted ${upserted} rows${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
-function upsertEmployees(db, rows) {
+function upsertEmployees(db, rows, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO employees (id, name, position, phone, monthlySalary, hireDate, isActive, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -362,8 +422,11 @@ function upsertEmployees(db, rows) {
       isActive      = excluded.isActive
   `);
   const now = new Date().toISOString();
+  let upserted = 0;
+  let skipped = 0;
   const run = db.transaction(() => {
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       stmt.run(
         r.id,
         r.name,
@@ -374,13 +437,14 @@ function upsertEmployees(db, rows) {
         r.active ? 1 : 0,
         now
       );
+      upserted += 1;
     }
   });
   run();
-  logger.info(`[pull] employees: upserted ${rows.length} rows`);
+  logger.info(`[pull] employees: upserted ${upserted} rows${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
-function upsertSalaryRecords(db, rows, employeeMap) {
+function upsertSalaryRecords(db, rows, employeeMap, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO salary_records (id, employeeId, employeeName, amount, payDate, createdAt)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -389,23 +453,29 @@ function upsertSalaryRecords(db, rows, employeeMap) {
       payDate  = excluded.payDate
   `);
   const now = new Date().toISOString();
-  const cloudIds = rows.map(r => r.id);
+  const cloudIds = [];
+  let upserted = 0;
+  let skipped = 0;
   const run = db.transaction(() => {
     for (const r of rows) {
+      if (pendingIds.has(r.id)) { skipped += 1; continue; }
       const empName = employeeMap[r.employee_id] || '';
       const payDate = r.month ? `${r.month}-01` : now.slice(0, 10);
       stmt.run(r.id, r.employee_id, empName, r.amount, payDate, r.paid_at || now);
+      cloudIds.push(r.id);
+      upserted += 1;
     }
     // Remove local records that no longer exist in Supabase (e.g. deleted remotely or locally)
-    if (cloudIds.length > 0) {
-      const placeholders = cloudIds.map(() => '?').join(',');
-      db.prepare(`DELETE FROM salary_records WHERE id NOT IN (${placeholders})`).run(...cloudIds);
+    const keepIds = [...new Set([...cloudIds, ...pendingIds])];
+    if (keepIds.length > 0) {
+      const placeholders = keepIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM salary_records WHERE id NOT IN (${placeholders})`).run(...keepIds);
     } else {
       db.prepare('DELETE FROM salary_records').run();
     }
   });
   run();
-  logger.info(`[pull] salary_records: upserted ${rows.length} rows, removed orphans`);
+  logger.info(`[pull] salary_records: upserted ${upserted} rows, removed orphans${skipped ? `, skipped ${skipped} pending` : ''}`);
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -439,14 +509,13 @@ async function pullAllFromSupabase({ skipPush = false } = {}) {
 
   logger.info('[pull] Starting startup pull from Supabase...');
   const db = getDb();
+  const pendingByTable = getPendingIdsByTable(db);
 
   try {
-    if (!skipPush) {
-      await pushLocalToSupabase(db);
-    }
-
     // Fetch all tables in parallel (order-independent fetches)
     const [cats, items, expenses, kProfiles, kTxs, employees, salaries] = await Promise.all([
+      fetchAll(client, 'menu_categories',    branchId),
+      fetchAll(client, 'menu_items',         branchId),
       fetchAll(client, 'expenses',           branchId),
       fetchAll(client, 'khata_profiles',     branchId),
       fetchAll(client, 'khata_transactions', branchId),
@@ -459,15 +528,19 @@ async function pullAllFromSupabase({ skipPush = false } = {}) {
     for (const e of employees) employeeMap[e.id] = e.name;
 
     // Upsert in FK-safe order
-    if (cats.length)       upsertMenuCategories(db, cats);
-    if (items.length)      upsertMenuItems(db, items);
-    if (expenses.length)   upsertExpenses(db, expenses);
-    if (kProfiles.length)  upsertKhataProfiles(db, kProfiles);
-    if (kTxs.length)       upsertKhataTransactions(db, kTxs);
-    if (employees.length)  upsertEmployees(db, employees);
-    if (salaries.length)   upsertSalaryRecords(db, salaries, employeeMap);
+    if (cats.length)       upsertMenuCategories(db, cats, pendingByTable.get('menu_categories') || new Set());
+    if (items.length)      upsertMenuItems(db, items, pendingByTable.get('menu_items') || new Set());
+    if (expenses.length)   upsertExpenses(db, expenses, pendingByTable.get('expenses') || new Set());
+    if (kProfiles.length)  upsertKhataProfiles(db, kProfiles, pendingByTable.get('khata_profiles') || new Set());
+    if (kTxs.length)       upsertKhataTransactions(db, kTxs, pendingByTable.get('khata_transactions') || new Set());
+    if (employees.length)  upsertEmployees(db, employees, pendingByTable.get('employees') || new Set());
+    if (salaries.length)   upsertSalaryRecords(db, salaries, employeeMap, pendingByTable.get('salary_records') || new Set());
 
     logger.info('[pull] Startup pull complete');
+
+    if (!skipPush) {
+      await pushLocalToSupabase(db);
+    }
   } catch (err) {
     logger.error('[pull] Startup pull failed:', err.message);
   }

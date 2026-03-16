@@ -250,6 +250,19 @@ function runMigrations(db) {
       value TEXT NOT NULL
     );
 
+    -- Sync queue (offline-first Supabase sync)
+    CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY,
+      tableName TEXT NOT NULL,
+      action TEXT NOT NULL, -- upsert | delete
+      payload TEXT NOT NULL, -- JSON payload for the action
+      conflict TEXT DEFAULT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      lastError TEXT DEFAULT NULL,
+      createdAt TEXT NOT NULL,
+      lastAttemptAt TEXT
+    );
+
     -- Indexes for report queries (prevent full-table scans on large datasets)
     CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
     CREATE INDEX IF NOT EXISTS idx_bill_items_billId ON bill_items(billId);

@@ -14,6 +14,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { getDb }        = require('../db/index');
 const logger           = require('../utils/logger');
+const syncService      = require('./sync.service');
 
 let _client = null;
 
@@ -39,6 +40,56 @@ async function fetchAll(client, table, branchId) {
     return [];
   }
   return data || [];
+}
+
+async function pushLocalToSupabase(db) {
+  logger.info('[pull] Pushing local changes to Supabase before pull...');
+
+  // push dailysales 
+  const dailySales = db.prepare('SELECT date, totalRevenue, totalBills, totalExpenses FROM daily_sales').all();
+  for (const row of dailySales) {
+    await syncService.pushDailySales({
+      date: row.date,
+      totalRevenue: row.totalRevenue,
+      totalBills: row.totalBills,
+      totalExpenses: row.totalExpenses,
+    });
+  }
+
+
+  const expenses = db.prepare('SELECT * FROM expenses').all();
+  for (const expense of expenses) {
+    await syncService.pushExpense(expense);
+  }
+
+  const khataProfiles = db.prepare('SELECT * FROM khata_profiles').all();
+  for (const profile of khataProfiles) {
+    await syncService.pushKhataProfile(profile);
+  }
+
+  const khataTransactions = db.prepare('SELECT * FROM khata_transactions').all();
+  for (const tx of khataTransactions) {
+    await syncService.pushKhataTransaction({
+      ...tx,
+      expenseId: tx.expenseId || null,
+    });
+  }
+
+  const employees = db.prepare('SELECT * FROM employees').all();
+  for (const employee of employees) {
+    await syncService.pushEmployee(employee);
+  }
+
+  const salaryRecords = db.prepare('SELECT * FROM salary_records').all();
+  for (const record of salaryRecords) {
+    await syncService.pushSalaryRecord({
+      ...record,
+      payDate: record.payDate,
+      createdAt: record.createdAt,
+    });
+  }
+
+  logger.info('[pull] Local push complete');
 }
 
 // ─── Table-specific upsert helpers ───────────────────────────────────────────
@@ -377,7 +428,7 @@ function getConfiguredBranchId() {
   return null;
 }
 
-async function pullAllFromSupabase() {
+async function pullAllFromSupabase({ skipPush = false } = {}) {
   const client   = getClient();
   const branchId = getConfiguredBranchId();
 
@@ -390,10 +441,12 @@ async function pullAllFromSupabase() {
   const db = getDb();
 
   try {
+    if (!skipPush) {
+      await pushLocalToSupabase(db);
+    }
+
     // Fetch all tables in parallel (order-independent fetches)
     const [cats, items, expenses, kProfiles, kTxs, employees, salaries] = await Promise.all([
-      fetchAll(client, 'menu_categories',    branchId),
-      fetchAll(client, 'menu_items',         branchId),
       fetchAll(client, 'expenses',           branchId),
       fetchAll(client, 'khata_profiles',     branchId),
       fetchAll(client, 'khata_transactions', branchId),
@@ -420,4 +473,4 @@ async function pullAllFromSupabase() {
   }
 }
 
-module.exports = { pullAllFromSupabase };
+module.exports = { pullAllFromSupabase, pushLocalToSupabase };

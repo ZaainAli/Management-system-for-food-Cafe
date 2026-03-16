@@ -143,13 +143,15 @@ async function deleteKhataProfile(id) {
 
 async function pushKhataTransaction(tx) {
   await upsert('khata_transactions', {
-    id:         tx.id,
-    profile_id: tx.khataId,
-    branch_id:  getBranchId(),
-    type:       tx.type,
-    amount:     tx.amount,
-    note:       tx.note || null,
-    date:       tx.date,
+    id:             tx.id,
+    profile_id:     tx.khataId,
+    branch_id:      getBranchId(),
+    type:           tx.type,
+    amount:         tx.amount,
+    note:           tx.note || null,
+    date:           tx.date,
+    payment_source: tx.paymentSource || null,
+    expense_id:     tx.expenseId || null,
   }, 'id');
 }
 

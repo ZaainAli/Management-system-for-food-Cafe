@@ -55,7 +55,16 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
     }
   }, [form.source_type, branchId]);
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const set = (key) => (e) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const updated = { ...f, [key]: value };
+      if (key === 'source_type' && value === 'khata') {
+        updated.description = 'Khata Payment (exp :web)';
+      }
+      return updated;
+    });
+  };
 
   const handleSave = async () => {
     if (!form.category.trim())  { setError('Category is required.'); return; }

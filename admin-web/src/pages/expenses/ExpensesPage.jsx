@@ -35,7 +35,7 @@ function getRange(period, selMonth, selYear, customFrom, customTo) {
 export default function ExpensesPage() {
   const { activeBranch } = useAuth();
   const [expenses, setExpenses]   = useState([]);
-  const [period, setPeriod]         = useState('month');
+  const [period, setPeriod]         = useState('today');
   const [selMonth, setSelMonth]     = useState(curMonth());
   const [selYear, setSelYear]       = useState(curYear());
   const [customFrom, setCustomFrom] = useState(todayStr);

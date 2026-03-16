@@ -123,8 +123,24 @@ async function update({ id, ...updates }) {
   if (updates.description !== undefined && !updates.description) throw new Error('Expense must have a description');
   if (updates.category !== undefined && !updates.category) throw new Error('Expense must have a category');
 
-  const currentSourceType = normalizeSourceType(expense.sourceType);
-  const requestedSourceType = normalizeSourceType(updates.sourceType || currentSourceType);
+  let currentSourceTypeRaw = expense.sourceType;
+  // If legacy records are missing sourceType but have a linked record, infer it.
+  if (!currentSourceTypeRaw && expense.sourceRecordId) {
+    const khataTx = khataModel.getTransactionById(expense.sourceRecordId);
+    if (khataTx) currentSourceTypeRaw = 'khata';
+    else {
+      const salaryRecord = employeeModel.getSalaryRecordById(expense.sourceRecordId);
+      if (salaryRecord) currentSourceTypeRaw = 'salary';
+    }
+  }
+  const currentSourceType = normalizeSourceType(currentSourceTypeRaw);
+  const hasSourceTypeUpdate =
+    updates.sourceType !== undefined &&
+    updates.sourceType !== null &&
+    String(updates.sourceType).trim() !== '';
+  const requestedSourceType = hasSourceTypeUpdate
+    ? normalizeSourceType(updates.sourceType)
+    : currentSourceType;
   if (requestedSourceType !== currentSourceType) {
     throw new Error('Changing expense source type is not supported');
   }
@@ -134,7 +150,12 @@ async function update({ id, ...updates }) {
     if (!tx) throw new Error('Linked khata transaction not found');
     const nextAmount = normalizeAmount(updates.amount !== undefined ? updates.amount : expense.amount);
     const nextDate = updates.date || expense.date;
-    const nextNote = updates.notes !== undefined ? updates.notes : expense.notes;
+    const nextNote =
+      updates.notes !== undefined
+        ? updates.notes
+        : updates.description !== undefined
+        ? updates.description
+        : expense.notes;
     const updatedTx = {
       ...tx,
       amount: nextAmount,
@@ -151,7 +172,12 @@ async function update({ id, ...updates }) {
     if (!salaryRecord) throw new Error('Linked salary record not found');
     const nextAmount = normalizeAmount(updates.amount !== undefined ? updates.amount : expense.amount);
     const nextDate = updates.date || expense.date;
-    const nextNote = updates.notes !== undefined ? updates.notes : expense.notes;
+    const nextNote =
+      updates.notes !== undefined
+        ? updates.notes
+        : updates.description !== undefined
+        ? updates.description
+        : expense.notes;
     employeeModel.updateSalaryRecord({
       ...salaryRecord,
       amount: nextAmount,
@@ -187,6 +213,7 @@ async function remove(id) {
   const sourceType = normalizeSourceType(expense.sourceType);
   if (sourceType === 'khata' && expense.sourceRecordId) {
     khataModel.removeTransaction(expense.sourceRecordId);
+    syncService.deleteKhataTransaction(id).catch(() => {});
   }
   if (sourceType === 'salary' && expense.sourceRecordId) {
     employeeModel.removeSalaryRecord(expense.sourceRecordId);

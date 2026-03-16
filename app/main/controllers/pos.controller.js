@@ -1,5 +1,6 @@
 const billingService = require('../services/billing.service');
 const { printBillReceipt } = require('../services/print.service');
+const setupController = require('./setup.controller');
 const logger = require('../utils/logger');
 
 async function getMenuItems() {
@@ -72,7 +73,17 @@ async function createBill(billData) {
     let printSkipped = false;
     if (!skipPrint) {
       try {
-        const printResult = await printBillReceipt(bill);
+        const receiptOptions = {};
+        try {
+          const branchRes = await setupController.getBranchInfo();
+          const branchName = branchRes?.data?.name?.trim();
+          if (branchName) {
+            receiptOptions.restaurantName = branchName;
+          }
+        } catch (branchErr) {
+          logger.warn('Unable to load branch info for receipt header', branchErr);
+        }
+        const printResult = await printBillReceipt(bill, receiptOptions);
         if (printResult?.skipped) {
           printSkipped = true;
           printError = printResult.reason || 'Receipt print skipped';

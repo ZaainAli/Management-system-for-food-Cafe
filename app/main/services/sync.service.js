@@ -1,4 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid');
+const { getDb } = require('../db/index');
 const logger = require('../utils/logger');
 
 let _client = null;
@@ -40,10 +42,27 @@ async function upsert(table, row, conflict) {
     const client = getClient();
     const branchId = getBranchId();
     if (!client || !branchId) return;
-    const { error } = await client.from(table).upsert(row, { onConflict: conflict });
-    if (error) logger.error(`[sync] ${table} upsert failed:`, error.message);
+    const options = conflict ? { onConflict: conflict } : undefined;
+    const { error } = await client.from(table).upsert(row, options);
+    if (error) {
+      logger.error(`[sync] ${table} upsert failed:`, error.message);
+      enqueueSyncJob({
+        table,
+        action: 'upsert',
+        payload: row,
+        conflict,
+        errorMessage: error.message,
+      });
+    }
   } catch (err) {
     logger.error(`[sync] ${table} upsert error:`, err.message);
+    enqueueSyncJob({
+      table,
+      action: 'upsert',
+      payload: row,
+      conflict,
+      errorMessage: err.message,
+    });
   }
 }
 
@@ -53,10 +72,131 @@ async function del(table, id) {
     const client = getClient();
     if (!client || !getBranchId()) return;
     const { error } = await client.from(table).delete().eq('id', id);
-    if (error) logger.error(`[sync] ${table} delete failed:`, error.message);
+    if (error) {
+      logger.error(`[sync] ${table} delete failed:`, error.message);
+      enqueueSyncJob({
+        table,
+        action: 'delete',
+        payload: { id },
+        errorMessage: error.message,
+      });
+    }
   } catch (err) {
     logger.error(`[sync] ${table} delete error:`, err.message);
+    enqueueSyncJob({
+      table,
+      action: 'delete',
+      payload: { id },
+      errorMessage: err.message,
+    });
   }
+}
+
+function enqueueSyncJob({ table, action, payload, conflict, errorMessage }) {
+  try {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO sync_queue
+        (id, tableName, action, payload, conflict, attempts, lastError, createdAt, lastAttemptAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      uuidv4(),
+      table,
+      action,
+      JSON.stringify(payload || {}),
+      conflict || null,
+      0,
+      errorMessage || null,
+      now,
+      null
+    );
+    logger.warn(`[sync] queued ${action} for ${table}`);
+  } catch (err) {
+    logger.error('[sync] enqueue failed:', err.message);
+  }
+}
+
+function markSyncAttemptFailed(id, errorMessage) {
+  try {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE sync_queue
+      SET attempts = attempts + 1,
+          lastError = ?,
+          lastAttemptAt = ?
+      WHERE id = ?
+    `).run(errorMessage || null, now, id);
+  } catch (err) {
+    logger.error('[sync] queue update failed:', err.message);
+  }
+}
+
+function removeSyncJob(id) {
+  try {
+    const db = getDb();
+    db.prepare('DELETE FROM sync_queue WHERE id = ?').run(id);
+  } catch (err) {
+    logger.error('[sync] queue delete failed:', err.message);
+  }
+}
+
+let _flushInProgress = false;
+async function flushSyncQueue({ limit = 50 } = {}) {
+  if (_flushInProgress) return { success: false, reason: 'in_progress' };
+  const client = getClient();
+  const branchId = getBranchId();
+  if (!client || !branchId) return { success: false, reason: 'not_configured' };
+
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT * FROM sync_queue
+    ORDER BY createdAt ASC
+    LIMIT ?
+  `).all(limit);
+  if (!rows.length) return { success: true, processed: 0 };
+
+  _flushInProgress = true;
+  try {
+    for (const row of rows) {
+      let payload = null;
+      try {
+        payload = JSON.parse(row.payload || '{}');
+      } catch (err) {
+        markSyncAttemptFailed(row.id, `invalid payload: ${err.message}`);
+        continue;
+      }
+
+      try {
+        if (row.action === 'upsert') {
+          const options = row.conflict ? { onConflict: row.conflict } : undefined;
+          const { error } = await client.from(row.tableName).upsert(payload, options);
+          if (error) {
+            markSyncAttemptFailed(row.id, error.message);
+            continue;
+          }
+        } else if (row.action === 'delete') {
+          const deleteId = payload?.id ?? payload;
+          const { error } = await client.from(row.tableName).delete().eq('id', deleteId);
+          if (error) {
+            markSyncAttemptFailed(row.id, error.message);
+            continue;
+          }
+        } else {
+          markSyncAttemptFailed(row.id, `unknown action: ${row.action}`);
+          continue;
+        }
+        removeSyncJob(row.id);
+      } catch (err) {
+        markSyncAttemptFailed(row.id, err.message);
+      }
+    }
+  } finally {
+    _flushInProgress = false;
+  }
+
+  return { success: true, processed: rows.length };
 }
 
 // ─── daily_sales ─────────────────────────────────────────────────────────────
@@ -238,4 +378,5 @@ module.exports = {
   pushSalaryRecord,
   deleteSalaryRecord,
   pushDeletedItem,
+  flushSyncQueue,
 };

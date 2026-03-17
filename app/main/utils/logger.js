@@ -4,9 +4,11 @@ const fs = require('fs');
 
 // Determine log directory — use a fallback if electron app is not available (e.g., during testing)
 let logDir;
+let isPackaged = false;
 try {
   const { app } = require('electron');
   logDir = path.join(app.getPath('userData'), 'logs');
+  isPackaged = app.isPackaged;
 } catch {
   logDir = path.join(process.cwd(), 'logs');
 }
@@ -34,8 +36,10 @@ const logger = winston.createLogger({
   ],
 });
 
-// Add console transport in development
-if (process.env.NODE_ENV !== 'production') {
+// Add console transport only when stdout/stderr are available (avoid EPIPE in packaged apps)
+const stdoutWritable = !!(process.stdout && process.stdout.writable && !process.stdout.destroyed);
+const stderrWritable = !!(process.stderr && process.stderr.writable && !process.stderr.destroyed);
+if (process.env.NODE_ENV !== 'production' && !isPackaged && stdoutWritable && stderrWritable) {
   logger.add(new winston.transports.Console({
     format: winston.format.combine(
       winston.format.colorize(),

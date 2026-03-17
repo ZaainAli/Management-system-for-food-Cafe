@@ -80,7 +80,9 @@ async function add(expense) {
       paymentSource: 'today_sale',
       createdAt: new Date().toISOString(),
     };
+    // add sycncservice push inside model method to ensure record is created before syncing
     employeeModel.insertSalaryRecord(salaryRecord);
+    syncService.pushSalaryRecord(salaryRecord).catch(() => {});
     sourceEntityId = employee.id;
     sourceEntityName = employee.name;
     sourceRecordId = salaryRecord.id;
@@ -184,6 +186,12 @@ async function update({ id, ...updates }) {
       payDate: nextDate,
       notes: nextNote || updates.description || expense.description,
     });
+    syncService.pushSalaryRecord({
+      ...salaryRecord,
+      amount: nextAmount,
+      payDate: nextDate,
+      notes: nextNote || updates.description || expense.description,
+    }).catch(() => {});
   }
 
   const updated = {

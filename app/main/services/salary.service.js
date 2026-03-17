@@ -106,6 +106,7 @@ async function updateSalaryRecord({ id, amount, payDate, notes, type }) {
       updatedAt: new Date().toISOString(),
     };
     expenseModel.update(newExpense);
+    syncService.pushExpense(newExpense).catch(() => {});
     // Adjust daily_sales if amount or date changed
     if (oldDate !== payDate || linkedExpense.amount !== updated.amount) {
       salesModel.addExpenseToDailySales({ date: oldDate, amountDelta: -linkedExpense.amount });

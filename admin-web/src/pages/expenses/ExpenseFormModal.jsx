@@ -62,6 +62,9 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       if (key === 'source_type' && value === 'khata') {
         updated.description = 'Khata Payment (exp :web)';
       }
+      else if (key=='soucre_type' && value =='salary'){
+        updated.description='Salary Payment (exp:web)';
+      }
       return updated;
     });
   };
@@ -178,6 +181,7 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       } else if (form.source_type === 'salary' && selectedEmployeeId) {
         await supabase.from('salary_records').insert({
           employee_id: selectedEmployeeId,
+          branch_id:  branchId,
           amount:      parseFloat(Number(form.amount).toFixed(2)),
           month:       form.date.slice(0, 7),
           paid_at:     new Date().toISOString(),

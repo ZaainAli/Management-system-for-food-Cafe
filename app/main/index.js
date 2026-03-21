@@ -1,8 +1,8 @@
 const path = require('path');
 const fs   = require('fs');
 const dotenvResult = require('dotenv').config({ path: path.join(__dirname, '../../.env') });
-const { app, BrowserWindow, Menu } = require('electron');
-const { initializeDatabase } = require('./db/index');
+const { app, BrowserWindow, Menu, powerMonitor } = require('electron');
+const { initializeDatabase, closeDatabase } = require('./db/index');
 const { registerIPCHandlers } = require('./ipc/index');
 const { pullAllFromSupabase } = require('./services/pull.service');
 const logger = require('./utils/logger');
@@ -114,5 +114,23 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (!mainWindow) {
     createWindow();
+  }
+});
+
+// Handle system sleep/wake events to prevent database connection issues
+powerMonitor.on('suspend', () => {
+  logger.info('System is going to sleep - closing database connection');
+  closeDatabase();
+});
+
+powerMonitor.on('resume', () => {
+  logger.info('System resumed from sleep - reinitializing database connection');
+  try {
+    initializeDatabase();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:resumed');
+    }
+  } catch (err) {
+    logger.error('Failed to reinitialize database after resume:', err);
   }
 });

@@ -7,11 +7,15 @@ const { v4: uuidv4 } = require('uuid');
 const { formatPkDate } = require('../utils/datetime');
 
 async function getAll(filters = {}) {
-  return expenseModel.findAll(filters);
+  const expenses = expenseModel.findAll(filters);
+  return await enrichExpenses(expenses);
 }
 
 async function getById(id) {
-  return expenseModel.findById(id);
+  const expense = expenseModel.findById(id);
+  if (!expense) return null;
+  const enriched = await enrichExpenses([expense]);
+  return enriched[0];
 }
 
 function normalizeSourceType(sourceType) {
@@ -117,8 +121,9 @@ async function add(expense) {
 }
 
 async function update({ id, ...updates }) {
-  const expense = await expenseModel.findById(id);
-  if (!expense) throw new Error('Expense not found');
+  const rawExpense = expenseModel.findById(id);
+  if (!rawExpense) throw new Error('Expense not found');
+  const expense = rawExpense;
   if (updates.amount !== undefined) updates.amount = normalizeAmount(updates.amount);
   if (updates.description !== undefined) updates.description = String(updates.description).trim();
   if (updates.category !== undefined) updates.category = String(updates.category).trim();
@@ -216,8 +221,9 @@ async function update({ id, ...updates }) {
 }
 
 async function remove(id) {
-  const expense = await expenseModel.findById(id);
-  if (!expense) throw new Error('Expense not found');
+  const rawExpense = expenseModel.findById(id);
+  if (!rawExpense) throw new Error('Expense not found');
+  const expense = rawExpense;
   const sourceType = normalizeSourceType(expense.sourceType);
   if (sourceType === 'khata' && expense.sourceRecordId) {
     khataModel.removeTransaction(expense.sourceRecordId);
@@ -265,4 +271,35 @@ async function getSummary(filters = {}) {
   };
 }
 
-module.exports = { getAll, getById, add, update, remove, getCategories, getSummary };
+// Enrich expense data by fetching and populating missing entity names
+async function enrichExpenses(expenses) {
+  if (!Array.isArray(expenses)) expenses = [expenses];
+  if (!expenses.length) return expenses;
+
+  // Create a map to cache entity names for performance
+  const khataCache = new Map();
+  const employeeCache = new Map();
+
+  for (const exp of expenses) {
+    if (!exp.sourceEntityName && exp.sourceEntityId) {
+      if (exp.sourceType === 'khata') {
+        if (!khataCache.has(exp.sourceEntityId)) {
+          const profile = await khataModel.getProfileById(exp.sourceEntityId);
+          khataCache.set(exp.sourceEntityId, profile?.name || '');
+        }
+        exp.sourceEntityName = khataCache.get(exp.sourceEntityId);
+      } else if (exp.sourceType === 'salary') {
+        if (!employeeCache.has(exp.sourceEntityId)) {
+          const employee = await employeeModel.findById(exp.sourceEntityId);
+          employeeCache.set(exp.sourceEntityId, employee?.name || '');
+        }
+        exp.sourceEntityName = employeeCache.get(exp.sourceEntityId);
+      }
+    }
+  }
+
+  return expenses;
+}
+
+module.exports = { getAll, getById, add, update, remove, getCategories, getSummary, enrichExpenses };
+

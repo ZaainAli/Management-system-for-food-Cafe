@@ -280,7 +280,29 @@ function runMigrations(db) {
     db.prepare('ALTER TABLE menu_items ADD COLUMN halfPrice REAL').run();
   }
 
-  const expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+  let expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+  
+  // Migration: If old snake_case columns exist, copy data to camelCase and drop snake_case
+  const hasSnakeCase = expenseCols.includes('source_type');
+  const hasCamelCase = expenseCols.includes('sourceType');
+  
+  if (hasSnakeCase && !hasCamelCase) {
+    // Old database with snake_case columns - add camelCase columns and migrate data
+    db.prepare('ALTER TABLE expenses ADD COLUMN sourceType TEXT NOT NULL DEFAULT "manual"').run();
+    db.prepare('ALTER TABLE expenses ADD COLUMN sourceEntityId TEXT').run();
+    db.prepare('ALTER TABLE expenses ADD COLUMN sourceEntityName TEXT DEFAULT ""').run();
+    db.prepare('ALTER TABLE expenses ADD COLUMN sourceRecordId TEXT').run();
+    
+    // Copy data from snake_case to camelCase
+    db.prepare('UPDATE expenses SET sourceType = source_type').run();
+    db.prepare('UPDATE expenses SET sourceEntityId = source_entity_id').run();
+    db.prepare('UPDATE expenses SET sourceEntityName = source_entity_name').run();
+    db.prepare('UPDATE expenses SET sourceRecordId = source_record_id').run();
+    
+    logger.info('Migration: Migrated expense source columns from snake_case to camelCase');
+  }
+  
+  // Add camelCase columns if they don't exist (for fresh installs)
   if (!expenseCols.includes('sourceType')) {
     db.prepare("ALTER TABLE expenses ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'manual'").run();
     logger.info('Migration: Added sourceType column to expenses table');
@@ -316,7 +338,7 @@ function runMigrations(db) {
     logger.info('Migration: Added type column to salary_records table');
   }
   if (!salaryCols.includes('paymentSource')) {
-    db.prepare("ALTER TABLE salary_records ADD COLUMN paymentSource TEXT NOT NULL DEFAULT 'manual'").run();
+    db.prepare("ALTER TABLE salary_records ADD COLUMN paymentSource TEXT NOT NULL DEFAULT 'today_sale'").run();
     logger.info('Migration: Added paymentSource column to salary_records table');
   }
 

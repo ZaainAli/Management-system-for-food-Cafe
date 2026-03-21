@@ -15,7 +15,14 @@ async function getById(id) {
   const profile = khataModel.getProfileById(id);
   if (!profile) return null;
   const transactions = khataModel.getTransactionsByKhataId(id);
-  const linkedExpenses = expenseModel.findBySourceRecordIds(transactions.map((tx) => tx.id), 'khata');
+  const rawLinkedExpenses = expenseModel.findBySourceRecordIds(transactions.map((tx) => tx.id), 'khata');
+  const linkedExpenses = rawLinkedExpenses.map((exp) => ({
+    ...exp,
+    sourceType: exp.source_type,
+    sourceEntityId: exp.source_entity_id,
+    sourceEntityName: exp.source_entity_name,
+    sourceRecordId: exp.source_record_id,
+  }));
   const linkedByRecordId = new Map(linkedExpenses.map((exp) => [exp.sourceRecordId, exp.id]));
   const enrichedTransactions = transactions.map((tx) => ({
     ...tx,
@@ -168,8 +175,15 @@ async function updateTransaction(payload) {
   const saved = khataModel.updateTransaction(updated);
 
   // Update the linked expense if one exists
-  const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
-  if (linkedExpense) {
+  const rawLinkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+  if (rawLinkedExpense) {
+    const linkedExpense = {
+      ...rawLinkedExpense,
+      sourceType: rawLinkedExpense.source_type,
+      sourceEntityId: rawLinkedExpense.source_entity_id,
+      sourceEntityName: rawLinkedExpense.source_entity_name,
+      sourceRecordId: rawLinkedExpense.source_record_id,
+    };
     const amountChanged = tx.amount !== nextAmount;
     const dateChanged = tx.date !== nextDate;
     if (amountChanged || dateChanged) {
@@ -215,8 +229,15 @@ async function deleteTransaction(payload) {
       }
     } else {
       // Supplier: unlink the expense record
-      const linkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
-      if (linkedExpense) {
+      const rawLinkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+      if (rawLinkedExpense) {
+        const linkedExpense = {
+          ...rawLinkedExpense,
+          sourceType: rawLinkedExpense.source_type,
+          sourceEntityId: rawLinkedExpense.source_entity_id,
+          sourceEntityName: rawLinkedExpense.source_entity_name,
+          sourceRecordId: rawLinkedExpense.source_record_id,
+        };
         const unlinked = { ...linkedExpense, sourceType: 'manual', sourceEntityId: null, sourceEntityName: '', sourceRecordId: null, updatedAt: new Date().toISOString() };
         expenseModel.update(unlinked);
         syncService.pushExpense(unlinked).catch(() => {});

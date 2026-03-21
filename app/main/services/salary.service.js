@@ -93,8 +93,15 @@ async function updateSalaryRecord({ id, amount, payDate, notes, type }) {
   syncService.pushSalaryRecord(updated).catch(() => {});
 
   // Sync linked expense if exists
-  const linkedExpense = expenseModel.findBySourceRecordId(id, 'salary');
-  if (linkedExpense) {
+  const rawLinkedExpense = expenseModel.findBySourceRecordId(id, 'salary');
+  if (rawLinkedExpense) {
+    const linkedExpense = {
+      ...rawLinkedExpense,
+      sourceType: rawLinkedExpense.source_type,
+      sourceEntityId: rawLinkedExpense.source_entity_id,
+      sourceEntityName: rawLinkedExpense.source_entity_name,
+      sourceRecordId: rawLinkedExpense.source_record_id,
+    };
     const typeLabel = recordType === 'bonus' ? 'Bonus' : recordType === 'advance' ? 'Advance' : 'Salary';
     const oldDate = linkedExpense.date;
     const newExpense = {
@@ -122,9 +129,18 @@ async function deleteSalaryRecord(id) {
   if (!existing) throw new Error('Salary record not found');
 
   // Remove linked expense first
-  const linkedExpense = expenseModel.findBySourceRecordId(id, 'salary');
-  if (linkedExpense) {
+  const rawLinkedExpense = expenseModel.findBySourceRecordId(id, 'salary');
+  if (rawLinkedExpense) {
+    const linkedExpense = {
+      ...rawLinkedExpense,
+      sourceType: rawLinkedExpense.source_type,
+      sourceEntityId: rawLinkedExpense.source_entity_id,
+      sourceEntityName: rawLinkedExpense.source_entity_name,
+      sourceRecordId: rawLinkedExpense.source_record_id,
+    };
     expenseModel.remove(linkedExpense.id);
+    // delete from sync and adjust daily sales
+    syncService.deleteExpense(linkedExpense.id).catch(() => {});
     salesModel.addExpenseToDailySales({ date: linkedExpense.date, amountDelta: -linkedExpense.amount });
   }
 

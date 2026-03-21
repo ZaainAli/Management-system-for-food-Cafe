@@ -185,14 +185,17 @@ function upsertMenuItems(db, rows, pendingIds = new Set()) {
 
 function upsertExpenses(db, rows, pendingIds = new Set()) {
   const upsert = db.prepare(`
-    INSERT INTO expenses (id, description, amount, category, date, sourceType, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO expenses (id, description, amount, category, date, sourceType, sourceEntityId, sourceEntityName, sourceRecordId, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       description = excluded.description,
       amount      = excluded.amount,
       category    = excluded.category,
       date        = excluded.date,
-      sourceType  = excluded.sourceType
+      sourceType = excluded.sourceType,
+      sourceEntityId = excluded.sourceEntityId,
+      sourceEntityName = excluded.sourceEntityName,
+      sourceRecordId = excluded.sourceRecordId
   `);
   let upserted = 0;
   let skipped = 0;
@@ -207,6 +210,9 @@ function upsertExpenses(db, rows, pendingIds = new Set()) {
         r.category,
         r.date,
         r.source_type || 'manual',
+        r.source_entity_id || null,
+        r.source_entity_name || '',
+        r.source_record_id || null,
         r.created_at || new Date().toISOString()
       );
       cloudIds.push(r.id);

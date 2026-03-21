@@ -190,12 +190,9 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       }
 
       if (txData?.id && result.data?.[0]?.id) {
-        // Get the profile name for source_entity_name
-        const profileName = khataProfiles.find(p => p.id === selectedProfileId)?.name || '';
         const { error: linkError } = await supabase.from('expenses').update({
             source_entity_id: selectedProfileId,
             source_record_id: txData.id,
-            source_entity_name: profileName,
           }).eq('id', result.data[0].id);
 
         if (linkError) {
@@ -223,11 +220,9 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       }
 
       if ( salaryData?.id && result.data?.[0]?.id) {
-        // Get the employee name for source_entity_name
-        const employeeName = employees.find(e => e.id === selectedEmployeeId)?.name || '';
         const { error: linkError } = await supabase
           .from('expenses')
-          .update({ source_entity_id: selectedEmployeeId, source_record_id: salaryData.id, source_entity_name: employeeName })
+          .update({ source_entity_id: selectedEmployeeId, source_record_id: salaryData.id })
           .eq('id', result.data[0].id);
 
         if (linkError) {
@@ -243,6 +238,7 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
     // ── EDIT EXISTING EXPENSE ────────────────────────────────────
 
     if (expense.source_type === 'khata' && expense.source_record_id) {
+      
       const { error: txError } = await supabase.from('khata_transactions').update({
           amount: parseFloat(Number(form.amount).toFixed(2)),
           note:   form.description.trim() || form.category.trim(),

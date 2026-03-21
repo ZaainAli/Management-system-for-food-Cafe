@@ -71,7 +71,8 @@ function createWindow() {
   initializeDatabase();
   registerIPCHandlers();
 
-  mainWindow.webContents.openDevTools()
+  // Open DevTools in development mode, but not in production
+  // mainWindow.webContents.openDevTools()
 
   // Pull latest data from Supabase into SQLite (non-blocking)
   // After pull completes, notify renderer so pages like Dashboard can re-fetch

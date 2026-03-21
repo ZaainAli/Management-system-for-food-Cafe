@@ -258,8 +258,6 @@ export default function SalaryPage() {
   );
 
   const { salaryPaid, advancePaid, totalAdvanceAllTime, totalDue, lastMonthBalance, remainingDue, earned } = monthlySummary;
-  console.log("Salary summary:", { salaryPaid, advancePaid, totalAdvanceAllTime, totalDue, lastMonthBalance, remainingDue, earned });
-  console.log("monthHistory:", monthHistory); 
   return (
     <div>
       {/* Header */}

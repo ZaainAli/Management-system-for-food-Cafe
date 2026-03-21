@@ -258,7 +258,6 @@ export default function SalaryPage() {
   );
 
   const { salaryPaid, advancePaid, totalAdvanceAllTime, totalDue, lastMonthBalance, remainingDue, earned } = monthlySummary;
-
   return (
     <div>
       {/* Header */}

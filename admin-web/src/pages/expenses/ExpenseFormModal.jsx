@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { formatPkDate } from '@/utils/datetime';
+import { formatPkDate ,formatPkDateTime } from '@/utils/datetime';
 
-const CATEGORIES = ['Other', 'Utilities', 'Rent', 'Raw Material', 'Salary', 'Khata Payment'];
+const CATEGORIES = ['manual', 'Other', 'Utilities', 'Rent', 'Raw Material', 'khata payment', 'salary payment'];
 const SOURCE_TYPES = ['manual', 'khata', 'salary'];
 
 const today = () => formatPkDate();
+const now = () => formatPkDateTime();
 
 export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }) {
   const [form, setForm] = useState({ category: '', description: '', amount: '', date: today(), source_type: 'manual' });
@@ -59,8 +60,17 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
     const value = e.target.value;
     setForm((f) => {
       const updated = { ...f, [key]: value };
-      if (key === 'source_type' && value === 'khata') {
-        updated.description = 'Khata Payment (exp :web)';
+      if (key === 'source_type') {
+        if (value === 'manual') {
+          updated.category = 'manual';
+          updated.description = '';
+        } else if (value === 'khata') {
+          updated.category = 'khata payment';
+          updated.description = 'khata payment (exp:web)';
+        } else if (value === 'salary') {
+          updated.category = 'salary payment';
+          updated.description = 'Salary payment (exp:web)';
+        }
       }
       return updated;
     });
@@ -157,11 +167,13 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
       }
     }
 
-    // Side-effects: create or update linked records
-    if (!expense?.id) {
-      // New expense
-      if (form.source_type === 'khata' && selectedProfileId) {
-        const { data: txData } = await supabase.from('khata_transactions').insert({
+// Side-effects: create or update linked records
+  if (!expense?.id) {
+    // ── NEW EXPENSE ──────────────────────────────────────────────
+    if (form.source_type === 'khata' && selectedProfileId) {
+      const { data: txData, error: txError } = await supabase
+        .from('khata_transactions')
+        .insert({
           profile_id: selectedProfileId,
           branch_id:  branchId,
           type:       'payment',
@@ -169,33 +181,96 @@ export default function ExpenseFormModal({ expense, branchId, onClose, onSaved }
           note:       form.description.trim() || form.category.trim(),
           date:       form.date,
         }).select('id').single();
-        if (txData?.id && result.data?.[0]?.id) {
-          await supabase.from('expenses').update({
+
+      if (txError) {
+        setError('Expense saved but failed to create khata transaction: ' + txError.message);
+        setSaving(false);
+        onSaved(); onClose();
+        return;
+      }
+
+      if (txData?.id && result.data?.[0]?.id) {
+        const { error: linkError } = await supabase.from('expenses').update({
             source_entity_id: selectedProfileId,
             source_record_id: txData.id,
           }).eq('id', result.data[0].id);
+
+        if (linkError) {
+          setError('Khata transaction created but failed to link to expense: ' + linkError.message);
+          setSaving(false);
+          onSaved(); onClose();
+          return;
         }
-      } else if (form.source_type === 'salary' && selectedEmployeeId) {
-        await supabase.from('salary_records').insert({
-          employee_id: selectedEmployeeId,
-          amount:      parseFloat(Number(form.amount).toFixed(2)),
-          month:       form.date.slice(0, 7),
-          paid_at:     new Date().toISOString(),
-        });
       }
-    } else {
-      // Edit existing expense — update the linked khata transaction if present
-      if (expense.source_type === 'khata' && expense.source_record_id) {
-        await supabase.from('khata_transactions').update({
+
+    } else if (form.source_type === 'salary' && selectedEmployeeId) {
+        const { data: salaryData, error: salaryError } = await supabase.from('salary_records').insert({
+            employee_id: selectedEmployeeId,
+            branch_id:  branchId,
+            amount:      parseFloat(Number(form.amount).toFixed(2)),
+            month:       form.date.slice(0, 7),
+            paid_at:     now(),
+          }).select('id').single();
+
+      if (salaryError) {
+        setError('Expense saved but failed to create salary record: ' + salaryError.message);
+        setSaving(false);
+        onSaved(); onClose();
+        return;
+      }
+
+      if ( salaryData?.id && result.data?.[0]?.id) {
+        const { error: linkError } = await supabase
+          .from('expenses')
+          .update({ source_entity_id: selectedEmployeeId, source_record_id: salaryData.id })
+          .eq('id', result.data[0].id);
+
+        if (linkError) {
+          setError('Salary record created but failed to link employee to expense: ' + linkError.message);
+          setSaving(false);
+          onSaved(); onClose();
+          return;
+        }
+      }
+    }
+
+  } else {
+    // ── EDIT EXISTING EXPENSE ────────────────────────────────────
+
+    if (expense.source_type === 'khata' && expense.source_record_id) {
+      
+      const { error: txError } = await supabase.from('khata_transactions').update({
           amount: parseFloat(Number(form.amount).toFixed(2)),
           note:   form.description.trim() || form.category.trim(),
           date:   form.date,
         }).eq('id', expense.source_record_id);
+
+      if (txError) {
+        setError('Expense updated but failed to sync khata transaction: ' + txError.message);
+        setSaving(false);
+        onSaved(); onClose();
+        return;
+      }
+
+    } else if (expense.source_type === 'salary' && expense.source_entity_id) {
+      // ✅ Fix: update the latest salary record for this employee+month
+      const { error: salaryError } = await supabase.from('salary_records').update({
+          amount:  parseFloat(Number(form.amount).toFixed(2)),
+          month:   form.date.slice(0, 7),
+          paid_at: now(),
+        }).eq('id', expense.source_record_id)
+
+      if (salaryError) {
+        setError('Expense updated but failed to sync salary record: ' + salaryError.message);
+        setSaving(false);
+        onSaved(); onClose();
+        return;
       }
     }
+  }
 
-    onSaved(); onClose();
-    setSaving(false);
+  onSaved(); onClose();
+  setSaving(false);
   };
 
   return (

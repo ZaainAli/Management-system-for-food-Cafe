@@ -161,7 +161,6 @@ export default function ExpensesPage() {
   const total = expenses.reduce((s, e) => s + e.amount, 0);
 
   if (loading) return <div className="text-slate-400">Loading expenses...</div>;
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">

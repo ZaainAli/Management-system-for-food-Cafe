@@ -61,7 +61,6 @@ export default function ReportsPage() {
           case 'pl':      res = await window.api.report.getProfitLoss(filters); break;
           default: break;
         }
-        console.log('Report data:', res);
         if (res?.success) setData(res.data);
         else setError(res?.error || 'Failed to load report.');
       } catch (err) {

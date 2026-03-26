@@ -231,6 +231,7 @@ async function remove(id) {
   }
   if (sourceType === 'salary' && expense.sourceRecordId) {
     employeeModel.removeSalaryRecord(expense.sourceRecordId);
+    syncService.deleteSalaryRecord(expense.sourceRecordId).catch(() => {});
   }
   // Snapshot to trash before deleting
   syncService.pushDeletedItem({

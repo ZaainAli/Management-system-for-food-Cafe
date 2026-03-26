@@ -319,13 +319,16 @@ async function pushEmployee(employee) {
 async function pushSalaryRecord(record) {
   // Supabase salary_records.month is 'YYYY-MM'; derive from payDate
   const month = record.payDate ? record.payDate.slice(0, 7) : new Date().toISOString().slice(0, 7);
+  // paid_at should be stored as date string (YYYY-MM-DD format) consistent with db
+  const paidAtDate = record.payDate || new Date().toISOString().slice(0, 10);
+  
   await upsert('salary_records', {
     id:          record.id,
     employee_id: record.employeeId,
     branch_id:   getBranchId(),
     amount:      record.amount,
     month,
-    paid_at:     record.createdAt || new Date().toISOString(),
+    paid_at:     paidAtDate,
   }, 'id');
 }
 

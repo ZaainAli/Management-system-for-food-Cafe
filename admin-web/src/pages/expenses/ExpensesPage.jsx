@@ -177,15 +177,15 @@ export default function ExpensesPage() {
       )}
 
       {/* Table */}
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-700">
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Date</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Category</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase hidden sm:table-cell">Description</th>
+              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Description</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Amount</th>
-              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase hidden md:table-cell">Source</th>
+              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Source</th>
               <th className="px-4 py-3 w-16"></th>
             </tr>
           </thead>
@@ -198,9 +198,9 @@ export default function ExpensesPage() {
                   <tr key={e.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                     <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{e.date}</td>
                     <td className="px-4 py-3 text-white font-medium">{e.category}</td>
-                    <td className="px-4 py-3 text-slate-400 text-xs hidden sm:table-cell">{e.description || '—'}</td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">{e.description || '—'}</td>
                     <td className="px-4 py-3 text-slate-300 whitespace-nowrap">Rs {Number(e.amount).toLocaleString()}</td>
-                    <td className="px-4 py-3 hidden md:table-cell">
+                    <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${SOURCE_COLORS[e.source_type] ?? SOURCE_COLORS.manual}`}>
                         {e.source_type}
                       </span>

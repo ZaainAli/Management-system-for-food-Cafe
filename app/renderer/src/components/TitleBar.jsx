@@ -33,7 +33,7 @@ export default function TitleBar() {
   return (
     <div className="title-bar">
       <div className="title-bar-drag-region">
-        <span className="title-bar-title">Restaurant Manager</span>
+        <span className="title-bar-title">Hamza & Brother's Food Chain</span>
       </div>
       <div className="title-bar-controls">
         <button

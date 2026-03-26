@@ -38,7 +38,7 @@ async function addSalaryRecord({ employeeId, amount, payDate, notes = '', type =
     id: uuidv4(),
     employeeId,
     employeeName: employee.name,
-    amount: parseFloat(amount),
+    amount: parseFloat(parseFloat(amount).toFixed(2)),
     payDate,
     notes,
     type: recordType,
@@ -83,7 +83,7 @@ async function updateSalaryRecord({ id, amount, payDate, notes, type }) {
 
   const updated = {
     ...existing,
-    amount: parseFloat(amount),
+    amount: parseFloat(parseFloat(amount).toFixed(2)),
     payDate,
     notes: notes || '',
     type: recordType,

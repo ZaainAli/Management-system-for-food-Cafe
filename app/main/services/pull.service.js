@@ -466,7 +466,29 @@ function upsertSalaryRecords(db, rows, employeeMap, pendingIds = new Set()) {
     for (const r of rows) {
       if (pendingIds.has(r.id)) { skipped += 1; continue; }
       const empName = employeeMap[r.employee_id] || '';
-      const payDate = r.month ? `${r.month}-01` : now.slice(0, 10);
+      // Extract date from paid_at or month field
+      let payDate;
+      if (r.paid_at) {
+        // Try to extract date string (YYYY-MM-DD) from paid_at
+        const paidStr = String(r.paid_at).trim();
+        const dateMatch = paidStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (dateMatch) {
+          payDate = dateMatch[0]; // Use YYYY-MM-DD directly
+        } else {
+          // If paid_at is not in expected format, parse as date
+          const paidDate = new Date(r.paid_at);
+          if (!Number.isNaN(paidDate.getTime())) {
+            const year = paidDate.getUTCFullYear();
+            const month = String(paidDate.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(paidDate.getUTCDate()).padStart(2, '0');
+            payDate = `${year}-${month}-${day}`;
+          } else {
+            payDate = r.month ? `${r.month}-01` : now.slice(0, 10);
+          }
+        }
+      } else {
+        payDate = r.month ? `${r.month}-01` : now.slice(0, 10);
+      }
       stmt.run(r.id, r.employee_id, empName, r.amount, payDate, r.paid_at || now);
       cloudIds.push(r.id);
       upserted += 1;

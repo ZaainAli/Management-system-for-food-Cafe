@@ -70,6 +70,7 @@ export default function SalaryModal({ employee, onClose, onSaved }) {
               autoFocus
               type="number"
               min="1"
+              step="0.01"
               value={form.amount}
               onChange={set('amount')}
               className="input-field"

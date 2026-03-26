@@ -78,7 +78,7 @@ export default function EmployeeModal({ employee, branches, onClose, onSaved }) 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Salary (Rs)</label>
-              <input type="number" min="0" value={form.salary} onChange={set('salary')} className="input-field" placeholder="0" />
+              <input type="number" min="0" step="0.01" value={form.salary} onChange={set('salary')} className="input-field" placeholder="0" />
             </div>
             <div>
               <label className="label">Hire Date</label>

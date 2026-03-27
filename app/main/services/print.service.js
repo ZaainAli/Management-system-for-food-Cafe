@@ -5,6 +5,7 @@ const path = require('path');
 const logger = require('../utils/logger');
 
 const RECEIPT_WIDTH = 42; // characters for 80mm thermal printer
+const LEFT_MARGIN = '  '; // 2 spaces for left margin
 
 // ESC/POS commands for Epson TM-T88V
 const ESC = '\x1b';
@@ -25,68 +26,61 @@ function centerText(text, width = RECEIPT_WIDTH) {
   return ' '.repeat(pad) + text;
 }
 
-function line(char = '-', width = RECEIPT_WIDTH) {
+function line(char = '-', width = RECEIPT_WIDTH-2) {
   return char.repeat(width);
 }
 
 function renderReceiptText(bill, options = {}) {
   const restaurantName = options.restaurantName || 'Hamza & Brother Food ';
-  const restaurantAddress = options.restaurantAddress || '';
   const createdAt = bill.createdAt ? new Date(bill.createdAt) : new Date();
   const timeStr = createdAt.toLocaleTimeString('en-PK', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
   const parts = [];
 
   // Header
-  parts.push(ALIGN_CENTER);
-  parts.push(BOLD_ON + restaurantName + BOLD_OFF + '\n');
-  if (restaurantAddress) {
-    parts.push(restaurantAddress + '\n');
-  }
+  parts.push(ALIGN_CENTER + BOLD_ON + restaurantName + BOLD_OFF + '\n');
   parts.push(ALIGN_LEFT);
-  parts.push('\n');
+  
 
   // Bill info - ID and time on same line
   const billInfo = `Bill: ${bill.id}`;
-  parts.push(billInfo.padEnd(RECEIPT_WIDTH - timeStr.length) + timeStr + '\n');
-  if (bill.tableId) parts.push(`Table: ${bill.tableId}\n`);
-  if (bill.customerName) parts.push(`Customer: ${bill.customerName}\n`);
-  parts.push(`Payment: ${bill.paymentMethod || ''}\n`);
-  parts.push(line() + '\n');
+  parts.push(LEFT_MARGIN + billInfo.padEnd(RECEIPT_WIDTH - timeStr.length - LEFT_MARGIN.length) + timeStr + '\n');
+  if (bill.tableId) parts.push(LEFT_MARGIN + `Table: ${bill.tableId}\n`);
+  parts.push(LEFT_MARGIN + line() + '\n');
 
   // Column header
   parts.push(
-    'Item'.padEnd(18) +
+    LEFT_MARGIN + 'Item'.padEnd(18 - LEFT_MARGIN.length) +
     'Qty'.padStart(4) +
     'Price'.padStart(10) +
     'Total'.padStart(10) + '\n'
   );
-  parts.push(line() + '\n');
+  parts.push(LEFT_MARGIN + line() + '\n');
 
   // Items have variable length names, so we truncate to 18 chars and pad right. Quantity is 4 chars, price and total are 10 chars each, right-aligned.
   for (const item of (bill.items || [])) {
-    const name = String(item.name).substring(0, 18).padEnd(18);
+    const name = String(item.name).substring(0, 18 - LEFT_MARGIN.length).padEnd(18 - LEFT_MARGIN.length);
     const qty = String(item.quantity).padStart(4);
     const price = formatAmount(item.price).padStart(10);
     const total = formatAmount(item.lineTotal).padStart(10);
-    parts.push(`${name}${qty}${price}${total}\n`);
+    parts.push(LEFT_MARGIN + `${name}${qty}${price}${total}\n`);
   }
 
-  parts.push(line() + '\n');
+  parts.push(LEFT_MARGIN + line() + '\n');
 
   // Summary
-  const labelWidth = RECEIPT_WIDTH - 20;
+  const labelWidth = RECEIPT_WIDTH - 20 - LEFT_MARGIN.length;
   if (bill.discount > 0) {
-    parts.push('Discount'.padEnd(labelWidth) + ('-' + formatAmount(bill.discount)).padStart(20) + '\n');
-    parts.push(line() + '\n');
+    parts.push(LEFT_MARGIN + 'Discount'.padEnd(labelWidth) + ('-' + formatAmount(bill.discount)).padStart(20) + '\n');
+    parts.push(LEFT_MARGIN + line() + '\n');
   }
   
 
   // TOTAL - bold and double height
   const totalLine = 'TOTAL'.padEnd(labelWidth) + formatAmount(bill.total).padStart(20);
-  parts.push(BOLD_ON + DOUBLE_HEIGHT_ON + totalLine + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
+  parts.push(LEFT_MARGIN + BOLD_ON + DOUBLE_HEIGHT_ON + totalLine + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
 
-  parts.push(line() + '\n');
+  parts.push(LEFT_MARGIN + line() + '\n');
 
   // Auto paper cut
   parts.push(CUT_PAPER);

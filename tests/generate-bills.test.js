@@ -25,8 +25,8 @@ const TAX_RATE = 0.00;
 const BILLS_PER_DAY = Number(process.env.BILLS_PER_DAY || 1000);
 
 // ─── Date range: one month (2026-01-08 to 2026-02-07) ─────
-const DATE_FROM = '2024-01-08';
-const DATE_TO = '2026-02-07';
+const DATE_FROM = '2026-03-27';
+const DATE_TO = '2026-03-27';
 
 function getAllDatesInRange(from, to) {
   const dates = [];
@@ -104,9 +104,9 @@ function buildBill(itemPool, dateStr) {
   });
 
   const discount = randomInt(0, 10);
-  const tax = parseFloat((subtotal * TAX_RATE).toFixed(2));
-  const discountAmt = parseFloat((subtotal * (discount / 100)).toFixed(2));
-  const total = parseFloat((subtotal + tax - discountAmt).toFixed(2));
+  const tax = parseFloat((subtotal * 0));
+  const discountAmt = parseFloat((subtotal * (discount / 100)));
+  const total = parseFloat((subtotal + tax - discountAmt));
 
   // Random time within the day
   const hh = String(randomInt(8, 23)).padStart(2, '0');
@@ -117,7 +117,6 @@ function buildBill(itemPool, dateStr) {
   return {
     id: uuidv4(),
     tableId: tableIds.length > 0 ? tableIds[randomInt(0, tableIds.length - 1)] : null,
-    customerName: '',
     items: lineItems,
     subtotal: parseFloat(subtotal.toFixed(2)),
     tax,

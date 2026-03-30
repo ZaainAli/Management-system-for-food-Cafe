@@ -131,6 +131,7 @@ export default function KhataPage() {
       amount: resolved,
       date: txForm.date,
       note: txForm.note,
+      khataId: activeId,
       paymentSource: txForm.type === 'payment' ? txForm.paymentSource : null,
     });
     if (res.success) {

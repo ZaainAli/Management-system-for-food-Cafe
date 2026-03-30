@@ -167,7 +167,12 @@ async function updateDue(payload) {
 
 async function updateTransaction(payload) {
   if (!payload?.id) throw new Error('Transaction id is required');
+  if (!payload.khataId) throw new Error('Khata profile is required');
+  const profile = khataModel.getProfileById(payload.khataId);
+  if (!profile) throw new Error('Khata profile not found');
   const tx = khataModel.getTransactionById(payload.id);
+  const rawLinkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+  if (!rawLinkedExpense) throw new Error('Linked expense not found for the transaction');
   if (!tx) throw new Error('Transaction not found');
 
   const nextAmount = payload.amount !== undefined ? normalizeAmount(payload.amount) : tx.amount;
@@ -197,14 +202,14 @@ async function updateTransaction(payload) {
   const saved = khataModel.updateTransaction(updated);
 
   // Update the linked expense if one exists
-  const rawLinkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+  let linkedExpense = null;
   if (rawLinkedExpense) {
-    const linkedExpense = {
+     linkedExpense = {
       ...rawLinkedExpense,
-      sourceType: rawLinkedExpense.source_type,
-      sourceEntityId: rawLinkedExpense.source_entity_id,
-      sourceEntityName: rawLinkedExpense.source_entity_name,
-      sourceRecordId: rawLinkedExpense.source_record_id,
+      sourceType: 'khata',
+      sourceEntityId: profile.id,
+      sourceEntityName: profile.name,
+      sourceRecordId: tx.id,
     };
     const amountChanged = tx.amount !== nextAmount;
     const dateChanged = tx.date !== nextDate;

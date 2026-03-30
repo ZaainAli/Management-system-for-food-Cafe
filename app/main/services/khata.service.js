@@ -143,6 +143,28 @@ async function addPayment(payload) {
   return created;
 }
 
+async function updateDue(payload) {
+  if (!payload?.id) throw new Error('Transaction id is required');
+  const tx = khataModel.getTransactionById(payload.id);
+  if (!tx) throw new Error('Transaction not found');
+  if (tx.type !== 'due') throw new Error('Transaction is not a due type');
+
+  const nextAmount = payload.amount !== undefined ? normalizeAmount(payload.amount) : tx.amount;
+  const nextDate = payload.date || tx.date;
+  const nextNote = payload.note !== undefined ? String(payload.note).trim() : tx.note;
+
+  const updated = {
+    ...tx,
+    amount: nextAmount,
+    date: nextDate,
+    note: nextNote,
+  };
+
+  const saved = khataModel.updateTransaction(updated);
+  syncService.pushKhataTransaction(saved).catch(() => {});
+  return saved;
+}
+
 async function updateTransaction(payload) {
   if (!payload?.id) throw new Error('Transaction id is required');
   const tx = khataModel.getTransactionById(payload.id);
@@ -297,6 +319,7 @@ module.exports = {
   getById,
   addProfile,
   addDue,
+  updateDue,
   addPayment,
   updateTransaction,
   deleteTransaction,

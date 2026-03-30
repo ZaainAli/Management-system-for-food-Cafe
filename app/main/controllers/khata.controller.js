@@ -81,6 +81,16 @@ async function addPayment(payload) {
   }
 }
 
+async function updateDue(payload) {
+  try {
+    const updated = await khataService.updateDue(payload);
+    return { success: true, data: updated };
+  } catch (err) {
+    logger.error('khata:updateDue failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function updateTransaction(payload) {
   try {
     const updated = await khataService.updateTransaction(payload);
@@ -185,6 +195,7 @@ module.exports = {
   getById,
   addProfile,
   addDue,
+  updateDue,
   addPayment,
   updateTransaction,
   deleteTransaction,

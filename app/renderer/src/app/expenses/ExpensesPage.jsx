@@ -210,9 +210,9 @@ export default function ExpensesPage() {
           )}
           {period === 'custom' && (
             <div className="flex items-center gap-2">
-              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
+              <input type="date" value={customFrom} max={getPkToday()} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
               <span className="text-slate-500 text-xs">to</span>
-              <input type="date" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
+              <input type="date" value={customTo} min={customFrom} max={getPkToday()} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
             </div>
           )}
         </div>

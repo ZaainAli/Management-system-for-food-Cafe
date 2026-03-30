@@ -149,6 +149,18 @@ function insertBill(bill, stockAdjustments = []) {
   return bill;
 }
 
+function updateBill(bill) {
+  const db = getDb();
+
+  db.prepare(`
+    UPDATE bills 
+    SET subtotal = ?, total = ?
+    WHERE id = ?
+  `).run(bill.subtotal, bill.total, bill.id);
+
+  return bill;
+}
+
 function insertHeldBill(heldBill) {
   const db = getDb();
   const tx = db.transaction(() => {
@@ -510,5 +522,5 @@ module.exports = {
   insertBill, getBills, getBillById, getRecentBills, getTopItems, getTodayBillCount,
   insertHeldBill, getHeldBills, getHeldBillById, deleteHeldBill,
   insertDiscountedBill, getDiscountedBills, cancelBill,
-  getQuickKeys, setQuickKeys,
+  getQuickKeys, setQuickKeys,updateBill,
 };

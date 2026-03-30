@@ -231,6 +231,7 @@ function drawExpensesContent(doc, d, y) {
   y = drawTable(doc, ['Category', 'Entries', 'Total'], (d.byCategory || []).map(r => [r.category, r.count, r.total]), y);
   y = drawSubLabel(doc, 'Expenses - Daily Totals', y);
   y = drawTable(doc, ['Date', 'Total'], (d.dailyTotals || []).map(r => [r.date, r.total]), y);
+  y = drawTable(doc, ['Date', 'Description', 'Category', 'Amount'], (d.details || []).map(r => [r.date, r.description, r.category, `Rs ${r.amount}`]), y);
   return y;
 }
 

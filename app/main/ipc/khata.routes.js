@@ -40,6 +40,14 @@ function registerKhataRoutes() {
     });
   });
 
+  ipcMain.handle('khata:updateDue', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager'], async () => {
+        return khataController.updateDue(payload);
+      });
+    });
+  });
+
   ipcMain.handle('khata:updateTransaction', async (_event, payload) => {
     return requireAuth(async () => {
       return requireRole(['admin', 'manager'], async () => {

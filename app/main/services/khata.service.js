@@ -143,8 +143,33 @@ async function addPayment(payload) {
   return created;
 }
 
+async function updateDue(payload) {
+  if (!payload?.id) throw new Error('Transaction id is required');
+  const tx = khataModel.getTransactionById(payload.id);
+  if (!tx) throw new Error('Transaction not found');
+  if (tx.type !== 'due') throw new Error('Transaction is not a due type');
+
+  const nextAmount = payload.amount !== undefined ? normalizeAmount(payload.amount) : tx.amount;
+  const nextDate = payload.date || tx.date;
+  const nextNote = payload.note !== undefined ? String(payload.note).trim() : tx.note;
+
+  const updated = {
+    ...tx,
+    amount: nextAmount,
+    date: nextDate,
+    note: nextNote,
+  };
+
+  const saved = khataModel.updateTransaction(updated);
+  syncService.pushKhataTransaction(saved).catch(() => {});
+  return saved;
+}
+
 async function updateTransaction(payload) {
   if (!payload?.id) throw new Error('Transaction id is required');
+  if (!payload.khataId) throw new Error('Khata profile is required');
+  const profile = khataModel.getProfileById(payload.khataId);
+  if (!profile) throw new Error('Khata profile not found');
   const tx = khataModel.getTransactionById(payload.id);
   if (!tx) throw new Error('Transaction not found');
 
@@ -174,18 +199,43 @@ async function updateTransaction(payload) {
   };
   const saved = khataModel.updateTransaction(updated);
 
-  // Update the linked expense if one exists
-  const rawLinkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
-  if (rawLinkedExpense) {
-    const linkedExpense = {
+  const amountChanged = tx.amount !== nextAmount;
+  const dateChanged = tx.date !== nextDate;
+
+  // ✅ Handle customer payment: update the linked bill
+  if (profile.profileType === 'customer') {
+    const billId = `${tx.date.replace(/-/g, '_')}-khata-${profile.name}-${tx.id}`;
+    const existingBill = billModel.getBillById(billId);
+    if (existingBill && (amountChanged || dateChanged)) {
+      const updatedBill = {
+        ...existingBill,
+        subtotal: nextAmount,
+        total: nextAmount,
+        updatedAt: new Date().toISOString(),
+      };
+      billModel.updateBill(updatedBill);
+
+      // Adjust daily_sales: reverse old bill total, apply new
+      if (amountChanged || dateChanged) {
+        salesModel.addBillToDailySales({ date: tx.date, total: -tx.amount });
+        salesModel.addBillToDailySales({ date: nextDate, total: nextAmount });
+      }
+    }
+    syncService.pushKhataTransaction({ ...saved, billId: existingBill ? existingBill.id : null }).catch(() => {});
+
+  }
+  else {
+    // Handle supplier/buyer payment: update the linked expense
+    const rawLinkedExpense = expenseModel.findBySourceRecordId(tx.id, 'khata');
+    if (!rawLinkedExpense) throw new Error('Linked expense not found for the transaction');
+   const linkedExpense = {
       ...rawLinkedExpense,
-      sourceType: rawLinkedExpense.source_type,
-      sourceEntityId: rawLinkedExpense.source_entity_id,
-      sourceEntityName: rawLinkedExpense.source_entity_name,
-      sourceRecordId: rawLinkedExpense.source_record_id,
+      sourceType: 'khata',
+      sourceEntityId: profile.id,
+      sourceEntityName: profile.name,
+      sourceRecordId: tx.id,
     };
-    const amountChanged = tx.amount !== nextAmount;
-    const dateChanged = tx.date !== nextDate;
+    
     if (amountChanged || dateChanged) {
       const updatedExpense = {
         ...linkedExpense,
@@ -199,9 +249,9 @@ async function updateTransaction(payload) {
       salesModel.addExpenseToDailySales({ date: nextDate, amountDelta: nextAmount });
       syncService.pushExpense(updatedExpense).catch(() => {});
     }
-  }
+    syncService.pushKhataTransaction({ ...saved, expenseId: linkedExpense?.id || null }).catch(() => {});
 
-  syncService.pushKhataTransaction({ ...saved, expenseId: linkedExpense?.id || null }).catch(() => {});
+  }
   return saved;
 }
 
@@ -223,7 +273,7 @@ async function deleteTransaction(payload) {
         await billingService.cancelBill({
           billId,
           billAmount: tx.amount,
-          returnAmount: 0,
+          returnAmount: tx.amount,
           reason: `Khata transaction deleted: ${profile.name}`,
         });
       }
@@ -297,6 +347,7 @@ module.exports = {
   getById,
   addProfile,
   addDue,
+  updateDue,
   addPayment,
   updateTransaction,
   deleteTransaction,

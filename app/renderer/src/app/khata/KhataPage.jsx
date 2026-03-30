@@ -120,15 +120,18 @@ export default function KhataPage() {
     setShowTxModal(true);
   };
 
-  const handleSaveTransaction = async () => {
+ const handleSaveTransaction = async () => {
     setError(''); setMessage('');
     const resolved = evalAmount(txForm.amount);
     if (isNaN(resolved) || resolved <= 0) { setError('Enter a valid amount.'); return; }
-    const res = await window.api.khata.updateTransaction({
+    
+    const api = txForm.type === 'due' ? window.api.khata.updateDue : window.api.khata.updateTransaction;
+    const res = await api({
       id: txForm.id,
       amount: resolved,
       date: txForm.date,
       note: txForm.note,
+      khataId: activeId,
       paymentSource: txForm.type === 'payment' ? txForm.paymentSource : null,
     });
     if (res.success) {
@@ -139,7 +142,6 @@ export default function KhataPage() {
       setError(res.error || 'Failed to update transaction');
     }
   };
-
   const handleDeleteTransaction = async (txId) => {
     if (!confirm('Delete this transaction?')) return;
     setError(''); setMessage('');
@@ -642,7 +644,7 @@ export default function KhataPage() {
               </div>
               <div>
                 <label className="label">Date</label>
-                <input type="date" className="input-field" value={addTxForm.date}
+                <input type="date" className="input-field" value={addTxForm.date} max={getPkToday()}
                   onChange={e => setAddTxForm({ ...addTxForm, date: e.target.value })} />
               </div>
               {addTxForm.type === 'payment' && (
@@ -705,7 +707,7 @@ export default function KhataPage() {
               </div>
               <div>
                 <label className="label">Date</label>
-                <input type="date" className="input-field" value={txForm.date}
+                <input type="date" className="input-field" value={txForm.date} max={getPkToday()}
                   onChange={e => setTxForm({ ...txForm, date: e.target.value })} />
               </div>
               {txForm.type === 'payment' && (

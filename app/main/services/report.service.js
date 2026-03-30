@@ -96,6 +96,7 @@ async function getExpenseReport(filters = {}) {
   const byCategory = await expenseModel.getCategoryTotals({ from: fromDate, to: toDate });
   const dailyTotals = await expenseModel.getDailyTotals({ from: fromDate, to: toDate });
   const totals = await expenseModel.getTotalAmount({ from: fromDate, to: toDate });
+  const details = await expenseModel.findAll({ from: fromDate, to: toDate });
 
   return {
     byCategory: byCategory.map(row => ({
@@ -109,6 +110,7 @@ async function getExpenseReport(filters = {}) {
     })),
     totalExpenses: parseFloat((totals.totalExpenses || 0).toFixed(2)),
     period,
+    details,
   };
 }
 

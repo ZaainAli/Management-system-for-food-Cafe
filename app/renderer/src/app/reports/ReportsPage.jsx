@@ -207,7 +207,8 @@ export default function ReportsPage() {
                 {data.byCategory.length === 0 ? (
                   <p className="text-slate-600 text-sm text-center py-4">No expense data</p>
                 ) : (
-                  <div className="space-y-2">
+                  <>
+                   <div className="space-y-2">
                     {data.byCategory.map((cat, i) => {
                       const maxAmt = data.byCategory[0].total;
                       const pct = maxAmt > 0 ? (cat.total / maxAmt) * 100 : 0;
@@ -224,6 +225,33 @@ export default function ReportsPage() {
                       );
                     })}
                   </div>
+
+                  {/* Table */}
+                  <div className="card p-0 overflow-hidden mt-5">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-700">
+                          <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Date</th>
+                          <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Description</th>
+                          <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Category</th>
+                          <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Amount</th>
+                          <th className="px-4 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.details.map(exp => (
+                          <tr key={exp.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                            <td className="px-4 py-3 text-slate-400 text-xs">{exp.date}</td>
+                            <td className="px-4 py-3 text-white">{exp.description}</td>
+                            <td className="px-4 py-3"><span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded-full">{exp.category}</span></td>
+                            <td className="px-4 py-3 text-red-400 font-medium">PKR {exp.amount.toLocaleString()}</td>
+                          
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  </>
                 )}
               </div>
             </div>

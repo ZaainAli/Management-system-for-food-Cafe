@@ -273,7 +273,7 @@ async function deleteTransaction(payload) {
         await billingService.cancelBill({
           billId,
           billAmount: tx.amount,
-          returnAmount: 0,
+          returnAmount: tx.amount,
           reason: `Khata transaction deleted: ${profile.name}`,
         });
       }

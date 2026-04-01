@@ -21,9 +21,9 @@ const YEAR_OPTIONS = Array.from(
   (_, i) => String(new Date().getFullYear() - i)
 );
 
-function getRange(period, selMonth, selYear, customFrom, customTo) {
+function getRange(period, selMonth, selYear, customFrom, customTo, selDate) {
   const today = todayStr();
-  if (period === 'today') return { from: today, to: today };
+  if (period === 'today') return { from: selDate, to: selDate };
   if (period === 'week') {
     return { from: shiftPkDate(today, -6), to: today };
   }
@@ -82,6 +82,7 @@ export default function Dashboard() {
   const [period, setPeriod]             = useState('today');
   const [selMonth, setSelMonth]         = useState(currentMonth());
   const [selYear, setSelYear]           = useState(currentYear());
+  const [selDate, setSelDate]           = useState(todayStr());
   const [customFrom, setCustomFrom]     = useState(todayStr());
   const [customTo, setCustomTo]         = useState(todayStr());
 
@@ -89,7 +90,7 @@ export default function Dashboard() {
     if (!branches.length) return;
     if (period === 'custom' && (!customFrom || !customTo)) return;
 
-    const { from, to } = getRange(period, selMonth, selYear, customFrom, customTo);
+    const { from, to } = getRange(period, selMonth, selYear, customFrom, customTo, selDate);
     setLoading(true);
     setFetchError(null);
     const ids = branches.map((b) => b.id);
@@ -112,7 +113,7 @@ export default function Dashboard() {
       if (!expRes.error)  { setExpRows(expRes.data ?? []); }
       setLoading(false);
     });
-  }, [branches, period, selMonth, selYear, customFrom, customTo]);
+  }, [branches, period, selMonth, selYear, customFrom, customTo, selDate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -211,6 +212,23 @@ export default function Dashboard() {
                 onChange={(e) => setCustomTo(e.target.value)}
                 className="input-field !w-auto text-xs py-1.5"
               />
+            </div>
+          )}
+
+          {/* Day navigator */}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftPkDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={todayStr()}
+                onChange={e => setSelDate(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5" />
+              <button onClick={() => { const next = shiftPkDate(selDate, 1); if (next <= todayStr()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
             </div>
           )}
         </div>

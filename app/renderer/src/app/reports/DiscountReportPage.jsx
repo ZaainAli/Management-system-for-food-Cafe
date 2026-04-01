@@ -15,6 +15,7 @@ export default function DiscountReportPage() {
   const [period, setPeriod]       = useState('today');
   const [selMonth, setSelMonth]   = useState(curMonth());
   const [selYear, setSelYear]     = useState(curYear());
+  const [selDate, setSelDate]     = useState(getPkToday());
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo]     = useState('');
   const [data, setData] = useState([]);
@@ -38,8 +39,8 @@ export default function DiscountReportPage() {
           from = getPkDateUtcBounds(customFrom).from;
           to = getPkDateUtcBounds(customTo).to;
         } else if (period === 'today') {
-          from = getPkDateUtcBounds(td).from;
-          to = getPkDateUtcBounds(td).to;
+          from = getPkDateUtcBounds(selDate).from;
+          to = getPkDateUtcBounds(selDate).to;
         } else if (period === 'week') {
           const weekStart = shiftDate(td, -6);
           from = getPkDateUtcBounds(weekStart).from;
@@ -62,7 +63,7 @@ export default function DiscountReportPage() {
         setLoading(false);
       }
     })();
-  }, [period, selMonth, selYear, customFrom, customTo]);
+  }, [period, selMonth, selYear, customFrom, customTo, selDate]);
 
   const totalBillAmount = data
     .filter(r => r.rowType !== 'cancelled')
@@ -105,6 +106,20 @@ export default function DiscountReportPage() {
               <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
               <span className="text-slate-500 text-xs">to</span>
               <input type="date" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
+            </div>
+          )}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={getPkToday()}
+                onChange={e => setSelDate(e.target.value)} className={inputCls} />
+              <button onClick={() => { const next = shiftDate(selDate, 1); if (next <= getPkToday()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
             </div>
           )}
         </div>

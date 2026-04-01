@@ -18,10 +18,10 @@ function curMonth() {
 function curYear() { return String(new Date().getFullYear()); }
 const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => String(new Date().getFullYear() - i));
 
-function getRange(period, selMonth, selYear, customFrom, customTo) {
+function getRange(period, selMonth, selYear, customFrom, customTo, selDate) {
   const today = todayStr();
   const pad   = (n) => String(n).padStart(2, '0');
-  if (period === 'today')  return { from: today, to: today };
+  if (period === 'today')  return { from: selDate, to: selDate };
   if (period === 'week')   return { from: shiftPkDate(today, -6), to: today };
   if (period === 'month')  {
     const [y, m] = selMonth.split('-').map(Number);
@@ -38,6 +38,7 @@ export default function ExpensesPage() {
   const [period, setPeriod]         = useState('today');
   const [selMonth, setSelMonth]     = useState(curMonth());
   const [selYear, setSelYear]       = useState(curYear());
+  const [selDate, setSelDate]       = useState(todayStr());
   const [customFrom, setCustomFrom] = useState(todayStr);
   const [customTo, setCustomTo]     = useState(todayStr);
   const [catFilter, setCatFilter] = useState('all');
@@ -51,7 +52,7 @@ export default function ExpensesPage() {
     if (!branchId) return;
     if (period === 'custom' && (!customFrom || !customTo)) return;
     setLoading(true);
-    const { from, to } = getRange(period, selMonth, selYear, customFrom, customTo);
+    const { from, to } = getRange(period, selMonth, selYear, customFrom, customTo, selDate);
     const { data } = await supabase
       .from('expenses')
       .select('id, category, description, amount, date, source_type, source_entity_id, source_record_id')
@@ -60,7 +61,7 @@ export default function ExpensesPage() {
       .order('date', { ascending: false });
     setExpenses(data ?? []);
     setLoading(false);
-  }, [branchId, period, selMonth, selYear, customFrom, customTo]);
+  }, [branchId, period, selMonth, selYear, customFrom, customTo, selDate]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -157,6 +158,21 @@ export default function ExpensesPage() {
                 onChange={(e) => setCustomTo(e.target.value)}
                 className="input-field py-1.5 text-xs w-36"
               />
+            </div>
+          )}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftPkDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={todayStr()}
+                onChange={e => setSelDate(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5" />
+              <button onClick={() => { const next = shiftPkDate(selDate, 1); if (next <= todayStr()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
             </div>
           )}
           <button onClick={() => { setEditing(null); setShowModal(true); }} className="btn-primary text-sm">+ Add</button>

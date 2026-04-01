@@ -26,9 +26,9 @@ const YEAR_OPTIONS = Array.from(
 );
 const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-2 py-1 focus:outline-none focus:border-primary-500';
 
-function getDateRange(period, selMonth, selYear, customFrom, customTo) {
+function getDateRange(period, selMonth, selYear, customFrom, customTo, selDate) {
   const today = getPkToday();
-  if (period === 'today') return { from: today, to: today };
+  if (period === 'today') return { from: selDate, to: selDate };
   if (period === 'week') return { from: shiftDate(today, -6), to: today };
   if (period === 'month') return monthBounds(selMonth);
   if (period === 'year') {
@@ -58,11 +58,12 @@ export default function ExpensesPage() {
   const [period, setPeriod]         = useState('today');
   const [selMonth, setSelMonth]     = useState(curMonth());
   const [selYear, setSelYear]       = useState(curYear());
+  const [selDate, setSelDate]       = useState(getPkToday());
   const [customFrom, setCustomFrom] = useState(`${getPkToday().slice(0, 7)}-01`);
   const [customTo, setCustomTo]     = useState(getPkToday());
 
   const fetchData = async () => {
-    const periodFilters = getDateRange(period, selMonth, selYear, customFrom, customTo);
+    const periodFilters = getDateRange(period, selMonth, selYear, customFrom, customTo, selDate);
     const filters = {
       ...(activeCategory !== 'All' ? { category: activeCategory } : {}),
       ...periodFilters,
@@ -80,7 +81,7 @@ export default function ExpensesPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [activeCategory, period, selMonth, selYear, customFrom, customTo]);
+  useEffect(() => { fetchData(); }, [activeCategory, period, selMonth, selYear, customFrom, customTo, selDate]);
 
   const showPermError = (msg) => {
     setPermError(msg);
@@ -213,6 +214,20 @@ export default function ExpensesPage() {
               <input type="date" value={customFrom} max={getPkToday()} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
               <span className="text-slate-500 text-xs">to</span>
               <input type="date" value={customTo} min={customFrom} max={getPkToday()} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
+            </div>
+          )}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={getPkToday()}
+                onChange={e => setSelDate(e.target.value)} className={inputCls} />
+              <button onClick={() => { const next = shiftDate(selDate, 1); if (next <= getPkToday()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
             </div>
           )}
         </div>

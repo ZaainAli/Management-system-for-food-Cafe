@@ -20,6 +20,8 @@ export function usePOSKeyboard({
   setSelectedTableId,
   setDiscount,
   discountInputRef,
+  openKhataModal,
+  khataModalOpen,
 }) {
   const { fsm, pendingLineId, pendingIsNewLine, itemBuffer } = fsmState;
 
@@ -38,6 +40,9 @@ export function usePOSKeyboard({
 
   useEffect(() => {
     const onKeyDown = (e) => {
+      // Skip all keyboard handling when khata modal is open (let modal handle input)
+      if (khataModalOpen) return;
+
       const key = e.key.toLowerCase();
       const tag = document.activeElement?.tagName?.toLowerCase();
       const isFormFieldFocused = tag === 'input' || tag === 'textarea' || tag === 'select';
@@ -49,7 +54,7 @@ export function usePOSKeyboard({
           !(key >= '0' && key <= '9');
         const isGlobalIdleHotkey =
           e.key === 'Escape' || e.key === 'F5' || e.key === 'F6' || e.key === 'F7' || e.key === 'F8' ||
-          e.key === 'F9' || e.key === 'F11' || e.key === 'F12' || 
+          e.key === 'F9' || e.key === 'F10' || e.key === 'F11' || e.key === 'F12' || 
           e.key === 'ArrowUp' || e.key === 'ArrowDown';
         if (!isQuickKeyHotkey && !isGlobalIdleHotkey) return;
       }
@@ -91,6 +96,13 @@ export function usePOSKeyboard({
         e.preventDefault();
         inputBufferRef.current = '';
         dispatch({ type: 'START_DISCOUNT' });
+        return;
+      }
+
+      if (key === 'f10' && fsm === 'IDLE' && cart.length > 0) {
+        if (e.repeat) return;
+        e.preventDefault();
+        openKhataModal();
         return;
       }
 
@@ -362,6 +374,6 @@ export function usePOSKeyboard({
     addItem, updateLine, deleteLine,
     createBill, holdCurrentOrder, recallHeldBill,
     setSelectedTableId, setDiscount, discountInputRef, inputBufferRef,
-    dispatch, pickCartLineByArrow,
+    dispatch, pickCartLineByArrow, openKhataModal, khataModalOpen,
   ]);
 }

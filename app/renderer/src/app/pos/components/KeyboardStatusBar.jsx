@@ -103,6 +103,9 @@ export default function KeyboardStatusBar({ fsm, cart, heldBills, pendingLineId,
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F7</kbd> table</span>
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F8</kbd> remove item</span>
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F9</kbd> discount</span>
+        <span className={cart.length === 0 ? 'opacity-40' : ''}>
+          <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F10</kbd> khata
+        </span>
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F11</kbd> bill (no print)</span>
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F12</kbd> print bill</span>
       </div>

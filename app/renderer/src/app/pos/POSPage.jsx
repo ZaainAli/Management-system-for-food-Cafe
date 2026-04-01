@@ -4,6 +4,7 @@ import { usePOSKeyboard } from './hooks/usePOSKeyboard.jsx';
 import QuickKeysBar from './components/QuickKeysBar.jsx';
 import KeyboardStatusBar from './components/KeyboardStatusBar.jsx';
 import CartPanel from './components/CartPanel.jsx';
+import CustomerKhataModal from './components/CustomerKhataModal.jsx';
 
 // ── FSM Reducer ──────────────────────────────────────────────────────────────
 const initialFSMState = { fsm: 'IDLE', pendingLineId: null, pendingIsNewLine: false, tableBuffer: '', itemBuffer: '' };
@@ -52,6 +53,10 @@ export default function POSPage() {
   const [printWarning, setPrintWarning] = useState(null);
   const [holdNotice, setHoldNotice] = useState(null);
 
+  // Customer Khata state
+  const [selectedKhataCustomer, setSelectedKhataCustomer] = useState(null);
+  const [showKhataModal, setShowKhataModal] = useState(false);
+
   // Cart hook
   const {
     cart, setCart,
@@ -75,6 +80,11 @@ export default function POSPage() {
     inputBufferRef.current = '';
     dispatch({ type: 'RESET' });
   }, []);
+
+  const openKhataModal = useCallback(() => {
+    if (cart.length === 0 || fsm !== 'IDLE') return;
+    setShowKhataModal(true);
+  }, [cart.length, fsm]);
 
   // ── Data Loading ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -173,8 +183,24 @@ export default function POSPage() {
         discount,
         paymentMethod,
         skipPrint,
+        skipSales: !!selectedKhataCustomer,
       });
       if (res.success) {
+        if (selectedKhataCustomer) {
+          const billTotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0) - discount;
+          const itemsNote = cart.map(i => `${i.name} x${i.quantity} = PKR ${(i.price * i.quantity).toLocaleString()}`).join(', ');
+          const note = `POS Bill${res.data?.billId ? ' #' + res.data.billId : ''}: ${itemsNote}`;
+          try {
+            await window.api.khata.addDue({
+              khataId: selectedKhataCustomer.id,
+              amount: billTotal,
+              note,
+            });
+          } catch (khataErr) {
+            setPrintWarning('Bill created but failed to add to khata: ' + khataErr.message);
+          }
+          setSelectedKhataCustomer(null);
+        }
         setBillSuccess(res.data);
         const stockRes = await window.api.stock.getAll();
         if (stockRes.success) setStockItems(stockRes.data);
@@ -190,7 +216,7 @@ export default function POSPage() {
     } finally {
       creatingBillRef.current = false;
     }
-  }, [cart, selectedTableId, discount, paymentMethod, clear, resetFSM]);
+  }, [cart, selectedTableId, discount, paymentMethod, selectedKhataCustomer, clear, resetFSM]);
 
   const holdCurrentOrder = useCallback(async () => {
     if (cart.length === 0 || fsm !== 'IDLE') return;
@@ -215,6 +241,7 @@ export default function POSPage() {
     setHoldNotice('Order held successfully');
     clear();
     setSelectedTableId('');
+    setSelectedKhataCustomer(null);
     setPaymentMethod('cash');
     resetFSM();
   }, [cart, fsm, selectedTableId, discount, paymentMethod, clear, setPaymentMethod, resetFSM]);
@@ -275,6 +302,8 @@ export default function POSPage() {
     setSelectedTableId,
     setDiscount,
     discountInputRef,
+    openKhataModal,
+    khataModalOpen: showKhataModal,
   });
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -374,6 +403,21 @@ export default function POSPage() {
 
       {/* Right: Cart + Toasts */}
       <div className="w-80 flex flex-col">
+        {selectedKhataCustomer && (
+          <div className="mb-2 bg-emerald-900/30 border border-emerald-700/50 text-emerald-300 text-xs rounded-lg px-3 py-2 flex items-center justify-between">
+            <div>
+              <span className="font-semibold">{selectedKhataCustomer.name}</span>
+              <span className="text-emerald-400/70 ml-1">(Khata)</span>
+            </div>
+            <button
+              onClick={() => setSelectedKhataCustomer(null)}
+              className="text-emerald-400 hover:text-white ml-2"
+              title="Remove khata customer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <CartPanel
           cart={cart}
           discount={discount}
@@ -399,6 +443,13 @@ export default function POSPage() {
           onRecallHeld={recallHeldBill}
           onDeleteHeld={deleteHeldBill}
           dispatch={dispatch}
+        />
+
+        <CustomerKhataModal
+          isOpen={showKhataModal}
+          onClose={() => setShowKhataModal(false)}
+          onSelect={(profile) => setSelectedKhataCustomer(profile)}
+          cart={cart}
         />
 
         {billSuccess && (

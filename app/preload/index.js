@@ -121,6 +121,16 @@ const syncAPI = {
   },
 };
 
+// ─── Day Session API ────────────────────────────────────────
+const daySessionAPI = {
+  getStatus: () => ipcRenderer.invoke('daySession:getStatus'),
+  openDay: (payload) => ipcRenderer.invoke('daySession:openDay', payload),
+  closeDay: (payload) => ipcRenderer.invoke('daySession:closeDay', payload),
+  getHistory: (payload) => ipcRenderer.invoke('daySession:getHistory', payload),
+  getSettings: () => ipcRenderer.invoke('daySession:getSettings'),
+  updateSettings: (payload) => ipcRenderer.invoke('daySession:updateSettings', payload),
+};
+
 // ─── Window API ─────────────────────────────────────────────
 const windowAPI = {
   minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -145,4 +155,5 @@ contextBridge.exposeInMainWorld('api', {
   khata: khataAPI,
   window: windowAPI,
   sync: syncAPI,
+  daySession: daySessionAPI,
 });

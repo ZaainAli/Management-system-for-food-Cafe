@@ -74,6 +74,17 @@ function getPkDateUtcBounds(dateStr) {
   };
 }
 
+function getEffectiveBusinessDate(closingTimeBuffer = 4, now = new Date()) {
+  const p = getPkParts(now);
+  if (!p) return formatPkDate(now);
+  const hour = parseInt(p.hour, 10);
+  if (hour < closingTimeBuffer) {
+    const yesterday = new Date(now.getTime() - 86400000);
+    return formatPkDate(yesterday);
+  }
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
 module.exports = {
   PK_TIMEZONE,
   formatPkDate,
@@ -81,4 +92,5 @@ module.exports = {
   shiftPkDate,
   extractDatePk,
   getPkDateUtcBounds,
+  getEffectiveBusinessDate,
 };

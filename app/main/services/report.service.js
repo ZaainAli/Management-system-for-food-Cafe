@@ -3,11 +3,12 @@ const expenseModel = require('../models/expense.model');
 const employeeModel = require('../models/employee.model');
 const salesModel = require('../models/sales.model');
 const khataModel = require('../models/khata.model');
+const settingsModel = require('../models/settings.model');
 const {
   formatPkDate,
   shiftPkDate,
   extractDatePk,
-  getPkDateUtcBounds,
+  getEffectiveBusinessDate,
 } = require('../utils/datetime');
 
 function normalizeDateRange(filters = {}, fallbackPeriod = 'today') {
@@ -27,7 +28,8 @@ function normalizeDateRange(filters = {}, fallbackPeriod = 'today') {
 }
 
 function getDateRange(period = 'today') {
-  const today = formatPkDate(new Date());
+  const closingBuffer = settingsModel.getInt('closingTimeBuffer', 4);
+  const today = getEffectiveBusinessDate(closingBuffer);
 
   switch (period) {
     case 'today':
@@ -49,7 +51,7 @@ function getDateRange(period = 'today') {
 async function getDashboardStats(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'today');
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
-  const expTotals = expenseModel.getTotalAmount({ from: fromDate, to: toDate });
+  const expTotals = expenseModel.getTotalAmount({ businessDateFrom: fromDate, businessDateTo: toDate });
   const employees = await employeeModel.findAll({});
 
   const totalRevenue = totals.totalRevenue || 0;
@@ -71,12 +73,10 @@ async function getDashboardStats(filters = {}) {
 
 async function getSalesReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const fromUtc = getPkDateUtcBounds(fromDate).from;
-  const toUtc = getPkDateUtcBounds(toDate).to;
 
   const dailyRows = await salesModel.getDailySales({ from: fromDate, to: toDate });
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
-  const topItems = await billModel.getTopItems({ from: fromUtc, to: toUtc, limit: 10 });
+  const topItems = await billModel.getTopItems({ businessDateFrom: fromDate, businessDateTo: toDate, limit: 10 });
 
   return {
     dailyTotals: dailyRows.map(r => ({
@@ -93,10 +93,10 @@ async function getSalesReport(filters = {}) {
 
 async function getExpenseReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const byCategory = await expenseModel.getCategoryTotals({ from: fromDate, to: toDate });
-  const dailyTotals = await expenseModel.getDailyTotals({ from: fromDate, to: toDate });
-  const totals = await expenseModel.getTotalAmount({ from: fromDate, to: toDate });
-  const details = await expenseModel.findAll({ from: fromDate, to: toDate });
+  const byCategory = await expenseModel.getCategoryTotals({ businessDateFrom: fromDate, businessDateTo: toDate });
+  const dailyTotals = await expenseModel.getDailyTotals({ businessDateFrom: fromDate, businessDateTo: toDate });
+  const totals = await expenseModel.getTotalAmount({ businessDateFrom: fromDate, businessDateTo: toDate });
+  const details = await expenseModel.findAll({ businessDateFrom: fromDate, businessDateTo: toDate });
 
   return {
     byCategory: byCategory.map(row => ({
@@ -141,7 +141,7 @@ async function getStaffReport(filters = {}) {
 async function getProfitLoss(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
   const totals = await salesModel.getTotals({ from: fromDate, to: toDate });
-  const expTotals = expenseModel.getTotalAmount({ from: fromDate, to: toDate });
+  const expTotals = expenseModel.getTotalAmount({ businessDateFrom: fromDate, businessDateTo: toDate });
   const totalRevenue = totals.totalRevenue || 0;
   const totalExpenses = expTotals.totalExpenses || 0;
 
@@ -156,10 +156,8 @@ async function getProfitLoss(filters = {}) {
 
 async function getDiscountedBillsReport(filters = {}) {
   const { fromDate, toDate, period } = normalizeDateRange(filters, 'month');
-  const from = getPkDateUtcBounds(fromDate).from;
-  const to = getPkDateUtcBounds(toDate).to;
 
-  const records = await billModel.getDiscountedBills({ from, to });
+  const records = await billModel.getDiscountedBills({ businessDateFrom: fromDate, businessDateTo: toDate });
   const activeRecords = records.filter(row => row.rowType !== 'cancelled');
   const cancelledRecords = records.filter(row => row.rowType === 'cancelled');
 

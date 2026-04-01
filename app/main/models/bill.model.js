@@ -101,9 +101,9 @@ function insertBill(bill, stockAdjustments = []) {
   // Use a transaction to insert bill + line items atomically
   const insertBillTx = db.transaction(() => {
     db.prepare(`
-      INSERT INTO bills (id, tableId, customerName, subtotal, tax, discount, total, paymentMethod, status, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(bill.id, bill.tableId, bill.customerName, bill.subtotal, bill.tax, bill.discount, bill.total, bill.paymentMethod, bill.status, bill.createdAt);
+      INSERT INTO bills (id, tableId, customerName, subtotal, tax, discount, total, paymentMethod, status, businessDate, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(bill.id, bill.tableId, bill.customerName, bill.subtotal, bill.tax, bill.discount, bill.total, bill.paymentMethod, bill.status, bill.businessDate || null, bill.createdAt);
 
     const insertItem = db.prepare(`
       INSERT INTO bill_items (id, billId, menuItemId, name, price, quantity, lineTotal)
@@ -250,11 +250,17 @@ function getBills(filters = {}) {
   const params = [];
   const conditions = [];
 
-  if (filters.from) {
+  if (filters.businessDateFrom) {
+    conditions.push('businessDate >= ?');
+    params.push(filters.businessDateFrom);
+  } else if (filters.from) {
     conditions.push('createdAt >= ?');
     params.push(filters.from);
   }
-  if (filters.to) {
+  if (filters.businessDateTo) {
+    conditions.push('businessDate <= ?');
+    params.push(filters.businessDateTo);
+  } else if (filters.to) {
     conditions.push('createdAt <= ?');
     params.push(filters.to);
   }
@@ -324,11 +330,20 @@ function getTopItems(filters = {}) {
   const params = [];
   const conditions = [];
 
-  if (filters.from) {
+  if (filters.businessDateFrom) {
+    conditions.push('b.businessDate >= ?');
+    params.push(filters.businessDateFrom);
+  }
+  if (filters.businessDateTo) {
+    conditions.push('b.businessDate <= ?');
+    params.push(filters.businessDateTo);
+  }
+  // Fallback to createdAt bounds if businessDate not provided
+  if (!filters.businessDateFrom && filters.from) {
     conditions.push('b.createdAt >= ?');
     params.push(filters.from);
   }
-  if (filters.to) {
+  if (!filters.businessDateTo && filters.to) {
     conditions.push('b.createdAt <= ?');
     params.push(filters.to);
   }
@@ -362,13 +377,28 @@ function getDiscountedBills(filters = {}) {
   const discountedConditions = [];
   const discountedParams = [];
 
-  if (filters.from) {
-    discountedConditions.push('db.createdAt >= ?');
-    discountedParams.push(filters.from);
-  }
-  if (filters.to) {
-    discountedConditions.push('db.createdAt <= ?');
-    discountedParams.push(filters.to);
+  // Support businessDate filtering via JOIN to bills table
+  const useBusinessDate = !!filters.businessDateFrom || !!filters.businessDateTo;
+  const useCreatedAt = !useBusinessDate && (!!filters.from || !!filters.to);
+
+  if (useBusinessDate) {
+    if (filters.businessDateFrom) {
+      discountedConditions.push('b.businessDate >= ?');
+      discountedParams.push(filters.businessDateFrom);
+    }
+    if (filters.businessDateTo) {
+      discountedConditions.push('b.businessDate <= ?');
+      discountedParams.push(filters.businessDateTo);
+    }
+  } else if (useCreatedAt) {
+    if (filters.from) {
+      discountedConditions.push('db.createdAt >= ?');
+      discountedParams.push(filters.from);
+    }
+    if (filters.to) {
+      discountedConditions.push('db.createdAt <= ?');
+      discountedParams.push(filters.to);
+    }
   }
 
   const discountedWhere = discountedConditions.length > 0
@@ -381,13 +411,24 @@ function getDiscountedBills(filters = {}) {
   ];
   const billParams = [];
 
-  if (filters.from) {
-    billConditions.push('b.createdAt >= ?');
-    billParams.push(filters.from);
-  }
-  if (filters.to) {
-    billConditions.push('b.createdAt <= ?');
-    billParams.push(filters.to);
+  if (useBusinessDate) {
+    if (filters.businessDateFrom) {
+      billConditions.push('b.businessDate >= ?');
+      billParams.push(filters.businessDateFrom);
+    }
+    if (filters.businessDateTo) {
+      billConditions.push('b.businessDate <= ?');
+      billParams.push(filters.businessDateTo);
+    }
+  } else if (useCreatedAt) {
+    if (filters.from) {
+      billConditions.push('b.createdAt >= ?');
+      billParams.push(filters.from);
+    }
+    if (filters.to) {
+      billConditions.push('b.createdAt <= ?');
+      billParams.push(filters.to);
+    }
   }
 
   const query = `
@@ -405,6 +446,7 @@ function getDiscountedBills(filters = {}) {
         '' AS reason,
         'discounted' AS rowType
       FROM discounted_bills db
+      ${useBusinessDate ? 'JOIN bills b ON b.id = db.billId' : ''}
       ${discountedWhere}
 
       UNION ALL
@@ -442,15 +484,22 @@ function getDiscountedBills(filters = {}) {
       JOIN bills b ON b.id = cb.billId
       LEFT JOIN tables t ON t.id = b.tableId
       WHERE 1 = 1
-        ${filters.from ? 'AND cb.createdAt >= ?' : ''}
-        ${filters.to ? 'AND cb.createdAt <= ?' : ''}
+        ${useBusinessDate && filters.businessDateFrom ? 'AND b.businessDate >= ?' : ''}
+        ${useBusinessDate && filters.businessDateTo ? 'AND b.businessDate <= ?' : ''}
+        ${!useBusinessDate && filters.from ? 'AND cb.createdAt >= ?' : ''}
+        ${!useBusinessDate && filters.to ? 'AND cb.createdAt <= ?' : ''}
     ) combined
     ORDER BY createdAt DESC
   `;
 
   const cancelledParams = [];
-  if (filters.from) cancelledParams.push(filters.from);
-  if (filters.to) cancelledParams.push(filters.to);
+  if (useBusinessDate) {
+    if (filters.businessDateFrom) cancelledParams.push(filters.businessDateFrom);
+    if (filters.businessDateTo) cancelledParams.push(filters.businessDateTo);
+  } else {
+    if (filters.from) cancelledParams.push(filters.from);
+    if (filters.to) cancelledParams.push(filters.to);
+  }
 
   return db.prepare(query).all(...discountedParams, ...billParams, ...cancelledParams);
 }

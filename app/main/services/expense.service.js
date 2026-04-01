@@ -4,7 +4,8 @@ const employeeModel = require('../models/employee.model');
 const khataModel = require('../models/khata.model');
 const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
-const { formatPkDate } = require('../utils/datetime');
+const { formatPkDate, getEffectiveBusinessDate } = require('../utils/datetime');
+const settingsModel = require('../models/settings.model');
 
 async function getAll(filters = {}) {
   const expenses = expenseModel.findAll(filters);
@@ -98,6 +99,10 @@ async function add(expense) {
     amount,
     category: String(expense.category).trim(),
     date,
+    businessDate: expense.businessDate || (() => {
+      const closingBuffer = settingsModel.getInt('closingTimeBuffer', 4);
+      return getEffectiveBusinessDate(closingBuffer);
+    })(),
     sourceType,
     sourceEntityId,
     sourceEntityName,
@@ -115,7 +120,7 @@ async function add(expense) {
     throw err;
   }
 
-  salesModel.addExpenseToDailySales({ date: saved.date, amountDelta: saved.amount });
+  salesModel.addExpenseToDailySales({ date: saved.businessDate || saved.date, amountDelta: saved.amount });
   syncService.pushExpense(saved).catch(() => {});
   return saved;
 }
@@ -212,8 +217,10 @@ async function update({ id, ...updates }) {
 
   // Adjust daily_sales for date/amount changes
   if (expense.date !== saved.date || expense.amount !== saved.amount) {
-    salesModel.addExpenseToDailySales({ date: expense.date, amountDelta: -expense.amount });
-    salesModel.addExpenseToDailySales({ date: saved.date, amountDelta: saved.amount });
+    const oldBusinessDate = expense.businessDate || expense.date;
+    const newBusinessDate = saved.businessDate || saved.date;
+    salesModel.addExpenseToDailySales({ date: oldBusinessDate, amountDelta: -expense.amount });
+    salesModel.addExpenseToDailySales({ date: newBusinessDate, amountDelta: saved.amount });
   }
 
   syncService.pushExpense(saved).catch(() => {});
@@ -241,7 +248,7 @@ async function remove(id) {
   }).catch(() => {});
 
   const removed = expenseModel.remove(id);
-  salesModel.addExpenseToDailySales({ date: expense.date, amountDelta: -expense.amount });
+  salesModel.addExpenseToDailySales({ date: expense.businessDate || expense.date, amountDelta: -expense.amount });
   syncService.deleteExpense(id).catch(() => {});
   return removed;
 }

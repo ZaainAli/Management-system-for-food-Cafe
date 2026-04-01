@@ -130,8 +130,8 @@ function buildBill(itemPool, dateStr) {
 
 // ─── Prepared statements for fast bulk insert ──────────────
 const stmtBill = db.prepare(`
-  INSERT INTO bills (id, tableId, customerName, subtotal, tax, discount, total, paymentMethod, status, createdAt)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO bills (id, tableId, customerName, subtotal, tax, discount, total, paymentMethod, status, businessDate, createdAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const stmtItem = db.prepare(`
   INSERT INTO bill_items (id, billId, menuItemId, name, price, quantity, lineTotal)
@@ -147,15 +147,15 @@ const stmtDailySales = db.prepare(`
 `);
 
 function insertBill(bill) {
+  const billDate = bill.createdAt.split('T')[0];
   stmtBill.run(
     bill.id, bill.tableId, bill.customerName,
     bill.subtotal, bill.tax, bill.discount, bill.total,
-    bill.paymentMethod, bill.status, bill.createdAt
+    bill.paymentMethod, bill.status, billDate, bill.createdAt
   );
   for (const li of bill.items) {
     stmtItem.run(li.id, bill.id, li.menuItemId, li.name, li.price, li.quantity, li.lineTotal);
   }
-  const billDate = bill.createdAt.split('T')[0];
   stmtDailySales.run(billDate, bill.total, new Date().toISOString());
 }
 

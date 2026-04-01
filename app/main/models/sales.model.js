@@ -2,6 +2,9 @@ const { getDb } = require('../db/index');
 const syncService = require('../services/sync.service');
 
 function upsertDailySales({ date, revenueDelta = 0, billsDelta = 0, expensesDelta = 0 }) {
+  // date parameter is the Business Date (not calendar date).
+  // Bills and expenses created after midnight but before closingTimeBuffer
+  // are attributed to the previous day's business date.
   const db = getDb();
   const now = new Date().toISOString();
   db.prepare(`

@@ -55,6 +55,7 @@ function runMigrations(db) {
       total REAL NOT NULL,
       paymentMethod TEXT NOT NULL DEFAULT 'cash',
       status TEXT NOT NULL DEFAULT 'completed',
+      businessDate TEXT,
       createdAt TEXT NOT NULL,
       FOREIGN KEY (tableId) REFERENCES tables(id)
     );
@@ -134,6 +135,7 @@ function runMigrations(db) {
       amount REAL NOT NULL,
       category TEXT NOT NULL,
       date TEXT NOT NULL,
+      businessDate TEXT,
       sourceType TEXT NOT NULL DEFAULT 'manual', -- manual | khata | salary
       sourceEntityId TEXT DEFAULT NULL, -- khata profile id | employee id
       sourceEntityName TEXT DEFAULT '',
@@ -263,6 +265,30 @@ function runMigrations(db) {
       lastAttemptAt TEXT
     );
 
+    -- Restaurant settings (branch-level configuration)
+    CREATE TABLE IF NOT EXISTS restaurant_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedAt TEXT
+    );
+
+    -- Day sessions (business day open/close tracking)
+    CREATE TABLE IF NOT EXISTS day_sessions (
+      id TEXT PRIMARY KEY,
+      businessDate TEXT NOT NULL,
+      openedAt TEXT NOT NULL,
+      openedBy TEXT DEFAULT '',
+      closedAt TEXT,
+      closedBy TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open', -- open | closed
+      totalRevenue REAL DEFAULT 0,
+      totalBills INTEGER DEFAULT 0,
+      totalExpenses REAL DEFAULT 0,
+      openingBalance REAL DEFAULT 0,
+      closingBalance REAL DEFAULT 0,
+      notes TEXT DEFAULT ''
+    );
+
     -- Indexes for report queries (prevent full-table scans on large datasets)
     CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
     CREATE INDEX IF NOT EXISTS idx_bill_items_billId ON bill_items(billId);
@@ -346,6 +372,84 @@ function runMigrations(db) {
   if (!discountedBillCols.includes('tableNum')) {
     db.prepare('ALTER TABLE discounted_bills ADD COLUMN tableNum INTEGER').run();
     logger.info('Migration: Added tableNum column to discounted_bills table');
+  }
+
+  // Migration: Add businessDate column to bills table
+  const billCols = db.prepare("PRAGMA table_info(bills)").all().map(c => c.name);
+  if (!billCols.includes('businessDate')) {
+    db.prepare('ALTER TABLE bills ADD COLUMN businessDate TEXT').run();
+    // Backfill: use bill ID date pattern if available, else createdAt date
+    db.prepare(`
+      UPDATE bills SET businessDate = 
+        CASE
+          WHEN id GLOB '????_??_??-*' THEN REPLACE(SUBSTR(id, 1, 10), '_', '-')
+          ELSE SUBSTR(createdAt, 1, 10)
+        END
+      WHERE businessDate IS NULL
+    `).run();
+    logger.info('Migration: Added businessDate column to bills table and backfilled');
+  }
+
+  // Migration: Add businessDate column to expenses table
+  const expenseColsAll = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+  if (!expenseColsAll.includes('businessDate')) {
+    db.prepare('ALTER TABLE expenses ADD COLUMN businessDate TEXT').run();
+    // Backfill: use the expense date column
+    db.prepare(`
+      UPDATE expenses SET businessDate = COALESCE(NULLIF(date, ''), SUBSTR(createdAt, 1, 10))
+      WHERE businessDate IS NULL
+    `).run();
+    logger.info('Migration: Added businessDate column to expenses table and backfilled');
+  }
+
+  // Migration: Create restaurant_settings table for existing installations
+  const settingsTableExists = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='restaurant_settings'"
+  ).get();
+  if (!settingsTableExists) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS restaurant_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt TEXT
+      )
+    `);
+    logger.info('Migration: Created restaurant_settings table');
+  }
+
+  // Seed default closingTimeBuffer if not set
+  const closingBuffer = db.prepare("SELECT value FROM restaurant_settings WHERE key = 'closingTimeBuffer'").get();
+  if (!closingBuffer) {
+    db.prepare("INSERT INTO restaurant_settings (key, value, updatedAt) VALUES ('closingTimeBuffer', '4', ?)").run(new Date().toISOString());
+    logger.info('Migration: Seeded default closingTimeBuffer = 4 (4 AM)');
+  }
+
+  // Migration: Create day_sessions table for existing installations
+  const daySessionsTableExists = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='day_sessions'"
+  ).get();
+  if (!daySessionsTableExists) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS day_sessions (
+        id TEXT PRIMARY KEY,
+        businessDate TEXT NOT NULL,
+        openedAt TEXT NOT NULL,
+        openedBy TEXT DEFAULT '',
+        closedAt TEXT,
+        closedBy TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open',
+        totalRevenue REAL DEFAULT 0,
+        totalBills INTEGER DEFAULT 0,
+        totalExpenses REAL DEFAULT 0,
+        openingBalance REAL DEFAULT 0,
+        closingBalance REAL DEFAULT 0,
+        notes TEXT DEFAULT ''
+      )
+    `);
+    // Index for querying sessions by business date
+    db.exec('CREATE INDEX IF NOT EXISTS idx_day_sessions_businessDate ON day_sessions(businessDate)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_day_sessions_status ON day_sessions(status)');
+    logger.info('Migration: Created day_sessions table');
   }
 
   // Clamp negative daily_sales values (one-time fix)
@@ -434,6 +538,57 @@ function runMigrations(db) {
     rebuildDailySalesTx();
     setMeta.run('daily_sales_local_date_fix_v1', '1');
     logger.info('Migration: Rebuilt daily_sales with local bill dates');
+  }
+
+  // Migration: Rebuild daily_sales using businessDate from bills and expenses
+  const dailySalesBusinessDateFix = Number((getMeta.get('daily_sales_business_date_v1') || {}).value || 0);
+  if (dailySalesBusinessDateFix < 1) {
+    const now = new Date().toISOString();
+    const rebuildFromBusinessDateTx = db.transaction(() => {
+      db.prepare('DELETE FROM daily_sales').run();
+
+      // Aggregate bills by businessDate
+      db.prepare(`
+        INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+        SELECT
+          COALESCE(businessDate,
+            CASE
+              WHEN id GLOB '????_??_??-*' THEN REPLACE(SUBSTR(id, 1, 10), '_', '-')
+              ELSE SUBSTR(createdAt, 1, 10)
+            END
+          ) as date,
+          SUM(total) as revenue,
+          COUNT(*) as bills,
+          0 as expenses,
+          ?
+        FROM bills
+        GROUP BY COALESCE(businessDate,
+          CASE
+            WHEN id GLOB '????_??_??-*' THEN REPLACE(SUBSTR(id, 1, 10), '_', '-')
+            ELSE SUBSTR(createdAt, 1, 10)
+          END
+        )
+      `).run(now);
+
+      // Aggregate expenses by businessDate (merge with existing rows)
+      db.prepare(`
+        INSERT INTO daily_sales (date, totalRevenue, totalBills, totalExpenses, updatedAt)
+        SELECT
+          COALESCE(businessDate, date, SUBSTR(createdAt, 1, 10)) as date,
+          0 as revenue,
+          0 as bills,
+          SUM(amount) as expenses,
+          ?
+        FROM expenses
+        GROUP BY COALESCE(businessDate, date, SUBSTR(createdAt, 1, 10))
+        ON CONFLICT(date) DO UPDATE SET
+          totalExpenses = totalExpenses + excluded.totalExpenses,
+          updatedAt = excluded.updatedAt
+      `).run(now);
+    });
+    rebuildFromBusinessDateTx();
+    setMeta.run('daily_sales_business_date_v1', '1');
+    logger.info('Migration: Rebuilt daily_sales using businessDate');
   }
 
   // Seed menu categories (must come before menu items)

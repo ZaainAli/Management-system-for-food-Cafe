@@ -6,11 +6,18 @@ function findAll(filters = {}) {
   const params = [];
   const conditions = [];
 
-  if (filters.from) {
+  // Prefer businessDate filtering when available
+  if (filters.businessDateFrom) {
+    conditions.push('COALESCE(businessDate, date) >= ?');
+    params.push(filters.businessDateFrom);
+  } else if (filters.from) {
     conditions.push('date >= ?');
     params.push(filters.from);
   }
-  if (filters.to) {
+  if (filters.businessDateTo) {
+    conditions.push('COALESCE(businessDate, date) <= ?');
+    params.push(filters.businessDateTo);
+  } else if (filters.to) {
     conditions.push('date <= ?');
     params.push(filters.to);
   }
@@ -39,11 +46,17 @@ function getCategoryTotals(filters = {}) {
   const params = [];
   const conditions = [];
 
-  if (filters.from) {
+  if (filters.businessDateFrom) {
+    conditions.push('COALESCE(businessDate, date) >= ?');
+    params.push(filters.businessDateFrom);
+  } else if (filters.from) {
     conditions.push('date >= ?');
     params.push(filters.from);
   }
-  if (filters.to) {
+  if (filters.businessDateTo) {
+    conditions.push('COALESCE(businessDate, date) <= ?');
+    params.push(filters.businessDateTo);
+  } else if (filters.to) {
     conditions.push('date <= ?');
     params.push(filters.to);
   }
@@ -60,18 +73,24 @@ function getDailyTotals(filters = {}) {
   const db = getDb();
   let query = `
     SELECT
-      COALESCE(NULLIF(date, ''), SUBSTR(createdAt, 1, 10)) as date,
+      COALESCE(businessDate, date, SUBSTR(createdAt, 1, 10)) as date,
       COALESCE(SUM(amount), 0) as total
     FROM expenses
   `;
   const params = [];
   const conditions = [];
 
-  if (filters.from) {
+  if (filters.businessDateFrom) {
+    conditions.push('COALESCE(businessDate, date) >= ?');
+    params.push(filters.businessDateFrom);
+  } else if (filters.from) {
     conditions.push('date >= ?');
     params.push(filters.from);
   }
-  if (filters.to) {
+  if (filters.businessDateTo) {
+    conditions.push('COALESCE(businessDate, date) <= ?');
+    params.push(filters.businessDateTo);
+  } else if (filters.to) {
     conditions.push('date <= ?');
     params.push(filters.to);
   }
@@ -80,7 +99,7 @@ function getDailyTotals(filters = {}) {
     query += ' WHERE ' + conditions.join(' AND ');
   }
 
-  query += ' GROUP BY COALESCE(NULLIF(date, \'\'), SUBSTR(createdAt, 1, 10)) ORDER BY date ASC';
+  query += ' GROUP BY COALESCE(businessDate, date, SUBSTR(createdAt, 1, 10)) ORDER BY date ASC';
   return db.prepare(query).all(...params);
 }
 
@@ -90,11 +109,17 @@ function getTotalAmount(filters = {}) {
   const params = [];
   const conditions = [];
 
-  if (filters.from) {
+  if (filters.businessDateFrom) {
+    conditions.push('COALESCE(businessDate, date) >= ?');
+    params.push(filters.businessDateFrom);
+  } else if (filters.from) {
     conditions.push('date >= ?');
     params.push(filters.from);
   }
-  if (filters.to) {
+  if (filters.businessDateTo) {
+    conditions.push('COALESCE(businessDate, date) <= ?');
+    params.push(filters.businessDateTo);
+  } else if (filters.to) {
     conditions.push('date <= ?');
     params.push(filters.to);
   }
@@ -115,17 +140,18 @@ function insert(expense) {
   const db = getDb();
   db.prepare(`
     INSERT INTO expenses (
-      id, description, amount, category, date,
+      id, description, amount, category, date, businessDate,
       sourceType, sourceEntityId, sourceEntityName, sourceRecordId,
       notes, createdAt
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     expense.id,
     expense.description,
     expense.amount,
     expense.category,
     expense.date,
+    expense.businessDate || null,
     expense.sourceType,
     expense.sourceEntityId,
     expense.sourceEntityName,

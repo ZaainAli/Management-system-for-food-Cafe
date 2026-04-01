@@ -3,7 +3,8 @@ const stockModel = require('../models/stock.model');
 const salesModel = require('../models/sales.model');
 const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
-const { formatPkDate } = require('../utils/datetime');
+const { formatPkDate, getEffectiveBusinessDate } = require('../utils/datetime');
+const settingsModel = require('../models/settings.model');
 
 function getBillLocalDate(savedBill) {
   const billIdMatch = String(savedBill?.id || '').match(/^(\d{4})_(\d{2})_(\d{2})-/);
@@ -159,6 +160,9 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   const billNum = billModel.getTodayBillCount(dateStr) + 1;
   const billId = `${dateStr}-${String(billNum).padStart(2, '0')}`;
 
+  const closingBuffer = settingsModel.getInt('closingTimeBuffer', 4);
+  const businessDate = getEffectiveBusinessDate(closingBuffer);
+
   const bill = {
     id: billId,
     tableId: tableId || null,
@@ -170,6 +174,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     total: skipSales ? 0 : parseFloat(total.toFixed(2)),
     paymentMethod,
     status: 'completed',
+    businessDate,
     createdAt: new Date().toISOString(),
   };
 
@@ -201,8 +206,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
 
   // Skip daily sales update for khata bills (total is 0, not a cash sale)
   if (!skipSales) {
-    const billDate = getBillLocalDate(saved);
-    salesModel.addBillToDailySales({ date: billDate, total: saved.total });
+    salesModel.addBillToDailySales({ date: businessDate, total: saved.total });
   }
 
   saved.stockAdjustments = stockAdjustments.map(adj => {
@@ -318,9 +322,10 @@ async function cancelBill({ billId, billAmount, returnAmount, reason }) {
     createdAt: new Date().toISOString(),
   });
 
-  const billDate = getBillLocalDate(bill);
+  // Use the bill's businessDate if available, otherwise fall back to bill local date
+  const billBusinessDate = bill.businessDate || getBillLocalDate(bill);
   salesModel.adjustDailySales({
-    date: billDate,
+    date: billBusinessDate,
     revenueDelta: -(Number(bill.total) || 0),
     billsDelta: -1,
     expensesDelta: 0,

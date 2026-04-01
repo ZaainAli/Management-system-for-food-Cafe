@@ -24,7 +24,7 @@ const inputCls = 'bg-slate-800 border border-slate-700 text-white text-xs rounde
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('sales');
-  const [period, setPeriod]       = useState('month');
+  const [period, setPeriod]       = useState('today');
   const [selMonth, setSelMonth]   = useState(curMonth());
   const [selYear, setSelYear]     = useState(curYear());
   const [selDate, setSelDate]     = useState(getPkToday());

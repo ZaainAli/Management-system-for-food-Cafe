@@ -13,7 +13,7 @@ export default function HeldBillsPanel({ heldBills, fsm, onRecall, onDelete }) {
           disabled={fsm !== 'IDLE'}
           className="text-[11px] text-primary-300 hover:text-primary-200 disabled:opacity-50"
         >
-          Recall Latest (F7)
+          Recall Latest (F6)
         </button>
       </div>
       <div className="space-y-1.5 max-h-36 overflow-y-auto">

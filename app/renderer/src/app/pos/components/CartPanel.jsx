@@ -147,7 +147,7 @@ export default function CartPanel({
                 const val = e.target.value.replace(/[^0-9]/g, '');
                 setDiscount(val === '' ? 0 : Math.max(0, Number(val)));
               }}
-              disabled={fsm !== 'IDLE'}
+              disabled={fsm !== 'IDLE' && fsm !== 'DISCOUNT'}
               className="input-field py-1.5 text-xs"
             />
           </div>

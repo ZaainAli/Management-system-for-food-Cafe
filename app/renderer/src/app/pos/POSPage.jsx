@@ -22,6 +22,10 @@ function fsmReducer(state, action) {
       return { ...state, tableBuffer: action.buffer };
     case 'UPDATE_ITEM_BUFFER':
       return { ...state, itemBuffer: action.buffer };
+    case 'START_DISCOUNT':
+      return { ...state, fsm: 'DISCOUNT', discountBuffer: '' };
+    case 'UPDATE_DISCOUNT_BUFFER':
+      return { ...state, discountBuffer: action.buffer };
     case 'RESET':
       return { ...initialFSMState };
     default:
@@ -59,7 +63,7 @@ export default function POSPage() {
 
   // FSM state
   const [fsmState, dispatch] = useReducer(fsmReducer, initialFSMState);
-  const { fsm, pendingLineId, tableBuffer, itemBuffer } = fsmState;
+  const { fsm, pendingLineId, tableBuffer, itemBuffer, discountBuffer } = fsmState;
 
   // Refs
   const inputBufferRef = useRef('');
@@ -269,6 +273,7 @@ export default function POSPage() {
     holdCurrentOrder,
     recallHeldBill,
     setSelectedTableId,
+    setDiscount,
     discountInputRef,
   });
 
@@ -318,6 +323,7 @@ export default function POSPage() {
           pendingLineId={pendingLineId}
           tableBuffer={tableBuffer}
           itemBuffer={itemBuffer}
+          discountBuffer={discountBuffer}
         />
 
         {/* Menu Grid */}

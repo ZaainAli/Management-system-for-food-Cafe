@@ -18,6 +18,7 @@ export function usePOSKeyboard({
   holdCurrentOrder,
   recallHeldBill,
   setSelectedTableId,
+  setDiscount,
   discountInputRef,
 }) {
   const { fsm, pendingLineId, pendingIsNewLine, itemBuffer } = fsmState;
@@ -47,44 +48,30 @@ export function usePOSKeyboard({
         const isQuickKeyHotkey = QUICK_KEY_SET.has(key) && key.length === 1 && !e.repeat &&
           !(key >= '0' && key <= '9');
         const isGlobalIdleHotkey =
-          e.key === 'Escape' || e.key === 'F8' || e.key === 'F9' ||
-          e.key === 'F10' || e.key === 'F6' || e.key === 'F7' ||
-          e.key === 'F12' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
+          e.key === 'Escape' || e.key === 'F5' || e.key === 'F6' || e.key === 'F7' || e.key === 'F8' ||
+          e.key === 'F9' || e.key === 'F11' || e.key === 'F12' || 
+          e.key === 'ArrowUp' || e.key === 'ArrowDown';
         if (!isQuickKeyHotkey && !isGlobalIdleHotkey) return;
       }
 
-      if (key === 'f6' && fsm === 'IDLE' && cart.length > 0) {
+      if (key === 'f5' && fsm === 'IDLE' && cart.length > 0) {
         if (e.repeat) return;
         e.preventDefault();
         holdCurrentOrder();
         return;
       }
 
-      if (key === 'f7' && fsm === 'IDLE' && heldBills.length > 0) {
+      if (key === 'f6' && fsm === 'IDLE' && heldBills.length > 0) {
         if (e.repeat) return;
         e.preventDefault();
         recallHeldBill(heldBills[0].id);
         return;
       }
 
-      if (key === 'f9' && fsm === 'IDLE') {
-        e.preventDefault();
-        discountInputRef.current?.focus();
-        discountInputRef.current?.select?.();
-        return;
-      }
-
-      if (key === 'f10' && fsm === 'IDLE') {
+      if (key === 'f7' && fsm === 'IDLE') {
         e.preventDefault();
         inputBufferRef.current = '';
         dispatch({ type: 'START_TABLE' });
-        return;
-      }
-
-      if (key === 'f12' && fsm === 'IDLE' && cart.length > 0) {
-        if (e.repeat) return;
-        e.preventDefault();
-        createBill({ skipPrint: true });
         return;
       }
 
@@ -99,6 +86,32 @@ export function usePOSKeyboard({
         }
         return;
       }
+
+      if (key === 'f9' && fsm === 'IDLE') {
+        e.preventDefault();
+        inputBufferRef.current = '';
+        dispatch({ type: 'START_DISCOUNT' });
+        return;
+      }
+
+      
+
+      if (key === 'f11' && fsm === 'IDLE' && cart.length > 0) {
+        if (e.repeat) return;
+        e.preventDefault();
+        createBill({ skipPrint: true });
+        return;
+      }
+       
+      if (key === 'f12' && fsm === 'IDLE' && cart.length > 0) {
+        if (e.repeat) return;
+        e.preventDefault();
+        createBill();
+        return;
+      }
+
+
+      
 
       // ── IDLE ──
       if (fsm === 'IDLE') {
@@ -154,8 +167,6 @@ export function usePOSKeyboard({
           e.preventDefault();
           if (itemBuffer) {
             dispatch({ type: 'UPDATE_ITEM_BUFFER', buffer: '' });
-          } else if (cart.length > 0) {
-            createBill();
           }
           return;
         }
@@ -306,6 +317,40 @@ export function usePOSKeyboard({
         }
         return;
       }
+
+      // ── DISCOUNT ──
+      if (fsm === 'DISCOUNT') {
+        e.preventDefault();
+        if (e.key === 'Enter') {
+          if (inputBufferRef.current !== '') {
+            const amount = parseFloat(inputBufferRef.current);
+            if (Number.isFinite(amount) && amount >= 0) {
+              setDiscount(amount);
+            }
+          }
+          inputBufferRef.current = '';
+          dispatch({ type: 'RESET' });
+          return;
+        }
+        if ((e.key >= '0' && e.key <= '9') || e.key === '.') {
+          inputBufferRef.current += e.key;
+          dispatch({ type: 'UPDATE_DISCOUNT_BUFFER', buffer: inputBufferRef.current });
+          return;
+        }
+        if (e.key === 'Backspace') {
+          inputBufferRef.current = inputBufferRef.current.slice(0, -1);
+          dispatch({ type: 'UPDATE_DISCOUNT_BUFFER', buffer: inputBufferRef.current });
+          return;
+        }
+        if (e.key === 'Escape') {
+          inputBufferRef.current = '';
+          dispatch({ type: 'RESET' });
+          return;
+        }
+        return;
+      }
+
+
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -316,7 +361,7 @@ export function usePOSKeyboard({
     cart, tables, heldBills,
     addItem, updateLine, deleteLine,
     createBill, holdCurrentOrder, recallHeldBill,
-    setSelectedTableId, discountInputRef, inputBufferRef,
+    setSelectedTableId, setDiscount, discountInputRef, inputBufferRef,
     dispatch, pickCartLineByArrow,
   ]);
 }

@@ -237,6 +237,19 @@ function runMigrations(db) {
       FOREIGN KEY (billId) REFERENCES bills(id)
     );
 
+    -- POS Khata Bills (bills added to customer khata from POS)
+    CREATE TABLE IF NOT EXISTS pos_khata_bills (
+      id TEXT PRIMARY KEY,
+      billId TEXT NOT NULL,
+      khataId TEXT NOT NULL,
+      customerName TEXT NOT NULL,
+      totalAmount REAL NOT NULL,
+      itemsNote TEXT DEFAULT '',
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (billId) REFERENCES bills(id),
+      FOREIGN KEY (khataId) REFERENCES khata_profiles(id)
+    );
+
     -- Quick keys (POS keyboard shortcuts for frequent items)
     CREATE TABLE IF NOT EXISTS quick_keys (
       key TEXT PRIMARY KEY,
@@ -270,6 +283,7 @@ function runMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_cancelled_bills_createdAt ON cancelled_bills(createdAt);
     CREATE INDEX IF NOT EXISTS idx_khata_transactions_khataId ON khata_transactions(khataId);
     CREATE INDEX IF NOT EXISTS idx_khata_transactions_date ON khata_transactions(date);
+    CREATE INDEX IF NOT EXISTS idx_pos_khata_bills_createdAt ON pos_khata_bills(createdAt);
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
     CREATE INDEX IF NOT EXISTS idx_salary_records_employeeId ON salary_records(employeeId);
   `);
@@ -346,6 +360,24 @@ function runMigrations(db) {
   if (!discountedBillCols.includes('tableNum')) {
     db.prepare('ALTER TABLE discounted_bills ADD COLUMN tableNum INTEGER').run();
     logger.info('Migration: Added tableNum column to discounted_bills table');
+  }
+
+  // Migration: Create pos_khata_bills table if it doesn't exist (for existing databases)
+  const hasKhataBillsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_khata_bills'").get();
+  if (!hasKhataBillsTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS pos_khata_bills (
+        id TEXT PRIMARY KEY,
+        billId TEXT NOT NULL,
+        khataId TEXT NOT NULL,
+        customerName TEXT NOT NULL,
+        totalAmount REAL NOT NULL,
+        itemsNote TEXT DEFAULT '',
+        createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pos_khata_bills_createdAt ON pos_khata_bills(createdAt);
+    `);
+    logger.info('Migration: Created pos_khata_bills table');
   }
 
   // Clamp negative daily_sales values (one-time fix)

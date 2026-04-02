@@ -24,10 +24,10 @@ const curYear  = () => String(new Date().getFullYear());
 const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2019 }, (_, i) => String(new Date().getFullYear() - i));
 const PERIODS = ['today', 'week', 'month', 'year', 'custom'];
 
-function getRange(period, selMonth, selYear) {
+function getRange(period, selMonth, selYear, selDate) {
   const pad = (n) => String(n).padStart(2, '0');
   const td  = formatPkDate();
-  if (period === 'today') return { from: td, to: td };
+  if (period === 'today') return { from: selDate, to: selDate };
   if (period === 'week') {
     return { from: shiftPkDate(td, -6), to: td };
   }
@@ -81,6 +81,7 @@ export default function ReportsPage() {
   const [period, setPeriod]             = useState('today');
   const [selMonth, setSelMonth]         = useState(curMonth());
   const [selYear, setSelYear]           = useState(curYear());
+  const [selDate, setSelDate]           = useState(today());
   const [customFrom, setCustomFrom]     = useState(today());
   const [customTo, setCustomTo]         = useState(today());
   const [branchFilter, setBranchFilter] = useState('all'); // 'all' | branch_id
@@ -94,7 +95,7 @@ export default function ReportsPage() {
     setLoading(true);
     const { from, to } = period === 'custom'
       ? { from: customFrom, to: customTo }
-      : getRange(period, selMonth, selYear);
+      : getRange(period, selMonth, selYear, selDate);
 
     // Build branch filter
     let salesQ = supabase
@@ -140,7 +141,7 @@ export default function ReportsPage() {
     setKhataRows(khataRes.data ?? []);
     setAllKhataRows(allKhataRes.data ?? []);
     setLoading(false);
-  }, [period, selMonth, selYear, customFrom, customTo, branchFilter]);
+  }, [period, selMonth, selYear, customFrom, customTo, branchFilter, selDate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -287,6 +288,23 @@ export default function ReportsPage() {
                 onChange={(e) => setCustomTo(e.target.value)}
                 className="input-field !w-auto text-xs py-1.5"
               />
+            </div>
+          )}
+
+          {/* Day navigator */}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftPkDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={today()}
+                onChange={e => setSelDate(e.target.value)}
+                className="input-field !w-auto text-xs py-1.5" />
+              <button onClick={() => { const next = shiftPkDate(selDate, 1); if (next <= today()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
             </div>
           )}
         </div>

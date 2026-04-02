@@ -1,4 +1,5 @@
 const billingService = require('../services/billing.service');
+const billModel = require('../models/bill.model');
 const { printBillReceipt } = require('../services/print.service');
 const setupController = require('./setup.controller');
 const logger = require('../utils/logger');
@@ -207,7 +208,9 @@ async function updateTableStatus(payload) {
 async function getDiscountedBills(filters = {}) {
   try {
     const data = await billingService.getDiscountedBills(filters);
-    return { success: true, data };
+    // Also fetch khata bills for the same date range
+    const khataBills = billModel.getPosKhataBillsByDateRange(filters);
+    return { success: true, data, khataBills };
   } catch (err) {
     logger.error('getDiscountedBills failed', err);
     return { success: false, error: err.message };

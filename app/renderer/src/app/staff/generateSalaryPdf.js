@@ -88,12 +88,12 @@ export function generateSalaryPdf({
   statBox(doc, bx[0], by, bw, bh, 'Present Days', String(attendanceSummary.presentDays));
   statBox(doc, bx[1], by, bw, bh, 'Absent Days', String(attendanceSummary.absentDays));
   statBox(doc, bx[2], by, bw, bh, 'Total Hours', String(attendanceSummary.totalHours));
-  statBox(doc, bx[3], by, bw, bh, 'Hourly Rate', `PKR ${attendanceSummary.hourlyRate.toLocaleString()}`);
+  statBox(doc, bx[3], by, bw, bh, 'Per Day Salary', `PKR ${attendanceSummary.perDaySalary.toLocaleString()}`);
 
   // Salary from attendance row
   const earnedY = by + bh + 3;
   rect(doc, M + 4, earnedY, W - 8, 16, C.cardAlt);
-  label(doc, `Salary from attendance (${attendanceSummary.from} to ${attendanceSummary.to})`, M + 7, earnedY + 6);
+  label(doc, `Salary from attendance (${attendanceSummary.from} to ${attendanceSummary.to}) — ${attendanceSummary.presentDays} days × PKR ${attendanceSummary.perDaySalary}`, M + 7, earnedY + 6);
   value(doc, `PKR ${monthlySummary.earned.toLocaleString()}`, M + 7, earnedY + 12, C.green, 11, true);
 
   y += 62 + 4;

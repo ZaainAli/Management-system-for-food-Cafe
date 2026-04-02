@@ -255,11 +255,17 @@ function drawPLContent(doc, d, y) {
 function drawDiscountedContent(doc, d, y) {
   y = drawBanner(doc, 'discounted', y);
   y = drawSummaryCards(doc,
-    ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount', 'Cancelled Bills', 'Total Return Amount'],
-    [d.totalRecords, d.totalTableBills || 0, d.totalBillAmount, d.totalDiscount, d.totalFinalAmount, d.totalCancelledBills || 0, d.totalReturnAmount || 0], y);
+    ['Total Bills', 'Total Table Bills', 'Total Bill Amount', 'Total Discount', 'Total After Discount', 'Khata Bills', 'Khata Amount', 'Cancelled Bills', 'Total Return Amount'],
+    [d.totalRecords, d.totalTableBills || 0, d.totalBillAmount, d.totalDiscount, d.totalFinalAmount, d.totalKhataBills || 0, d.totalKhataAmount || 0, d.totalCancelledBills || 0, d.totalReturnAmount || 0], y);
   y = drawSubLabel(doc, 'Table & Discount Report', y);
   y = drawTable(doc, ['Bill ID', 'Type', 'Table No', 'Bill Amt', 'Discount', 'Final Amt', 'Return Amt', 'Reason', 'Created At'],
     (d.records || []).map(r => [r.billId, r.rowType || '', r.tableNum || '', r.billAmount, r.discountAmount, r.finalAmount, r.returnAmount || 0, r.reason || '', formatPkDateTime(r.createdAt)]), y);
+  // Khata Bills section
+  if (d.khataBills && d.khataBills.length > 0) {
+    y = drawSubLabel(doc, 'POS Khata Bills (Customer Credit)', y);
+    y = drawTable(doc, ['Bill ID', 'Customer', 'Amount', 'Items', 'Created At'],
+      d.khataBills.map(r => [r.billId, r.customerName, `Rs ${Number(r.totalAmount).toLocaleString()}`, r.itemsNote || '', formatPkDateTime(r.createdAt)]), y);
+  }
   return y;
 }
 
@@ -351,7 +357,7 @@ function estimateExportRows(type, data) {
     case 'staff':
       return data.employees?.length || 0;
     case 'discounted':
-      return data.records?.length || 0;
+      return (data.records?.length || 0) + (data.khataBills?.length || 0);
     case 'khata':
       return (data.profiles?.length || 0) + (data.transactions?.length || 0);
     case 'pl':

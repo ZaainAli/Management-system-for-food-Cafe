@@ -515,6 +515,32 @@ function setQuickKeys(assignments) {
   tx();
 }
 
+// ─── POS Khata Bills ───────────────────────────────────────
+
+function insertPosKhataBill(record) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO pos_khata_bills (id, billId, khataId, customerName, totalAmount, itemsNote, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(record.id, record.billId, record.khataId, record.customerName, record.totalAmount, record.itemsNote || '', record.createdAt);
+  return record;
+}
+
+function getPosKhataBillsByDateRange(filters = {}) {
+  const db = getDb();
+  let query = `
+    SELECT pkb.*, kp.name as khataName
+    FROM pos_khata_bills pkb
+    JOIN khata_profiles kp ON kp.id = pkb.khataId
+    WHERE 1 = 1
+  `;
+  const params = [];
+  if (filters.from) { query += ' AND pkb.createdAt >= ?'; params.push(filters.from); }
+  if (filters.to)   { query += ' AND pkb.createdAt <= ?'; params.push(filters.to); }
+  query += ' ORDER BY pkb.createdAt DESC';
+  return db.prepare(query).all(...params);
+}
+
 module.exports = {
   getAllMenuItems, getMenuItemById, insertMenuItem, updateMenuItem, deleteMenuItem,
   getAllCategories, insertCategory,
@@ -522,5 +548,6 @@ module.exports = {
   insertBill, getBills, getBillById, getRecentBills, getTopItems, getTodayBillCount,
   insertHeldBill, getHeldBills, getHeldBillById, deleteHeldBill,
   insertDiscountedBill, getDiscountedBills, cancelBill,
-  getQuickKeys, setQuickKeys,updateBill,
+  getQuickKeys, setQuickKeys, updateBill,
+  insertPosKhataBill, getPosKhataBillsByDateRange,
 };

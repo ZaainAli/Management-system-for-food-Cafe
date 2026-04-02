@@ -12,13 +12,13 @@ const YEAR_OPTIONS = Array.from(
   (_, i) => String(Number(getPkToday().slice(0, 4)) - i)
 );
 
-function computeRange(period, selMonth, selYear) {
+function computeRange(period, selMonth, selYear, selDate) {
   const td = getPkToday();
-  if (period === 'today') return { from: td, to: td };
+  if (period === 'today') return { from: selDate, to: selDate };
   if (period === 'week') return { from: shiftDate(td, -6), to: td };
   if (period === 'month') return monthBounds(selMonth);
   if (period === 'year') return { from: `${selYear}-01-01`, to: `${selYear}-12-31` };
-  return { from: td, to: td };
+  return { from: selDate, to: selDate };
 }
 
 const StatCard = ({ label, value, sub, color = 'text-white' }) => (
@@ -36,11 +36,12 @@ export default function Dashboard() {
   const [period, setPeriod]     = useState('today');
   const [selMonth, setSelMonth] = useState(curMonth());
   const [selYear, setSelYear]   = useState(curYear());
+  const [selDate, setSelDate]   = useState(getPkToday());
   const [loading, setLoading]   = useState(true);
 
   const fetchStats = async () => {
     setLoading(true);
-    const { from, to } = computeRange(period, selMonth, selYear);
+    const { from, to } = computeRange(period, selMonth, selYear, selDate);
     const res = await window.api.report.getDashboardStats({ from, to });
     if (res.success) setStats(res.data);
     setLoading(false);
@@ -48,14 +49,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-  }, [period, selMonth, selYear]);
+  }, [period, selMonth, selYear, selDate]);
 
   // Re-fetch when the startup pull from Supabase completes
   useEffect(() => {
     if (!window.api?.sync?.onPulled) return;
     const cleanup = window.api.sync.onPulled(() => { fetchStats(); });
     return cleanup;
-  }, [period, selMonth, selYear]);
+  }, [period, selMonth, selYear, selDate]);
 
   const fmt = (n) => `PKR ${Number(n).toLocaleString()}`;
 
@@ -99,6 +100,22 @@ export default function Dashboard() {
             <select value={selYear} onChange={e => setSelYear(e.target.value)} className={inputCls}>
               {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
+          )}
+
+          {/* Day navigator */}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={getPkToday()}
+                onChange={e => setSelDate(e.target.value)} className={inputCls} />
+              <button onClick={() => { const next = shiftDate(selDate, 1); if (next <= getPkToday()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
+            </div>
           )}
         </div>
       </div>

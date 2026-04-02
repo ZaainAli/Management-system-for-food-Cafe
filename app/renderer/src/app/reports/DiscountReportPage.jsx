@@ -15,9 +15,11 @@ export default function DiscountReportPage() {
   const [period, setPeriod]       = useState('today');
   const [selMonth, setSelMonth]   = useState(curMonth());
   const [selYear, setSelYear]     = useState(curYear());
+  const [selDate, setSelDate]     = useState(getPkToday());
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo]     = useState('');
   const [data, setData] = useState([]);
+  const [khataBills, setKhataBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -25,6 +27,7 @@ export default function DiscountReportPage() {
     if (period === 'custom' && (!customFrom || !customTo)) {
       setLoading(false);
       setData([]);
+      setKhataBills([]);
       return;
     }
 
@@ -38,8 +41,8 @@ export default function DiscountReportPage() {
           from = getPkDateUtcBounds(customFrom).from;
           to = getPkDateUtcBounds(customTo).to;
         } else if (period === 'today') {
-          from = getPkDateUtcBounds(td).from;
-          to = getPkDateUtcBounds(td).to;
+          from = getPkDateUtcBounds(selDate).from;
+          to = getPkDateUtcBounds(selDate).to;
         } else if (period === 'week') {
           const weekStart = shiftDate(td, -6);
           from = getPkDateUtcBounds(weekStart).from;
@@ -54,15 +57,19 @@ export default function DiscountReportPage() {
         }
 
         const res = await window.api.pos.getDiscountedBills({ from, to });
-        if (res?.success) setData(res.data);
-        else setError(res?.error || 'Failed to load table & discount report.');
+        if (res?.success) {
+          setData(res.data);
+          setKhataBills(res.khataBills || []);
+        } else {
+          setError(res?.error || 'Failed to load table & discount report.');
+        }
       } catch (err) {
         setError(err.message || 'Failed to load table & discount report.');
       } finally {
         setLoading(false);
       }
     })();
-  }, [period, selMonth, selYear, customFrom, customTo]);
+  }, [period, selMonth, selYear, customFrom, customTo, selDate]);
 
   const totalBillAmount = data
     .filter(r => r.rowType !== 'cancelled')
@@ -78,6 +85,9 @@ export default function DiscountReportPage() {
   const totalReturnAmount = data
     .filter(r => r.rowType === 'cancelled')
     .reduce((sum, r) => sum + (Number(r.returnAmount) || 0), 0);
+
+  const totalKhataBills = khataBills.length;
+  const totalKhataAmount = khataBills.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
 
   return (
     <div>
@@ -107,11 +117,25 @@ export default function DiscountReportPage() {
               <input type="date" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
             </div>
           )}
+          {period === 'today' && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelDate(d => shiftDate(d, -1))}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                &larr; Prev
+              </button>
+              <input type="date" value={selDate} max={getPkToday()}
+                onChange={e => setSelDate(e.target.value)} className={inputCls} />
+              <button onClick={() => { const next = shiftDate(selDate, 1); if (next <= getPkToday()) setSelDate(next); }}
+                className="px-2 py-1 text-xs rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                Next &rarr;
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="card">
           <p className="text-slate-500 text-xs mb-1">Total Bills</p>
           <p className="text-white text-lg font-bold">{data.length}</p>
@@ -129,6 +153,14 @@ export default function DiscountReportPage() {
           <p className="text-white text-lg font-bold">PKR {totalFinal.toLocaleString()}</p>
         </div>
         <div className="card">
+          <p className="text-slate-500 text-xs mb-1">Khata Bills</p>
+          <p className="text-amber-400 text-lg font-bold">{totalKhataBills}</p>
+        </div>
+        <div className="card">
+          <p className="text-slate-500 text-xs mb-1">Khata Amount</p>
+          <p className="text-amber-400 text-lg font-bold">PKR {totalKhataAmount.toLocaleString()}</p>
+        </div>
+        <div className="card">
           <p className="text-slate-500 text-xs mb-1">Cancelled Bills</p>
           <p className="text-red-400 text-lg font-bold">{totalCancelledBills}</p>
         </div>
@@ -143,65 +175,108 @@ export default function DiscountReportPage() {
         <div className="text-slate-400 text-sm">Loading...</div>
       ) : error ? (
         <div className="text-red-400 text-sm">{error}</div>
-      ) : data.length === 0 ? (
+      ) : data.length === 0 && khataBills.length === 0 ? (
         <div className="card text-center py-10">
-          <p className="text-slate-500 text-sm">No table or discounted bills found for this period.</p>
+          <p className="text-slate-500 text-sm">No table, discount, or khata bills found for this period.</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="border-b border-slate-700 text-slate-400 text-xs">
-                <th className="py-2 px-3">#</th>
-                <th className="py-2 px-3">Bill No</th>
-                <th className="py-2 px-3">Type</th>
-                <th className="py-2 px-3">Table No</th>
-                <th className="py-2 px-3">Date</th>
-                <th className="py-2 px-3 text-right">Bill Amount</th>
-                <th className="py-2 px-3 text-right">Discount</th>
-                <th className="py-2 px-3 text-right">Final Amount</th>
-                <th className="py-2 px-3 text-right">Return Amount</th>
-                <th className="py-2 px-3">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row, idx) => (
-                <tr key={`${row.rowType || 'record'}-${row.id}`} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                  <td className="py-2 px-3 text-slate-500 text-xs">{idx + 1}</td>
-                  <td className="py-2 px-3 text-white text-xs font-medium">{row.billId}</td>
-                  <td className="py-2 px-3 text-xs">
-                    <span className={
-                      row.rowType === 'cancelled'
-                        ? 'text-red-400'
-                        : row.rowType === 'discounted'
-                          ? 'text-green-400'
-                          : 'text-slate-300'
-                    }>
-                      {row.rowType === 'cancelled' ? 'Cancelled' : row.rowType === 'discounted' ? 'Discounted' : 'Table'}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-slate-300 text-xs">{row.tableNum ?? ''}</td>
-                  <td className="py-2 px-3 text-slate-400 text-xs">{formatPkDateTime(row.createdAt)}</td>
-                  <td className="py-2 px-3 text-white text-xs text-right">PKR {Number(row.billAmount || 0).toLocaleString()}</td>
-                  <td className="py-2 px-3 text-green-400 text-xs text-right">{row.rowType === 'cancelled' ? '-' : `PKR ${Number(row.discountAmount || 0).toLocaleString()}`}</td>
-                  <td className="py-2 px-3 text-white text-xs text-right">{row.rowType === 'cancelled' ? '-' : `PKR ${Number(row.finalAmount || 0).toLocaleString()}`}</td>
-                  <td className="py-2 px-3 text-red-300 text-xs text-right">{row.rowType === 'cancelled' ? `PKR ${Number(row.returnAmount || 0).toLocaleString()}` : '-'}</td>
-                  <td className="py-2 px-3 text-slate-300 text-xs">{row.rowType === 'cancelled' ? (row.reason || '-') : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-slate-600 font-semibold text-xs">
-                <td className="py-2 px-3" colSpan="5">Totals</td>
-                <td className="py-2 px-3 text-white text-right">PKR {totalBillAmount.toLocaleString()}</td>
-                <td className="py-2 px-3 text-green-400 text-right">PKR {totalDiscount.toLocaleString()}</td>
-                <td className="py-2 px-3 text-white text-right">PKR {totalFinal.toLocaleString()}</td>
-                <td className="py-2 px-3 text-red-300 text-right">PKR {totalReturnAmount.toLocaleString()}</td>
-                <td className="py-2 px-3 text-slate-400 text-right">-</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+        <>
+          {data.length > 0 && (
+            <div className="card overflow-x-auto mb-6">
+              <h3 className="text-white font-semibold mb-3">Table & Discount Bills</h3>
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-slate-700 text-slate-400 text-xs">
+                    <th className="py-2 px-3">#</th>
+                    <th className="py-2 px-3">Bill No</th>
+                    <th className="py-2 px-3">Type</th>
+                    <th className="py-2 px-3">Table No</th>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3 text-right">Bill Amount</th>
+                    <th className="py-2 px-3 text-right">Discount</th>
+                    <th className="py-2 px-3 text-right">Final Amount</th>
+                    <th className="py-2 px-3 text-right">Return Amount</th>
+                    <th className="py-2 px-3">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map((row, idx) => (
+                    <tr key={`${row.rowType || 'record'}-${row.id}`} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                      <td className="py-2 px-3 text-slate-500 text-xs">{idx + 1}</td>
+                      <td className="py-2 px-3 text-white text-xs font-medium">{row.billId}</td>
+                      <td className="py-2 px-3 text-xs">
+                        <span className={
+                          row.rowType === 'cancelled'
+                            ? 'text-red-400'
+                            : row.rowType === 'discounted'
+                              ? 'text-green-400'
+                              : 'text-slate-300'
+                        }>
+                          {row.rowType === 'cancelled' ? 'Cancelled' : row.rowType === 'discounted' ? 'Discounted' : 'Table'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-slate-300 text-xs">{row.tableNum ?? ''}</td>
+                      <td className="py-2 px-3 text-slate-400 text-xs">{formatPkDateTime(row.createdAt)}</td>
+                      <td className="py-2 px-3 text-white text-xs text-right">PKR {Number(row.billAmount || 0).toLocaleString()}</td>
+                      <td className="py-2 px-3 text-green-400 text-xs text-right">{row.rowType === 'cancelled' ? '-' : `PKR ${Number(row.discountAmount || 0).toLocaleString()}`}</td>
+                      <td className="py-2 px-3 text-white text-xs text-right">{row.rowType === 'cancelled' ? '-' : `PKR ${Number(row.finalAmount || 0).toLocaleString()}`}</td>
+                      <td className="py-2 px-3 text-red-300 text-xs text-right">{row.rowType === 'cancelled' ? `PKR ${Number(row.returnAmount || 0).toLocaleString()}` : '-'}</td>
+                      <td className="py-2 px-3 text-slate-300 text-xs">{row.rowType === 'cancelled' ? (row.reason || '-') : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-600 font-semibold text-xs">
+                    <td className="py-2 px-3" colSpan="5">Totals</td>
+                    <td className="py-2 px-3 text-white text-right">PKR {totalBillAmount.toLocaleString()}</td>
+                    <td className="py-2 px-3 text-green-400 text-right">PKR {totalDiscount.toLocaleString()}</td>
+                    <td className="py-2 px-3 text-white text-right">PKR {totalFinal.toLocaleString()}</td>
+                    <td className="py-2 px-3 text-red-300 text-right">PKR {totalReturnAmount.toLocaleString()}</td>
+                    <td className="py-2 px-3 text-slate-400 text-right">-</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* Khata Bills Table */}
+          {khataBills.length > 0 && (
+            <div className="card overflow-x-auto">
+              <h3 className="text-amber-400 font-semibold mb-3">POS Khata Bills (Customer Credit)</h3>
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-slate-700 text-slate-400 text-xs">
+                    <th className="py-2 px-3">#</th>
+                    <th className="py-2 px-3">Bill No</th>
+                    <th className="py-2 px-3">Customer</th>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3 text-right">Amount</th>
+                    <th className="py-2 px-3">Items</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {khataBills.map((row, idx) => (
+                    <tr key={row.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                      <td className="py-2 px-3 text-slate-500 text-xs">{idx + 1}</td>
+                      <td className="py-2 px-3 text-white text-xs font-medium">{row.billId}</td>
+                      <td className="py-2 px-3 text-amber-300 text-xs font-medium">{row.customerName}</td>
+                      <td className="py-2 px-3 text-slate-400 text-xs">{formatPkDateTime(row.createdAt)}</td>
+                      <td className="py-2 px-3 text-amber-400 text-xs text-right font-semibold">PKR {Number(row.totalAmount || 0).toLocaleString()}</td>
+                      <td className="py-2 px-3 text-slate-300 text-xs">{row.itemsNote || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-600 font-semibold text-xs">
+                    <td className="py-2 px-3" colSpan="4">Total Khata Bills: {totalKhataBills}</td>
+                    <td className="py-2 px-3 text-amber-400 text-right">PKR {totalKhataAmount.toLocaleString()}</td>
+                    <td className="py-2 px-3">-</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

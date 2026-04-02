@@ -96,7 +96,7 @@ async function addMenuCategory(category) {
 
 // ─── Bill Creation ──────────────────────────────────────────
 
-async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash', customerName = '' }) {
+async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash', customerName = '', skipSales = false, khataId = null }) {
   if (!items || items.length === 0) {
     throw new Error('Bill must have at least one item');
   }
@@ -164,10 +164,10 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     tableId: tableId || null,
     customerName,
     items: lineItems,
-    subtotal: parseFloat(subtotal.toFixed(2)),
+    subtotal: skipSales ? 0 : parseFloat(subtotal.toFixed(2)),
     tax: 0,
-    discount: parseFloat(discountAmount.toFixed(2)),
-    total: parseFloat(total.toFixed(2)),
+    discount: skipSales ? 0 : parseFloat(discountAmount.toFixed(2)),
+    total: skipSales ? 0 : parseFloat(total.toFixed(2)),
     paymentMethod,
     status: 'completed',
     createdAt: new Date().toISOString(),
@@ -185,8 +185,22 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
 
   const saved = billModel.insertBill(bill, stockAdjustments);
 
-  // Save discounted bill record if discount was applied
-  if (discountAmount > 0) {
+  // Save to pos_khata_bills table for khata customer bills
+  if (skipSales && khataId) {
+    const itemsNote = lineItems.map(li => `${li.name} x${li.quantity} = Rs ${li.lineTotal.toLocaleString()}`).join(', ');
+    billModel.insertPosKhataBill({
+      id: uuidv4(),
+      billId: saved.id,
+      khataId,
+      customerName,
+      totalAmount: parseFloat(total.toFixed(2)),
+      itemsNote,
+      createdAt: saved.createdAt,
+    });
+  }
+
+  // Save discounted bill record if discount was applied (skip for khata bills)
+  if (!skipSales && discountAmount > 0) {
     const tableNum = billModel.getTableNumberById(saved.tableId);
     billModel.insertDiscountedBill({
       id: uuidv4(),
@@ -199,8 +213,12 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     });
   }
 
-  const billDate = getBillLocalDate(saved);
-  salesModel.addBillToDailySales({ date: billDate, total: saved.total });
+  // Skip daily sales update for khata bills (total is 0, not a cash sale)
+  if (!skipSales) {
+    const billDate = getBillLocalDate(saved);
+    salesModel.addBillToDailySales({ date: billDate, total: saved.total });
+  }
+
   saved.stockAdjustments = stockAdjustments.map(adj => {
     const consumed = Math.abs(adj.consumeQty);
     const linked = stockConsumptionById.get(adj.stockItemId);

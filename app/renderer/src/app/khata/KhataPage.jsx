@@ -32,6 +32,8 @@ export default function KhataPage() {
   const [txForm, setTxForm] = useState(emptyTxForm);
   const [showAddTxModal, setShowAddTxModal] = useState(false);
   const [addTxForm, setAddTxForm] = useState(emptyAddTxForm);
+  const [profileFilter, setProfileFilter] = useState('supplier');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchProfiles = async () => {
     const res = await window.api.khata.getAll();
@@ -63,6 +65,21 @@ export default function KhataPage() {
   const activeProfile = activeData?.profile;
   const transactions = activeData?.transactions || [];
   const balance = useMemo(() => activeProfile?.balance || 0, [activeProfile]);
+
+  const filteredProfiles = useMemo(() => {
+    let list = profiles;
+    if (profileFilter !== 'all') {
+      list = list.filter(p => p.profileType === profileFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(p =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.phone || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [profiles, profileFilter, searchQuery]);
 
   // Running balance per row (ascending order)
   let running = 0;
@@ -369,8 +386,42 @@ export default function KhataPage() {
             Cashier can create profiles and add transactions only. Edit/Delete actions are restricted.
           </p>
         )}
+
+        {/* Filter buttons */}
+        <div className="flex rounded-lg overflow-hidden border border-slate-700 mb-3">
+          <button
+            onClick={() => setProfileFilter('all')}
+            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${profileFilter === 'all' ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setProfileFilter('supplier')}
+            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${profileFilter === 'supplier' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          >
+            Supplier
+          </button>
+          <button
+            onClick={() => setProfileFilter('customer')}
+            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${profileFilter === 'customer' ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          >
+            Customer
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="mb-3">
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Search by name or phone..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+
         <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-          {profiles.map(profile => (
+          {filteredProfiles.map(profile => (
             <button
               key={profile.id}
               onClick={() => setActiveId(profile.id)}
@@ -397,8 +448,8 @@ export default function KhataPage() {
               </div>
             </button>
           ))}
-          {profiles.length === 0 && (
-            <div className="text-slate-500 text-sm text-center py-6">No khata profiles yet</div>
+          {filteredProfiles.length === 0 && (
+            <div className="text-slate-500 text-sm text-center py-6">No khata profiles found</div>
           )}
         </div>
       </div>

@@ -176,6 +176,11 @@ async function getDiscountedBillsReport(filters = {}) {
   const totalCancelledBills = cancelledRecords.length;
   const totalReturnAmount = cancelledRecords.reduce((sum, row) => sum + (Number(row.returnAmount) || 0), 0);
 
+  // Fetch POS khata bills (bills added to customer khata)
+  const khataBills = await billModel.getPosKhataBillsByDateRange({ from, to });
+  const totalKhataBills = khataBills.length;
+  const totalKhataAmount = khataBills.reduce((sum, row) => sum + (Number(row.totalAmount) || 0), 0);
+
   return {
     records,
     totalRecords: records.length,
@@ -185,6 +190,9 @@ async function getDiscountedBillsReport(filters = {}) {
     totalFinalAmount: parseFloat(totals.totalFinalAmount.toFixed(2)),
     totalCancelledBills,
     totalReturnAmount: parseFloat(totalReturnAmount.toFixed(2)),
+    khataBills,
+    totalKhataBills,
+    totalKhataAmount: parseFloat(totalKhataAmount.toFixed(2)),
     period,
   };
 }

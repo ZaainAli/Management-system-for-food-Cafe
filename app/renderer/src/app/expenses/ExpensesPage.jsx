@@ -116,14 +116,18 @@ export default function ExpensesPage() {
 
   const handleSave = async () => {
     setFormError('');
-    const description =
-      form.sourceType === 'khata'
-        ? editId
-          ? 'khata payment:edit (app:exp)'
-          : 'khata payment(app:exp)'
-        : form.sourceType === 'salary'
-        ? 'Salary payment(app:exp)'
-        : form.description?.trim() || 'Manual EXP (app:exp)';
+    let description;
+    if (form.sourceType === 'khata') {
+      const profile = khataProfiles.find(p => p.id === form.sourceEntityId);
+      const name = profile?.name || ' ---';
+      description = `Khata Payment: ${name}`.trim();
+    } else if (form.sourceType === 'salary') {
+      const emp = employees.find(e => e.id === form.sourceEntityId);
+      const name = emp?.name || ' ---';
+      description = `Salary Payment: ${name}`.trim();
+    } else {
+      description = form.description?.trim() || 'Manual EXP (app:exp)';
+    }
     if (!form.amount || Number(form.amount) <= 0) {
       setFormError('Amount must be greater than 0.');
       return;

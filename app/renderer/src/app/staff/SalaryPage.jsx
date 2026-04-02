@@ -15,7 +15,7 @@ function toMonthValue(dateString) {
 }
 
 function round2(value) {
-  return Number((Number(value) || 0).toFixed(2));
+  return Math.round(Number(value) || 0);
 }
 
 function isDateInMonth(dateString, monthValue) {
@@ -47,7 +47,7 @@ export default function SalaryPage() {
   const [form, setForm] = useState(emptyForm());
   const [attendanceSummary, setAttendanceSummary] = useState({
     from: '', to: '', presentDays: 0, absentDays: 0,
-    totalHours: 0, hourlyRate: 0, calculatedSalary: 0,
+    totalHours: 0, perDaySalary: 0, calculatedSalary: 0,
   });
   // Previous month due (remaining owed to employee from last month)
   const [prevMonthCalcSalary, setPrevMonthCalcSalary] = useState(0);
@@ -74,9 +74,9 @@ export default function SalaryPage() {
     const presentDays = records.filter((r) => r.status === 'present').length;
     const absentDays = records.filter((r) => r.status === 'absent').length;
     const totalHours = round2(records.reduce((sum, r) => sum + (Number(r.hoursWorked) || 0), 0));
-    const hourlyRate = round2((Number(employee.monthlySalary) || 0) / 30 / 12);
-    const calculatedSalary = round2(hourlyRate * totalHours);
-    setAttendanceSummary({ from: range.from, to: range.to, presentDays, absentDays, totalHours, hourlyRate, calculatedSalary });
+    const perDaySalary = round2((Number(employee.monthlySalary) || 0) / 30);
+    const calculatedSalary = round2(perDaySalary * presentDays);
+    setAttendanceSummary({ from: range.from, to: range.to, presentDays, absentDays, totalHours, perDaySalary, calculatedSalary });
     return calculatedSalary;
   };
 
@@ -87,8 +87,8 @@ export default function SalaryPage() {
     const res = await window.api.staff.getAttendance({ employeeId: employee.id, from: range.from, to: range.to });
     const records = res.success ? (res.data || []) : [];
     const totalHours = round2(records.reduce((sum, r) => sum + (Number(r.hoursWorked) || 0), 0));
-    const hourlyRate = round2((Number(employee.monthlySalary) || 0) / 30 / 12);
-    setPrevMonthCalcSalary(round2(hourlyRate * totalHours));
+    const perDaySalary = round2((Number(employee.monthlySalary) || 0) / 30);
+    setPrevMonthCalcSalary(round2(perDaySalary * records.filter(r => r.status === 'present').length));
   };
 
   const refreshHistory = async (employee) => {
@@ -306,13 +306,13 @@ export default function SalaryPage() {
                 <p className="text-white font-semibold text-base">{attendanceSummary.totalHours}</p>
               </div>
               <div className="bg-slate-700/40 rounded p-3">
-                <p className="text-slate-500 mb-1">Hourly Rate</p>
-                <p className="text-white font-semibold text-base">PKR {attendanceSummary.hourlyRate.toLocaleString()}</p>
+                <p className="text-slate-500 mb-1">Per Day Salary</p>
+                <p className="text-white font-semibold text-base">PKR {attendanceSummary.perDaySalary.toLocaleString()}</p>
               </div>
             </div>
 
             <div className="bg-slate-700/40 rounded p-3 mb-3">
-              <p className="text-slate-500 text-xs mb-1">Salary from attendance ({attendanceSummary.from} to {attendanceSummary.to})</p>
+              <p className="text-slate-500 text-xs mb-1">Salary from attendance ({attendanceSummary.from} to {attendanceSummary.to}) — {attendanceSummary.presentDays} days × PKR {attendanceSummary.perDaySalary}</p>
               <p className="text-green-400 font-bold text-lg">PKR {earned.toLocaleString()}</p>
             </div>
 

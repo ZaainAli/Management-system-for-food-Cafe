@@ -44,7 +44,7 @@ export default function CartPanel({
           {cart.length === 0 ? (
             <p className="text-slate-600 text-xs text-center py-8">No items in order</p>
           ) : (
-            cart.map(item => {
+            [...cart].reverse().map(item => {
               const linkedStock = stockByMenuName[(item.name || '').trim().toLowerCase()];
               return (
                 <div

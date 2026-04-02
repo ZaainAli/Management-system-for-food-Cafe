@@ -184,12 +184,13 @@ export default function POSPage() {
         paymentMethod,
         skipPrint,
         skipSales: !!selectedKhataCustomer,
+        khataId: selectedKhataCustomer?.id || null,
       });
       if (res.success) {
         if (selectedKhataCustomer) {
           const billTotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0) - discount;
           const itemsNote = cart.map(i => `${i.name} x${i.quantity} = PKR ${(i.price * i.quantity).toLocaleString()}`).join(', ');
-          const note = `POS Bill${res.data?.billId ? ' #' + res.data.billId : ''}: ${itemsNote}`;
+          const note = `Bill : ${itemsNote}`;
           try {
             await window.api.khata.addDue({
               khataId: selectedKhataCustomer.id,

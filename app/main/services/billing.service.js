@@ -96,7 +96,7 @@ async function addMenuCategory(category) {
 
 // ─── Bill Creation ──────────────────────────────────────────
 
-async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash', customerName = '', skipSales = false }) {
+async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash', customerName = '', skipSales = false, khataId = null }) {
   if (!items || items.length === 0) {
     throw new Error('Bill must have at least one item');
   }
@@ -184,6 +184,20 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
   }));
 
   const saved = billModel.insertBill(bill, stockAdjustments);
+
+  // Save to pos_khata_bills table for khata customer bills
+  if (skipSales && khataId) {
+    const itemsNote = lineItems.map(li => `${li.name} x${li.quantity} = Rs ${li.lineTotal.toLocaleString()}`).join(', ');
+    billModel.insertPosKhataBill({
+      id: uuidv4(),
+      billId: saved.id,
+      khataId,
+      customerName,
+      totalAmount: parseFloat(total.toFixed(2)),
+      itemsNote,
+      createdAt: saved.createdAt,
+    });
+  }
 
   // Save discounted bill record if discount was applied (skip for khata bills)
   if (!skipSales && discountAmount > 0) {

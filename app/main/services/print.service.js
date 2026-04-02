@@ -39,8 +39,13 @@ function renderReceiptText(bill, options = {}) {
 
   // Header
   parts.push(ALIGN_CENTER + BOLD_ON + restaurantName + BOLD_OFF + '\n');
+
+  // Token number extracted from bill ID (e.g. "145" from "2026_04_02-145")
+  const tokenMatch = String(bill.id).match(/-(\d+)$/);
+  const tokenNumber = tokenMatch ? tokenMatch[1] : null;
+  parts.push(ALIGN_CENTER  + `Token #${tokenNumber}`  + '\n');
+
   parts.push(ALIGN_LEFT);
-  
 
   // Bill info - ID and time on same line
   const billInfo = `Bill: ${bill.id}`;

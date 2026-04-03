@@ -96,6 +96,7 @@ export default function KeyboardStatusBar({ fsm, cart, heldBills, pendingLineId,
     <div className="mb-3 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700">
       <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-slate-500">
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">0-9</kbd> add item</span>
+        <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F4</kbd> bill (no print)</span>
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F5</kbd> hold bill</span>
         <span className={heldBills.length === 0 ? 'opacity-40' : ''}>
           <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F6</kbd> recall hold
@@ -106,7 +107,6 @@ export default function KeyboardStatusBar({ fsm, cart, heldBills, pendingLineId,
         <span className={cart.length === 0 ? 'opacity-40' : ''}>
           <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F10</kbd> khata
         </span>
-        <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F11</kbd> bill (no print)</span>
         <span><kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-300">F12</kbd> print bill</span>
       </div>
     </div>

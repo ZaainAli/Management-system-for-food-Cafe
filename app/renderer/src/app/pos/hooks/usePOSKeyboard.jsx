@@ -54,7 +54,7 @@ export function usePOSKeyboard({
           !(key >= '0' && key <= '9');
         const isGlobalIdleHotkey =
           e.key === 'Escape' || e.key === 'F5' || e.key === 'F6' || e.key === 'F7' || e.key === 'F8' ||
-          e.key === 'F9' || e.key === 'F10' || e.key === 'F11' || e.key === 'F12' || 
+          e.key === 'F9' || e.key === 'F10' || e.key === 'F4' || e.key === 'F12' || 
           e.key === 'ArrowUp' || e.key === 'ArrowDown';
         if (!isQuickKeyHotkey && !isGlobalIdleHotkey) return;
       }
@@ -108,7 +108,7 @@ export function usePOSKeyboard({
 
       
 
-      if (key === 'f11' && fsm === 'IDLE' && cart.length > 0) {
+      if (key === 'f4' && fsm === 'IDLE' && cart.length > 0) {
         if (e.repeat) return;
         e.preventDefault();
         createBill({ skipPrint: true });

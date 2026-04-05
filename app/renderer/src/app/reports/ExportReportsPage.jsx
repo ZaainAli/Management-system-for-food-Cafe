@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getPkDateUtcBounds, getPkToday, monthBounds, shiftDate } from '../../utils/datetime';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -38,8 +38,8 @@ const reportTypes = [
 ];
 
 export default function ExportReportsPage() {
-  const [reportType, setReportType] = useState('sales');
-  const [period, setPeriod]         = useState('custom');
+  const [reportType, setReportType] = useState('all');
+  const [period, setPeriod]         = useState('today');
   const [selMonth, setSelMonth]     = useState(curMonth());
   const [selYear, setSelYear]       = useState(curYear());
   const [from, setFrom]             = useState('');
@@ -47,6 +47,15 @@ export default function ExportReportsPage() {
   const [loading, setLoading]       = useState(false);
   const [message, setMessage]       = useState('');
   const [error, setError]           = useState('');
+
+  // Auto-fill from/to when period changes to 'today'
+  useEffect(() => {
+    if (period === 'today') {
+      const td = getPkToday();
+      setFrom(td);
+      setTo(td);
+    }
+  }, [period]);
 
   // When period (other than custom) changes, auto-fill from/to
   const handlePeriodChange = (p) => {

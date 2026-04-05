@@ -185,6 +185,40 @@ async function cancelBill(payload = {}) {
   }
 }
 
+async function reprintBill(billId) {
+  try {
+    logger.info(`Reprint requested for bill: ${billId}`);
+    const bill = await billingService.getBillById(billId);
+    logger.info(`Bill retrieved: ${JSON.stringify(bill ? { id: bill.id, status: bill.status, items: bill.items?.length } : 'null')}`);
+    if (!bill) {
+      return { success: false, error: 'Bill not found' };
+    }
+    if (bill.status === 'cancelled') {
+      return { success: false, error: 'Cannot reprint cancelled bill' };
+    }
+    const receiptOptions = { reprint: true };
+    try {
+      const branchRes = await setupController.getBranchInfo();
+      const branchName = branchRes?.data?.name?.trim();
+      if (branchName) {
+        receiptOptions.restaurantName = branchName;
+      }
+    } catch (branchErr) {
+      logger.warn('Unable to load branch info for receipt header', branchErr);
+    }
+    logger.info(`Calling printBillReceipt for bill: ${bill.id}`);
+    const printResult = await printBillReceipt(bill, receiptOptions);
+    logger.info(`Print result: ${JSON.stringify(printResult)}`);
+    if (printResult?.skipped) {
+      return { success: false, error: printResult.reason || 'Receipt print skipped' };
+    }
+    return { success: true };
+  } catch (err) {
+    logger.error('reprintBill failed', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function getTables() {
   try {
     const tables = await billingService.getTables();
@@ -254,6 +288,7 @@ module.exports = {
   getBillById,
   getRecentBills,
   cancelBill,
+  reprintBill,
   getTables,
   updateTableStatus,
   getDiscountedBills,

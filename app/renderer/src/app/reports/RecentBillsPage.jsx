@@ -29,6 +29,8 @@ export default function RecentBillsPage() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [menuItems, setMenuItems] = useState([]);
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState('');
 
   // Initialize date to today
   const getTodayDateString = () => {
@@ -94,6 +96,14 @@ export default function RecentBillsPage() {
     fetchBills();
   }, []);
 
+  useEffect(() => {
+    window.api.pos.getMenuItems().then(res => {
+      if (res?.success) {
+        setMenuItems(res.data || []);
+      }
+    }).catch(() => {});
+  }, []);
+
   const activeBill = useMemo(
     () => rows.find((row) => row.id === activeBillId) || null,
     [rows, activeBillId]
@@ -106,6 +116,45 @@ export default function RecentBillsPage() {
   }, [rows, currentPage]);
 
   const totalPages = Math.ceil(rows.length / itemsPerPage);
+
+  const itemSummary = useMemo(() => {
+    if (!selectedMenuItemId) return [];
+    
+    const summaryMap = new Map();
+    
+    rows.forEach(bill => {
+      if (!bill.items || bill.status === 'cancelled') return;
+      
+      bill.items.forEach(item => {
+        if (String(item.menuItemId) === String(selectedMenuItemId)) {
+          const key = bill.id;
+          if (summaryMap.has(key)) {
+            const existing = summaryMap.get(key);
+            existing.quantity += item.quantity;
+            existing.lineTotal += item.lineTotal;
+          } else {
+            summaryMap.set(key, {
+              billId: bill.id,
+              tableNum: bill.tableNum,
+              quantity: item.quantity,
+              price: item.price,
+              lineTotal: item.lineTotal,
+            });
+          }
+        }
+      });
+    });
+    
+    return Array.from(summaryMap.values());
+  }, [rows, selectedMenuItemId]);
+
+  const totalItemQty = useMemo(() => {
+    return itemSummary.reduce((sum, item) => sum + item.quantity, 0);
+  }, [itemSummary]);
+
+  const totalItemAmount = useMemo(() => {
+    return itemSummary.reduce((sum, item) => sum + item.lineTotal, 0);
+  }, [itemSummary]);
 
   function openCancelModal(row) {
     const billTotal = Number(row?.total || 0);
@@ -216,7 +265,75 @@ export default function RecentBillsPage() {
             </button>
           </div>
         </div>
+
+        {/* Item Filter */}
+        <div className="card border border-slate-700 p-4 mb-5">
+          <div className="flex items-end gap-4">
+            <div className="flex-1">
+              <label className="text-xs text-slate-400 mb-2 block">Filter by Menu Item</label>
+              <select
+                value={selectedMenuItemId}
+                onChange={(e) => setSelectedMenuItemId(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-md px-3 py-2 focus:outline-none focus:border-primary-500"
+              >
+                <option value="">All Items</option>
+                {menuItems.map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </div>
+            {selectedMenuItemId && (
+              <button
+                onClick={() => setSelectedMenuItemId('')}
+                className="px-3 py-2 text-xs rounded bg-slate-700 text-slate-200 hover:bg-slate-600"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Item Summary Table */}
+      {selectedMenuItemId && itemSummary.length > 0 && (
+        <div className="card border border-purple-500/30 p-4 mb-5">
+          <h3 className="text-sm font-semibold text-white mb-3">
+            Item: {menuItems.find(i => i.id === selectedMenuItemId)?.name || 'Unknown'}
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead>
+                <tr className="border-b border-slate-700 text-slate-400 text-xs">
+                  <th className="py-2 px-3">Bill ID</th>
+                  <th className="py-2 px-3">Table</th>
+                  <th className="py-2 px-3">Qty</th>
+                  <th className="py-2 px-3">Unit Price</th>
+                  <th className="py-2 px-3">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemSummary.map((item) => (
+                  <tr key={item.billId} className="border-b border-slate-700/40">
+                    <td className="py-2 px-3 text-white text-xs font-medium">{item.billId}</td>
+                    <td className="py-2 px-3 text-slate-300 text-xs">{item.tableNum ?? ''}</td>
+                    <td className="py-2 px-3 text-white text-xs">{item.quantity}</td>
+                    <td className="py-2 px-3 text-slate-300 text-xs">{formatAmount(item.price)}</td>
+                    <td className="py-2 px-3 text-white text-xs">{formatAmount(item.lineTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-700 flex justify-between items-center">
+            <div className="text-xs text-slate-400">
+              Total Quantity: <span className="text-white font-medium">{totalItemQty}</span>
+            </div>
+            <div className="text-sm font-bold text-purple-300">
+              Total Amount: {formatAmount(totalItemAmount)}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
@@ -278,28 +395,48 @@ export default function RecentBillsPage() {
                     </span>
                   </td>
                   <td className="py-2 px-3 text-slate-400 text-xs">{formatDate(row.createdAt)}</td>
-                  <td className="py-2 px-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openViewModal(row)}
-                        className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
-                      >
-                        View
-                      </button>
-                      {row.status === 'cancelled' ? (
-                        <span className="text-slate-500 text-xs">Already cancelled</span>
-                      ) : (
+                      <td className="py-2 px-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => {
-                            openCancelModal(row);
-                          }}
-                          className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                          onClick={() => openViewModal(row)}
+                          className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
                         >
-                          Cancel Bill
+                          View
                         </button>
-                      )}
-                    </div>
-                  </td>
+                        {row.status === 'cancelled' ? (
+                          <span className="text-slate-500 text-xs">Cancelled</span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setRows(prev => prev.map(r => r.id === row.id ? { ...r, printing: true } : r));
+                                window.api.pos.reprintBill({ id: row.id }).then(res => {
+                                  if (!res?.success) {
+                                    setError(res?.error || 'Failed to print bill');
+                                  }
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, printing: false } : r));
+                                }).catch(() => {
+                                  setError('Failed to print bill');
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, printing: false } : r));
+                                });
+                              }}
+                              disabled={row.printing}
+                              className="px-2 py-1 text-xs rounded bg-green-500/20 text-green-300 hover:bg-green-500/30 disabled:opacity-50"
+                            >
+                              {row.printing ? 'Printing...' : 'Print'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                openCancelModal(row);
+                              }}
+                              className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                            >
+                              Cancel Bill
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                 </tr>
               ))}
               {rows.length === 0 && (

@@ -47,6 +47,12 @@ function renderReceiptText(bill, options = {}) {
 
   parts.push(ALIGN_LEFT);
 
+  // Reprint watermark
+  if (options.reprint) {
+    parts.push(ALIGN_CENTER + BOLD_ON + DOUBLE_HEIGHT_ON + '** REPRINT **' + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
+    parts.push(LEFT_MARGIN + line() + '\n');
+  }
+
   // Bill info - ID and time on same line
   const billInfo = `Bill: ${bill.id}`;
   parts.push(LEFT_MARGIN + billInfo.padEnd(RECEIPT_WIDTH - timeStr.length - LEFT_MARGIN.length) + timeStr + '\n');
@@ -86,6 +92,13 @@ function renderReceiptText(bill, options = {}) {
   parts.push(LEFT_MARGIN + BOLD_ON + DOUBLE_HEIGHT_ON + totalLine + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
 
   parts.push(LEFT_MARGIN + line() + '\n');
+
+  // At the end, just before CUT_PAPER:
+  if (options.reprint) {
+    parts.push(LEFT_MARGIN + line() + '\n');
+    parts.push(ALIGN_CENTER + BOLD_ON + DOUBLE_HEIGHT_ON + '** REPRINT **' + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
+  }
+
 
   // Auto paper cut
   parts.push(CUT_PAPER);

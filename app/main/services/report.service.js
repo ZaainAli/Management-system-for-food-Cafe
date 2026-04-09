@@ -210,6 +210,32 @@ async function getKhataReport(filters = {}) {
     .filter(tx => tx.type === 'payment')
     .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
+  const customerProfiles = profiles.filter(p => p.profileType === 'customer');
+  const supplierProfiles = profiles.filter(p => p.profileType !== 'customer');
+
+  const customerTransactions = transactions.filter(tx => {
+    const profile = profiles.find(p => p.id === tx.khataId);
+    return profile?.profileType === 'customer';
+  });
+  const supplierTransactions = transactions.filter(tx => {
+    const profile = profiles.find(p => p.id === tx.khataId);
+    return profile?.profileType !== 'customer';
+  });
+
+  const customerDueInRange = customerTransactions
+    .filter(tx => tx.type === 'due')
+    .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const customerPaidInRange = customerTransactions
+    .filter(tx => tx.type === 'payment')
+    .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+  const supplierDueInRange = supplierTransactions
+    .filter(tx => tx.type === 'due')
+    .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const supplierPaidInRange = supplierTransactions
+    .filter(tx => tx.type === 'payment')
+    .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
   return {
     profiles,
     transactions: transactions.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || '')),
@@ -219,6 +245,26 @@ async function getKhataReport(filters = {}) {
       transactionsInRange: transactions.length,
       totalDueInRange: parseFloat(dueTotal.toFixed(2)),
       totalPaidInRange: parseFloat(paidTotal.toFixed(2)),
+    },
+    customerKhata: {
+      profiles: customerProfiles,
+      transactions: customerTransactions.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || '')),
+      summary: {
+        totalProfiles: customerProfiles.length,
+        totalOutstandingBalance: parseFloat(customerProfiles.reduce((sum, p) => sum + (Number(p.balance) || 0), 0).toFixed(2)),
+        totalDueInRange: parseFloat(customerDueInRange.toFixed(2)),
+        totalPaidInRange: parseFloat(customerPaidInRange.toFixed(2)),
+      },
+    },
+    supplierKhata: {
+      profiles: supplierProfiles,
+      transactions: supplierTransactions.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || '')),
+      summary: {
+        totalProfiles: supplierProfiles.length,
+        totalOutstandingBalance: parseFloat(supplierProfiles.reduce((sum, p) => sum + (Number(p.balance) || 0), 0).toFixed(2)),
+        totalDueInRange: parseFloat(supplierDueInRange.toFixed(2)),
+        totalPaidInRange: parseFloat(supplierPaidInRange.toFixed(2)),
+      },
     },
     period,
   };

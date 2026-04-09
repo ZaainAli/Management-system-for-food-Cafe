@@ -30,6 +30,7 @@ const posAPI = {
   getDiscountedBills: (filters) => ipcRenderer.invoke('pos:getDiscountedBills', filters),
   getQuickKeys: () => ipcRenderer.invoke('pos:getQuickKeys'),
   setQuickKeys: (assignments) => ipcRenderer.invoke('pos:setQuickKeys', assignments),
+  reprintBill: (payload) => ipcRenderer.invoke('pos:reprintBill', payload),
 };
 
 // ─── Stock API ──────────────────────────────────────────────

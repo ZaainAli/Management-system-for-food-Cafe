@@ -139,6 +139,13 @@ function registerPosRoutes() {
       });
     });
   });
+
+  // Reprint bill
+  ipcMain.handle('pos:reprintBill', async (_event, { id }) => {
+    return requireAuth(async () => {
+      return posController.reprintBill(id);
+    });
+  });
 }
 
 module.exports = { registerPosRoutes };

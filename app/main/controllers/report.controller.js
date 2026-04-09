@@ -274,6 +274,30 @@ function drawKhataContent(doc, d, y) {
   y = drawSummaryCards(doc,
     ['Total Profiles', 'Outstanding Balance', 'Transactions In Range', 'Due In Range', 'Paid In Range'],
     [d.summary?.totalProfiles || 0, d.summary?.totalOutstandingBalance || 0, d.summary?.transactionsInRange || 0, d.summary?.totalDueInRange || 0, d.summary?.totalPaidInRange || 0], y);
+  
+  if (d.customerKhata && d.customerKhata.summary.totalProfiles > 0) {
+    y = drawSubLabel(doc, 'Customer Khata Borrow (Due)', y);
+    y = drawSummaryCards(doc,
+      ['Customer Profiles', 'Outstanding Due', 'Due In Range', 'Paid In Range'],
+      [d.customerKhata.summary.totalProfiles || 0, d.customerKhata.summary.totalOutstandingBalance || 0, d.customerKhata.summary.totalDueInRange || 0, d.customerKhata.summary.totalPaidInRange || 0], y);
+    y = drawSubLabel(doc, 'Customer Khata Borrow Transactions', y);
+    y = drawTable(doc, ['Date', 'Customer Name', 'Type', 'Amount', 'Note'],
+      (d.customerKhata.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.note]), y);
+  }
+
+  if (d.customerKhata && d.customerKhata.summary.totalPaidInRange > 0) {
+    y = drawSubLabel(doc, 'Customer Khata Payment', y);
+    y = drawSummaryCards(doc,
+      ['Total Paid In Range'],
+      [d.customerKhata.summary.totalPaidInRange || 0], y);
+    const paymentTxs = (d.customerKhata.transactions || []).filter(tx => tx.type === 'payment');
+    if (paymentTxs.length > 0) {
+      y = drawSubLabel(doc, 'Customer Khata Payment Transactions', y);
+      y = drawTable(doc, ['Date', 'Customer Name', 'Amount', 'Payment Source', 'Note'],
+        paymentTxs.map(tx => [tx.date, tx.khataName, tx.amount, tx.paymentSource, tx.note]), y);
+    }
+  }
+
   y = drawSubLabel(doc, 'Khata Profiles', y);
   y = drawTable(doc, ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance'],
     (d.profiles || []).map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance]), y);

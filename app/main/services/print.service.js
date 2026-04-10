@@ -43,7 +43,7 @@ function renderReceiptText(bill, options = {}) {
   // Token number extracted from bill ID (e.g. "145" from "2026_04_02-145")
   const tokenMatch = String(bill.id).match(/-(\d+)$/);
   const tokenNumber = tokenMatch ? tokenMatch[1] : null;
-  parts.push(ALIGN_CENTER  + `Token #${tokenNumber}`  + '\n');
+  parts.push(ALIGN_CENTER  + `Token # ${tokenNumber}`  + '\n');
 
   parts.push(ALIGN_LEFT);
 
@@ -60,21 +60,21 @@ function renderReceiptText(bill, options = {}) {
   parts.push(LEFT_MARGIN + line() + '\n');
 
   // Column header
-  parts.push(
-    LEFT_MARGIN + 'Item'.padEnd(18 - LEFT_MARGIN.length) +
-    'Qty'.padStart(4) +
+    parts.push(
+    LEFT_MARGIN + 'Qty'.padEnd(4) +
+    'Item'.padEnd(18- LEFT_MARGIN.length) +
     'Price'.padStart(10) +
     'Total'.padStart(10) + '\n'
   );
   parts.push(LEFT_MARGIN + line() + '\n');
 
-  // Items have variable length names, so we truncate to 18 chars and pad right. Quantity is 4 chars, price and total are 10 chars each, right-aligned.
+  // Qty is 4 chars left-aligned, Item is 18 chars, price and total are 10 chars each, right-aligned.
   for (const item of (bill.items || [])) {
-    const name = String(item.name).substring(0, 18 - LEFT_MARGIN.length).padEnd(18 - LEFT_MARGIN.length);
-    const qty = String(item.quantity).padStart(4);
+    const qty = String(item.quantity).padEnd(4);
+    const name = String(item.name).substring(0, 18- LEFT_MARGIN.length).padEnd(18- LEFT_MARGIN.length);
     const price = formatAmount(item.price).padStart(10);
     const total = formatAmount(item.lineTotal).padStart(10);
-    parts.push(LEFT_MARGIN + `${name}${qty}${price}${total}\n`);
+    parts.push(LEFT_MARGIN + `${qty}${name}${price}${total}\n`);
   }
 
   parts.push(LEFT_MARGIN + line() + '\n');

@@ -49,6 +49,30 @@ async function addProfile(payload) {
   return created;
 }
 
+async function updateProfile(payload) {
+  if (!payload.id) throw new Error('Profile ID is required');
+  if (!payload.name || !payload.name.trim()) throw new Error('Khata name is required');
+  
+  const existing = khataModel.getProfileById(payload.id);
+  if (!existing) throw new Error('Profile not found');
+
+  if (payload.name.trim() !== existing.name) {
+    const duplicate = khataModel.getProfileByName(payload.name.trim());
+    if (duplicate) throw new Error('Khata name must be unique');
+  }
+
+  const updated = {
+    ...existing,
+    name: payload.name.trim(),
+    phone: payload.phone ? String(payload.phone).trim() : '',
+    businessDetails: payload.businessDetails ? String(payload.businessDetails).trim() : '',
+    updatedAt: new Date().toISOString(),
+  };
+  khataModel.updateProfile(updated);
+  syncService.pushKhataProfile(updated).catch(() => {});
+  return updated;
+}
+
 function normalizeAmount(amount) {
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) throw new Error('Amount must be a positive number');
@@ -346,6 +370,7 @@ module.exports = {
   getAllProfiles,
   getById,
   addProfile,
+  updateProfile,
   addDue,
   updateDue,
   addPayment,

@@ -18,8 +18,14 @@ export default function KhataPage() {
   const [showTxModal, setShowTxModal]       = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingTx, setEditingTx]           = useState(null);
+  const [filter, setFilter]                 = useState('all'); // 'all', 'supplier', 'customer'
 
   const branchId = activeBranch?.id;
+
+  const filteredProfiles = profiles.filter(p => {
+    if (filter === 'all') return true;
+    return p.profile_type === filter;
+  });
 
   // ── Fetch profiles ────────────────────────────────────────────
   const fetchProfiles = useCallback(async () => {
@@ -334,18 +340,25 @@ export default function KhataPage() {
 
         {/* ── Profiles panel ── */}
         <div className="w-full lg:w-64 lg:flex-shrink-0 flex flex-col card p-0 overflow-hidden max-h-[40vh] lg:max-h-none">
-          <div className="px-3 py-3 border-b border-slate-700 flex items-center justify-between">
-            <span className="text-slate-300 text-sm font-medium">Profiles</span>
-            <button onClick={() => setShowProfileModal(true)} className="text-primary-400 hover:text-primary-300 transition-colors">
-              <Plus className="w-4 h-4" />
-            </button>
+          <div className="px-3 py-3 border-b border-slate-700">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-slate-300 text-sm font-medium">Profiles</span>
+              <button onClick={() => setShowProfileModal(true)} className="text-primary-400 hover:text-primary-300 transition-colors">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex gap-1">
+              <button onClick={() => setFilter('all')} className={`flex-1 text-[10px] py-1 px-2 rounded transition-colors ${filter === 'all' ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'}`}>All</button>
+              <button onClick={() => setFilter('supplier')} className={`flex-1 text-[10px] py-1 px-2 rounded transition-colors ${filter === 'supplier' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'}`}>Supplier</button>
+              <button onClick={() => setFilter('customer')} className={`flex-1 text-[10px] py-1 px-2 rounded transition-colors ${filter === 'customer' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'}`}>Customer</button>
+            </div>
           </div>
 
           {/* Profile list */}
           <div className="flex-1 overflow-y-auto">
             {loading
               ? [1,2,3].map((i) => <div key={i} className="mx-3 my-1.5 h-8 bg-slate-700/50 rounded animate-pulse" />)
-              : profiles.map((p) => (
+              : filteredProfiles.map((p) => (
                   <div
                     key={p.id}
                     onClick={() => selectProfile(p)}
@@ -379,8 +392,10 @@ export default function KhataPage() {
                   </div>
                 ))
             }
-            {!loading && profiles.length === 0 && (
-              <p className="px-3 py-4 text-slate-600 text-xs text-center">No profiles yet</p>
+            {!loading && filteredProfiles.length === 0 && (
+              <p className="px-3 py-4 text-slate-600 text-xs text-center">
+                {filter === 'all' ? 'No profiles yet' : `No ${filter === 'supplier' ? 'supplier' : 'customer'} profiles`}
+              </p>
             )}
           </div>
         </div>

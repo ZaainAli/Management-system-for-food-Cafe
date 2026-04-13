@@ -26,6 +26,7 @@ export default function KhataPage() {
   const [branchName, setBranchName] = useState("Hamza & Brother's Food Chain");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileForm, setProfileForm] = useState(emptyProfileForm);
+  const [isEditProfile, setIsEditProfile] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [showTxModal, setShowTxModal] = useState(false);
@@ -99,9 +100,30 @@ export default function KhataPage() {
     if (res.success) {
       setShowProfileModal(false);
       setProfileForm(emptyProfileForm);
+      setIsEditProfile(false);
       await fetchProfiles();
     } else {
       setError(res.error || 'Failed to add profile');
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    setError(''); setMessage('');
+    if (!activeProfile) return;
+    const res = await window.api.khata.updateProfile({
+      id: activeProfile.id,
+      name: profileForm.name,
+      phone: profileForm.phone,
+      businessDetails: profileForm.businessDetails,
+    });
+    if (res.success) {
+      setShowProfileModal(false);
+      setProfileForm(emptyProfileForm);
+      setIsEditProfile(false);
+      await Promise.all([fetchProfiles(), fetchActive(activeId)]);
+      setMessage('Profile updated successfully');
+    } else {
+      setError(res.error || 'Failed to update profile');
     }
   };
 
@@ -192,6 +214,22 @@ export default function KhataPage() {
       await Promise.all([fetchProfiles(), fetchActive(activeId)]);
     } else {
       setError(res.error || 'Failed to clear transactions');
+    }
+  };
+
+  const printKhataReceipt = async () => {
+    if (!activeProfile) return;
+    try {
+      const res = await window.api.khata.printReceipt({
+        profile: activeProfile,
+        transactions: txDesc,
+        restaurantName: branchName,
+      });
+      if (!res.success) {
+        setError(res.error || 'Failed to print receipt');
+      }
+    } catch (err) {
+      setError('Print error: ' + err.message);
     }
   };
 
@@ -468,6 +506,21 @@ export default function KhataPage() {
                   <h2 className="text-white text-lg font-semibold">{activeProfile.name}</h2>
                   <div className="text-sm text-slate-400">{activeProfile.phone || 'No phone'}</div>
                   <div className="text-sm text-slate-400">{activeProfile.businessDetails || 'No business details'}</div>
+                  <button
+                    onClick={() => {
+                      setProfileForm({
+                        name: activeProfile.name,
+                        phone: activeProfile.phone || '',
+                        businessDetails: activeProfile.businessDetails || '',
+                        profileType: activeProfile.profileType,
+                      });
+                      setIsEditProfile(true);
+                      setShowProfileModal(true);
+                    }}
+                    className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+                  >
+                    Edit Profile
+                  </button>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-500">Outstanding</div>
@@ -476,12 +529,20 @@ export default function KhataPage() {
                     {balance !== 0 && <span className="text-sm ml-1">{balance > 0 ? '(-)' : '(+)'}</span>}
                   </div>
                   <div className="mt-3 flex flex-col gap-2 items-end">
-                    <button
-                      onClick={downloadSelectedProfilePdf}
-                      className="btn-secondary text-xs"
-                    >
-                      Export PDF
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={printKhataReceipt}
+                        className="btn-primary text-xs"
+                      >
+                        Print Receipt
+                      </button>
+                      <button
+                        onClick={downloadSelectedProfilePdf}
+                        className="btn-secondary text-xs"
+                      >
+                        Export PDF
+                      </button>
+                    </div>
                     <button
                       onClick={handleClearTransactions}
                       disabled={isCashier}
@@ -606,35 +667,37 @@ export default function KhataPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="card w-96">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-white font-semibold">New Khata Profile</h2>
-              <button onClick={() => setShowProfileModal(false)} className="text-slate-500 hover:text-white">✕</button>
+              <h2 className="text-white font-semibold">{isEditProfile ? 'Edit Khata Profile' : 'New Khata Profile'}</h2>
+              <button onClick={() => { setShowProfileModal(false); setIsEditProfile(false); setProfileForm(emptyProfileForm); }} className="text-slate-500 hover:text-white">✕</button>
             </div>
             {error && <div className="mb-3 text-red-300 text-sm">{error}</div>}
             <div className="space-y-3">
-              <div>
-                <label className="label">Profile Type</label>
-                <div className="flex rounded-lg overflow-hidden border border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setProfileForm({ ...profileForm, profileType: 'supplier' })}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors ${profileForm.profileType === 'supplier' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                  >
-                    Supplier
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProfileForm({ ...profileForm, profileType: 'customer' })}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors ${profileForm.profileType === 'customer' ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                  >
-                    Customer
-                  </button>
+              {!isEditProfile && (
+                <div>
+                  <label className="label">Profile Type</label>
+                  <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setProfileForm({ ...profileForm, profileType: 'supplier' })}
+                      className={`flex-1 py-2 text-sm font-medium transition-colors ${profileForm.profileType === 'supplier' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                    >
+                      Supplier
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProfileForm({ ...profileForm, profileType: 'customer' })}
+                      className={`flex-1 py-2 text-sm font-medium transition-colors ${profileForm.profileType === 'customer' ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                    >
+                      Customer
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {profileForm.profileType === 'customer'
+                      ? 'Customer: payments will be added to Sales.'
+                      : 'Supplier: payments will be added to Expenses.'}
+                  </p>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {profileForm.profileType === 'customer'
-                    ? 'Customer: payments will be added to Sales.'
-                    : 'Supplier: payments will be added to Expenses.'}
-                </p>
-              </div>
+              )}
               <div>
                 <label className="label">Name (Unique)</label>
                 <input className="input-field" value={profileForm.name}
@@ -652,8 +715,17 @@ export default function KhataPage() {
               </div>
             </div>
             <div className="flex gap-2 mt-5">
-              <button onClick={handleAddProfile} className="btn-primary flex-1">Save</button>
-              <button onClick={() => setShowProfileModal(false)} className="btn-secondary">Cancel</button>
+              {isEditProfile ? (
+                <>
+                  <button onClick={handleUpdateProfile} className="btn-primary flex-1">Update</button>
+                  <button onClick={() => { setShowProfileModal(false); setIsEditProfile(false); setProfileForm(emptyProfileForm); }} className="btn-secondary">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={handleAddProfile} className="btn-primary flex-1">Save</button>
+                  <button onClick={() => { setShowProfileModal(false); setProfileForm(emptyProfileForm); }} className="btn-secondary">Cancel</button>
+                </>
+              )}
             </div>
           </div>
         </div>

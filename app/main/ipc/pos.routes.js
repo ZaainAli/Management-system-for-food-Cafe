@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const posController = require('../controllers/pos.controller');
 const { requireAuth } = require('../middlewares/auth.middleware');
 const { requireRole } = require('../middlewares/role.middleware');
+const { printKhataReceipt } = require('../services/print.service');
 
 function registerPosRoutes() {
   // Menu & Items
@@ -144,6 +145,18 @@ function registerPosRoutes() {
   ipcMain.handle('pos:reprintBill', async (_event, { id }) => {
     return requireAuth(async () => {
       return posController.reprintBill(id);
+    });
+  });
+
+  // Print khata receipt
+  ipcMain.handle('khata:printReceipt', async (_event, { profile, transactions }) => {
+    return requireAuth(async () => {
+      try {
+        const result = await printKhataReceipt(profile, transactions);
+        return { success: true, data: result };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
     });
   });
 }

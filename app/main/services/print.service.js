@@ -120,6 +120,68 @@ async function printBillReceipt(bill, options = {}) {
   return printUnix(text, printerName);
 }
 
+function renderKhataReceiptText(profile, transactions, options = {}) {
+  const restaurantName = options.restaurantName || 'Hamza & Brother Food ';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-PK', { timeZone: 'Asia/Karachi', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-PK', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', hour12: true });
+
+  const parts = [];
+
+  parts.push(ALIGN_CENTER + BOLD_ON + restaurantName + BOLD_OFF + '\n');
+  parts.push(ALIGN_CENTER + BOLD_ON + 'Khata Receipt' + BOLD_OFF + '\n');
+  parts.push(ALIGN_LEFT);
+
+  parts.push(LEFT_MARGIN + line() + '\n');
+  parts.push(LEFT_MARGIN + `Customer: ${profile.name}` + '\n');
+  if (profile.phone) parts.push(LEFT_MARGIN + `Phone: ${profile.phone}` + '\n');
+  parts.push(LEFT_MARGIN + `Date: ${dateStr} ${timeStr}` + '\n');
+  parts.push(LEFT_MARGIN + line() + '\n');
+
+  parts.push(LEFT_MARGIN + 'Date'.padEnd(10) + 'Due'.padStart(10) + 'Pay'.padStart(10) + 'Bal'.padStart(10) + '\n');
+  parts.push(LEFT_MARGIN + line() + '\n');
+
+  const txList = [...transactions].reverse();
+  for (const tx of txList) {
+    const due = tx.type === 'due' ? formatAmount(tx.amount) : '-';
+    const pay = tx.type === 'payment' ? formatAmount(tx.amount) : '-';
+    const bal = Math.abs(Number(tx.runningBalance) || 0);
+    parts.push(LEFT_MARGIN + String(tx.date).padEnd(10) + due.padStart(10) + pay.padStart(10) + bal.toString().padStart(10) + '\n');
+  }
+
+  const totalDue = transactions.filter(t => t.type === 'due').reduce((s, t) => s + Number(t.amount), 0);
+  const totalPayment = transactions.filter(t => t.type === 'payment').reduce((s, t) => s + Number(t.amount), 0);
+  const balance = profile.balance || 0;
+
+  parts.push(LEFT_MARGIN + line() + '\n');
+  parts.push(LEFT_MARGIN + 'Total Due:'.padEnd(20) + formatAmount(totalDue).padStart(20) + '\n');
+  parts.push(LEFT_MARGIN + 'Total Payment:'.padEnd(20) + formatAmount(totalPayment).padStart(20) + '\n');
+  parts.push(LEFT_MARGIN + line() + '\n');
+
+  const balLabel = balance >= 0 ? 'Balance (-):' : 'Balance (+):';
+  parts.push(ALIGN_CENTER + BOLD_ON + DOUBLE_HEIGHT_ON + balLabel + ' ' + formatAmount(Math.abs(balance)) + DOUBLE_HEIGHT_OFF + BOLD_OFF + '\n');
+
+  parts.push(ALIGN_CENTER + '\n');
+  parts.push(ALIGN_CENTER + 'Thank you!' + '\n');
+  parts.push(CUT_PAPER);
+
+  return parts.join('');
+}
+
+async function printKhataReceipt(profile, transactions, options = {}) {
+  if (!profile) throw new Error('Missing profile data for khata receipt');
+
+  const text = renderKhataReceiptText(profile, transactions, options);
+  const printerName = options.deviceName || 'TM-T88V';
+
+  logger.info(`Printing khata receipt for ${profile.name} on printer: ${printerName} (platform: ${process.platform})`);
+
+  if (process.platform === 'win32') {
+    return printWindows(text, printerName);
+  }
+  return printUnix(text, printerName);
+}
+
 function printUnix(text, printerName) {
   return new Promise((resolve, reject) => {
     const lp = execFile('lp', ['-d', printerName, '-o', 'raw'], (err, stdout, stderr) => {
@@ -259,4 +321,4 @@ Write-Output "OK"
   });
 }
 
-module.exports = { printBillReceipt };
+module.exports = { printBillReceipt, printKhataReceipt };

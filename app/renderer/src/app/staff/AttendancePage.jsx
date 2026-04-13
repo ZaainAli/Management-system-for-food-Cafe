@@ -122,7 +122,18 @@ export default function AttendancePage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-white">Attendance</h1>
         <div className="flex items-center gap-2">
-          <label className="text-slate-400 text-xs">Date</label>
+          <button
+            onClick={() => {
+              const d = new Date(selectedDate);
+              d.setDate(d.getDate() - 1);
+              setSelectedDate(d.toISOString().split('T')[0]);
+              setError('');
+              setMessage('');
+            }}
+            className="btn-secondary text-xs py-1.5 px-2"
+          >
+            Prev
+          </button>
           <input
             type="date"
             value={selectedDate}
@@ -134,6 +145,19 @@ export default function AttendancePage() {
             }}
             className="input-field py-1.5 text-xs w-40"
           />
+          <button
+            onClick={() => {
+              const d = new Date(selectedDate);
+              d.setDate(d.getDate() + 1);
+              setSelectedDate(d.toISOString().split('T')[0]);
+              setError('');
+              setMessage('');
+            }}
+            disabled={selectedDate >= getPkToday()}
+            className="btn-secondary text-xs py-1.5 px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
           <button
             onClick={saveAllAttendance}
             disabled={savingAll || !hasChanges}

@@ -24,6 +24,14 @@ function registerKhataRoutes() {
     });
   });
 
+  ipcMain.handle('khata:updateProfile', async (_event, payload) => {
+    return requireAuth(async () => {
+      return requireRole(['admin', 'manager'], async () => {
+        return khataController.updateProfile(payload);
+      });
+    });
+  });
+
   ipcMain.handle('khata:addDue', async (_event, payload) => {
     return requireAuth(async () => {
       return requireRole(['admin', 'manager', 'cashier'], async () => {

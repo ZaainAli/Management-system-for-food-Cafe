@@ -94,6 +94,7 @@ const khataAPI = {
   getAll: () => ipcRenderer.invoke('khata:getAll'),
   getById: (payload) => ipcRenderer.invoke('khata:getById', payload),
   addProfile: (payload) => ipcRenderer.invoke('khata:addProfile', payload),
+  updateProfile: (payload) => ipcRenderer.invoke('khata:updateProfile', payload),
   addDue: (payload) => ipcRenderer.invoke('khata:addDue', payload),
   addPayment: (payload) => ipcRenderer.invoke('khata:addPayment', payload),
   updateTransaction: (payload) => ipcRenderer.invoke('khata:updateTransaction', payload),
@@ -102,6 +103,7 @@ const khataAPI = {
   clearTransactions: (payload) => ipcRenderer.invoke('khata:clearTransactions', payload),
   exportProfile: (payload) => ipcRenderer.invoke('khata:exportProfile', payload),
   updateDue: (payload) => ipcRenderer.invoke('khata:updateDue', payload),
+  printReceipt: (payload) => ipcRenderer.invoke('khata:printReceipt', payload),
 };
 
 // ─── Setup API ──────────────────────────────────────────────

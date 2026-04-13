@@ -133,7 +133,8 @@ function renderKhataReceiptText(profile, transactions, options = {}) {
   parts.push(ALIGN_LEFT);
 
   parts.push(LEFT_MARGIN + line() + '\n');
-  parts.push(LEFT_MARGIN + `Customer: ${profile.name}` + '\n');
+  const typeLabel = profile.profileType === 'customer' ? 'Customer' : 'Supplier';
+  parts.push(LEFT_MARGIN + `${typeLabel}: ${profile.name}` + '\n');
   if (profile.phone) parts.push(LEFT_MARGIN + `Phone: ${profile.phone}` + '\n');
   parts.push(LEFT_MARGIN + `Date: ${dateStr} ${timeStr}` + '\n');
   parts.push(LEFT_MARGIN + line() + '\n');

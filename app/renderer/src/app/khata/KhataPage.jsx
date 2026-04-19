@@ -35,6 +35,8 @@ export default function KhataPage() {
   const [addTxForm, setAddTxForm] = useState(emptyAddTxForm);
   const [profileFilter, setProfileFilter] = useState('supplier');
   const [searchQuery, setSearchQuery] = useState('');
+  const [printDateFrom, setPrintDateFrom] = useState('');
+  const [printDateTo, setPrintDateTo] = useState('');
 
   const fetchProfiles = async () => {
     const res = await window.api.khata.getAll();
@@ -219,11 +221,20 @@ export default function KhataPage() {
 
   const printKhataReceipt = async () => {
     if (!activeProfile) return;
+    const filteredTx = txDesc.filter(tx => {
+      if (!printDateFrom && !printDateTo) return true;
+      const txDate = tx.date;
+      if (printDateFrom && txDate < printDateFrom) return false;
+      if (printDateTo && txDate > printDateTo) return false;
+      return true;
+    });
     try {
       const res = await window.api.khata.printReceipt({
         profile: activeProfile,
-        transactions: txDesc,
+        transactions: filteredTx,
         restaurantName: branchName,
+        dateFrom: printDateFrom,
+        dateTo: printDateTo,
       });
       if (!res.success) {
         setError(res.error || 'Failed to print receipt');
@@ -235,6 +246,14 @@ export default function KhataPage() {
 
   const downloadSelectedProfilePdf = () => {
     if (!activeProfile) return;
+    
+    const filteredTx = txDesc.filter(tx => {
+      if (!printDateFrom && !printDateTo) return true;
+      const txDate = tx.date;
+      if (printDateFrom && txDate < printDateFrom) return false;
+      if (printDateTo && txDate > printDateTo) return false;
+      return true;
+    });
 
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const PX = 30, PW = 595.28, PH = 841.89, CW = PW - PX * 2;
@@ -358,14 +377,21 @@ export default function KhataPage() {
 
     y = drawHeaders(y);
 
-    if (txWithBalance.length === 0) {
+    if (filteredTx.length === 0) {
       fill(PX, y, CW, LINE_H + 10, '#ffffff');
       doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor('#94a3b8');
       doc.text('No data available', PX + CW / 2, y + 7, { baseline: 'top', align: 'center' });
       y += LINE_H + 10;
       hline(y);
     } else {
-      [...txWithBalance].reverse().forEach((tx, idx) => {
+      // Calculate running balance for filtered transactions
+      let running = 0;
+      const filteredWithBalance = filteredTx.map((t) => {
+        running = t.type === 'due' ? running + Number(t.amount) : running - Number(t.amount);
+        return { ...t, runningBalance: running };
+      });
+      
+      filteredWithBalance.forEach((tx, idx) => {
         const noteW = colWidths[3] - 12;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
         const noteLines = doc.splitTextToSize(tx.note || '\u2014', noteW);
@@ -529,6 +555,24 @@ export default function KhataPage() {
                     {balance !== 0 && <span className="text-sm ml-1">{balance > 0 ? '(-)' : '(+)'}</span>}
                   </div>
                   <div className="mt-3 flex flex-col gap-2 items-end">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        className="input-field text-xs py-1 w-32"
+                        value={printDateFrom}
+                        max={today()}
+                        onChange={e => { setPrintDateFrom(e.target.value); setPrintDateTo(''); }}
+                      />
+                      <span className="text-slate-500 text-xs">to</span>
+                      <input
+                        type="date"
+                        className="input-field text-xs py-1 w-32"
+                        value={printDateTo}
+                        min={printDateFrom || undefined}
+                        max={today()}
+                        onChange={e => setPrintDateTo(e.target.value)}
+                      />
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={printKhataReceipt}
@@ -594,69 +638,71 @@ export default function KhataPage() {
                 </div>
               </div>
 
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Date</th>
-                    <th className="text-left px-4 py-3 text-red-400 font-medium text-xs uppercase">Due</th>
-                    <th className="text-left px-4 py-3 text-emerald-400 font-medium text-xs uppercase">Payment</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Note</th>
-                    <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Source</th>
-                    <th className="text-right px-4 py-3 text-slate-400 font-medium text-xs uppercase">Balance</th>
-                    <th className="text-right px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {txDesc.map(tx => (
-                    <tr key={tx.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                      <td className="px-4 py-3 text-slate-400 text-xs">{tx.date}</td>
-                      <td className="px-4 py-3 text-red-400 font-medium whitespace-nowrap">
-                        {tx.type === 'due' ? `PKR ${Number(tx.amount).toLocaleString()}` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-emerald-400 font-medium whitespace-nowrap">
-                        {tx.type === 'payment' ? `PKR ${Number(tx.amount).toLocaleString()}` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-300 text-xs">{tx.note || '—'}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">
-                        {tx.type === 'payment' ? (tx.paymentSource === 'net_profit' ? 'Net Profit' : 'Today Sale') : '—'}
-                      </td>
-                      <td className={`px-4 py-3 text-right text-xs font-semibold whitespace-nowrap ${tx.runningBalance > 0 ? 'text-red-400' : tx.runningBalance < 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
-                        PKR {Math.abs(tx.runningBalance).toLocaleString()}
-                        {tx.runningBalance !== 0 && <span className="ml-1">{tx.runningBalance > 0 ? '(-)' : '(+)'}</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => openEditTransaction(tx)}
-                            className="text-xs text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={Boolean(tx.linkedExpenseId) || isCashier}
-                            title={
-                              isCashier
-                                ? 'Cashier cannot edit transactions'
-                                : tx.linkedExpenseId
-                                  ? 'Linked to expense, edit from Expenses tab'
-                                  : 'Edit transaction'
-                            }
-                          >
-                            Edit
-                          </button>
-                          {!isCashier && (
-                            <button
-                              onClick={() => handleDeleteTransaction(tx.id)}
-                              className="text-xs text-red-400 hover:text-red-300"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </td>
+              <div className="max-h-[400px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Date</th>
+                      <th className="text-left px-4 py-3 text-red-400 font-medium text-xs uppercase">Due</th>
+                      <th className="text-left px-4 py-3 text-emerald-400 font-medium text-xs uppercase">Payment</th>
+                      <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Note</th>
+                      <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Source</th>
+                      <th className="text-right px-4 py-3 text-slate-400 font-medium text-xs uppercase">Balance</th>
+                      <th className="text-right px-4 py-3"></th>
                     </tr>
-                  ))}
-                  {transactions.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-600 text-sm">No transactions yet</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {txDesc.map(tx => (
+                      <tr key={tx.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                        <td className="px-4 py-3 text-slate-400 text-xs">{tx.date}</td>
+                        <td className="px-4 py-3 text-red-400 font-medium whitespace-nowrap">
+                          {tx.type === 'due' ? `PKR ${Number(tx.amount).toLocaleString()}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-emerald-400 font-medium whitespace-nowrap">
+                          {tx.type === 'payment' ? `PKR ${Number(tx.amount).toLocaleString()}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-300 text-xs">{tx.note || '—'}</td>
+                        <td className="px-4 py-3 text-slate-400 text-xs">
+                          {tx.type === 'payment' ? (tx.paymentSource === 'net_profit' ? 'Net Profit' : 'Today Sale') : '—'}
+                        </td>
+                        <td className={`px-4 py-3 text-right text-xs font-semibold whitespace-nowrap ${tx.runningBalance > 0 ? 'text-red-400' : tx.runningBalance < 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          PKR {Math.abs(tx.runningBalance).toLocaleString()}
+                          {tx.runningBalance !== 0 && <span className="ml-1">{tx.runningBalance > 0 ? '(-)' : '(+)'}</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => openEditTransaction(tx)}
+                              className="text-xs text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={Boolean(tx.linkedExpenseId) || isCashier}
+                              title={
+                                isCashier
+                                  ? 'Cashier cannot edit transactions'
+                                  : tx.linkedExpenseId
+                                    ? 'Linked to expense, edit from Expenses tab'
+                                    : 'Edit transaction'
+                              }
+                            >
+                              Edit
+                            </button>
+                            {!isCashier && (
+                              <button
+                                onClick={() => handleDeleteTransaction(tx.id)}
+                                className="text-xs text-red-400 hover:text-red-300"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {transactions.length === 0 && (
+                      <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-600 text-sm">No transactions yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

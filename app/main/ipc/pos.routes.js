@@ -149,10 +149,10 @@ function registerPosRoutes() {
   });
 
   // Print khata receipt
-  ipcMain.handle('khata:printReceipt', async (_event, { profile, transactions }) => {
+  ipcMain.handle('khata:printReceipt', async (_event, { profile, transactions,restaurantName, dateFrom, dateTo }) => {
     return requireAuth(async () => {
       try {
-        const result = await printKhataReceipt(profile, transactions);
+        const result = await printKhataReceipt(profile, transactions, { restaurantName, dateFrom, dateTo });
         return { success: true, data: result };
       } catch (err) {
         return { success: false, error: err.message };

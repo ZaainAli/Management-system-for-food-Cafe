@@ -4,7 +4,7 @@ const salesModel = require('../models/sales.model');
 const syncService = require('./sync.service');
 const { v4: uuidv4 } = require('uuid');
 
-const VALID_TYPES = ['salary', 'bonus', 'advance'];
+const VALID_TYPES = ['salary', 'bonus', 'advance', 'repayment'];
 const VALID_SOURCES = ['manual', 'today_sale'];
 
 function buildExpenseForSalaryRecord(record, employee) {
@@ -24,15 +24,18 @@ function buildExpenseForSalaryRecord(record, employee) {
   };
 }
 
-async function addSalaryRecord({ employeeId, amount, payDate, notes = '', type = 'salary', paymentSource = 'manual' }) {
+async function addSalaryRecord({ employeeId, amount, payDate, notes = '', type = 'salary', paymentSource = 'manual', subtractFromAdvance = false }) {
   const employee = await employeeModel.findById(employeeId);
   if (!employee) throw new Error('Employee not found');
   if (!employee.isActive) throw new Error('Salary cannot be issued to a non-active employee');
   if (!amount || amount <= 0) throw new Error('Amount must be positive');
   if (!payDate) throw new Error('Pay date is required');
+  if (paymentSource === 'subtract_advance' && type !== 'salary') {
+    throw new Error('Subtract from Advance can only be used when type is Salary');
+  }
 
   const recordType = VALID_TYPES.includes(type) ? type : 'salary';
-  const source = VALID_SOURCES.includes(paymentSource) ? paymentSource : 'manual';
+  const source = paymentSource === 'subtract_advance' ? 'manual' : (VALID_SOURCES.includes(paymentSource) ? paymentSource : 'manual');
 
   const record = {
     id: uuidv4(),
@@ -48,6 +51,22 @@ async function addSalaryRecord({ employeeId, amount, payDate, notes = '', type =
 
   employeeModel.insertSalaryRecord(record);
   syncService.pushSalaryRecord(record).catch(() => {});
+
+  if (subtractFromAdvance) {
+    const advanceRecord = {
+      id: uuidv4(),
+      employeeId,
+      employeeName: employee.name,
+      amount: -parseFloat(parseFloat(amount).toFixed(2)),
+      payDate,
+      notes: notes || 'Advance repayment',
+      type: 'repayment',
+      paymentSource: 'manual',
+      createdAt: new Date().toISOString(),
+    };
+    employeeModel.insertSalaryRecord(advanceRecord);
+    syncService.pushSalaryRecord(advanceRecord).catch(() => {});
+  }
 
   if (source === 'today_sale') {
     const expense = buildExpenseForSalaryRecord(record, employee);

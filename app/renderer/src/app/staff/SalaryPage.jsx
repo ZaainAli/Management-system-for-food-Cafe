@@ -28,10 +28,18 @@ function getPrevMonth(monthValue) {
   return `${year}-${String(month - 1).padStart(2, '0')}`;
 }
 
-const TYPE_LABELS = { salary: 'Salary', bonus: 'Bonus', advance: 'Advance' };
-const TYPE_COLORS = { salary: 'text-blue-400', bonus: 'text-emerald-400', advance: 'text-amber-400' };
+function formatDateWithDay(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr + 'T00:00:00');
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayName = days[date.getDay()] || '';
+  return `${dayName}, ${dateStr}`;
+}
 
-const emptyForm = () => ({ amount: '', payDate: getPkToday(), notes: '', type: 'salary', paymentSource: 'manual' });
+const TYPE_LABELS = { salary: 'Salary', bonus: 'Bonus', advance: 'Advance', repayment: 'Repayment' };
+const TYPE_COLORS = { salary: 'text-blue-400', bonus: 'text-emerald-400', advance: 'text-amber-400', repayment: 'text-orange-400' };
+
+const emptyForm = () => ({ amount: '', payDate: getPkToday(), notes: '', type: 'salary', paymentSource: 'today_sale' });
 
 export default function SalaryPage() {
   const { employeeId } = useParams();
@@ -47,7 +55,7 @@ export default function SalaryPage() {
   const [form, setForm] = useState(emptyForm());
   const [attendanceSummary, setAttendanceSummary] = useState({
     from: '', to: '', presentDays: 0, absentDays: 0,
-    totalHours: 0, perDaySalary: 0, calculatedSalary: 0,
+    totalHours: 0, perDaySalary: 0, calculatedSalary: 0, absentRecords: [],
   });
   // Previous month due (remaining owed to employee from last month)
   const [prevMonthCalcSalary, setPrevMonthCalcSalary] = useState(0);
@@ -55,6 +63,7 @@ export default function SalaryPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [paymentSourceError, setPaymentSourceError] = useState('');
 
   // Edit modal
   const [editRec, setEditRec] = useState(null);
@@ -73,10 +82,11 @@ export default function SalaryPage() {
     const records = res.success ? (res.data || []) : [];
     const presentDays = records.filter((r) => r.status === 'present').length;
     const absentDays = records.filter((r) => r.status === 'absent').length;
+    const absentRecords = records.filter((r) => r.status === 'absent');
     const totalHours = round2(records.reduce((sum, r) => sum + (Number(r.hoursWorked) || 0), 0));
     const perDaySalary = round2((Number(employee.monthlySalary) || 0) / 30);
     const calculatedSalary = round2(perDaySalary * presentDays);
-    setAttendanceSummary({ from: range.from, to: range.to, presentDays, absentDays, totalHours, perDaySalary, calculatedSalary });
+    setAttendanceSummary({ from: range.from, to: range.to, presentDays, absentDays, totalHours, perDaySalary, calculatedSalary, absentRecords });
     return calculatedSalary;
   };
 
@@ -94,6 +104,16 @@ export default function SalaryPage() {
   const refreshHistory = async (employee) => {
     const hRes = await window.api.staff.getSalaryHistory({ employeeId: employee.id, filters: {} });
     if (hRes.success) setSalaryHistory(hRes.data.records);
+  };
+
+  const getTotalAdvanceBalance = () => {
+    const totalAdvance = salaryHistory
+      .filter(r => r.type === 'advance')
+      .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const totalRepayment = salaryHistory
+      .filter(r => r.type === 'repayment')
+      .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    return round2(totalAdvance + totalRepayment);
   };
 
   useEffect(() => {
@@ -136,16 +156,40 @@ export default function SalaryPage() {
 
   const recordPayment = async () => {
     if (!form.amount || !emp || !emp.isActive) return;
+    
+    if (form.paymentSource === 'subtract_advance' && form.type !== 'salary') {
+      setPaymentSourceError('Subtract from Advance can only be used when type is Salary');
+      return;
+    }
+    if (form.type !== 'salary' && form.paymentSource === 'subtract_advance') {
+      setPaymentSourceError('Subtract from Advance can only be used when type is Salary');
+      return;
+    }
+    
+    setPaymentSourceError('');
     setSaving(true);
     setError('');
     setMessage('');
+    
+    let finalAmount = form.amount;
+    
+    if (form.paymentSource === 'subtract_advance' && form.type === 'salary') {
+      finalAmount = form.amount;
+    }
+    
+    if (!finalAmount || finalAmount <= 0) {
+      setPaymentSourceError('Amount must be positive');
+      return;
+    }
+    
     const res = await window.api.staff.addSalaryRecord({
       employeeId: emp.id,
-      amount: form.amount,
+      amount: finalAmount,
       payDate: form.payDate,
       notes: form.notes,
       type: form.type,
-      paymentSource: form.paymentSource,
+      paymentSource: form.paymentSource === 'subtract_advance' ? 'manual' : form.paymentSource,
+      subtractFromAdvance: form.paymentSource === 'subtract_advance' && form.type === 'salary',
     });
     if (res.success) {
       setForm(emptyForm());
@@ -213,8 +257,8 @@ export default function SalaryPage() {
 
     // Total advance given all time (so employee knows their full advance debt)
     const totalAdvanceAllTime = round2(
-      salaryHistory.filter(r => r.type === 'advance')
-        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+      salaryHistory.filter(r => r.type === 'advance').reduce((sum, r) => sum + (Number(r.amount) || 0), 0) +
+      salaryHistory.filter(r => r.type === 'repayment').reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
     );
 
     // Total due this month = salary paid + advance (bonus excluded)
@@ -316,6 +360,19 @@ export default function SalaryPage() {
               <p className="text-green-400 font-bold text-lg">PKR {earned.toLocaleString()}</p>
             </div>
 
+            {attendanceSummary.absentRecords && attendanceSummary.absentRecords.length > 0 && (
+              <div className="bg-red-900/20 border border-red-700/30 rounded p-3 mb-3">
+                <p className="text-red-400 text-xs font-medium mb-2">Absent Days ({attendanceSummary.absentRecords.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {attendanceSummary.absentRecords.map((rec) => (
+                    <span key={rec.id} className="text-xs bg-red-900/40 text-red-300 px-2 py-1 rounded">
+                      {formatDateWithDay(rec.date)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Last month carry-over banner */}
             {lastMonthBalance !== 0 && (
               <div className={`rounded p-2.5 mb-3 flex items-center justify-between ${lastMonthBalance > 0 ? 'bg-amber-400/10 border border-amber-400/30' : 'bg-red-900/20 border border-red-700/30'}`}>
@@ -377,13 +434,14 @@ export default function SalaryPage() {
           {/* Payment Form */}
           <div className="card">
             <h2 className="text-white font-semibold text-sm mb-3">Record Payment</h2>
+            {paymentSourceError && <p className="text-red-400 text-xs mb-2">{paymentSourceError}</p>}
             {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
             {message && <p className="text-emerald-400 text-xs mb-2">{message}</p>}
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label text-xs">Type</label>
-                  <select value={form.type} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, type: v })); }} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
+                  <select value={form.type} onChange={(e) => { const v = e.target.value; setForm(prev => { const newPaymentSource = v !== 'salary' && prev.paymentSource === 'subtract_advance' ? 'today_sale' : prev.paymentSource; if (prev.paymentSource === 'subtract_advance' && v !== 'salary') { setPaymentSourceError('Subtract from Advance can only be used when type is Salary'); } else if (newPaymentSource !== 'subtract_advance') { setPaymentSourceError(''); } return { ...prev, type: v, paymentSource: newPaymentSource }; }); }} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
                     <option value="salary">Salary</option>
                     <option value="bonus">Bonus</option>
                     <option value="advance">Advance</option>
@@ -391,9 +449,12 @@ export default function SalaryPage() {
                 </div>
                 <div>
                   <label className="label text-xs">Payment Source</label>
-                  <select value={form.paymentSource} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, paymentSource: v })); }} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
+                  <select value={form.paymentSource} onChange={(e) => { const v = e.target.value; const isSalary = form.type === 'salary'; if (v === 'subtract_advance' && !isSalary) { setPaymentSourceError('Subtract from Advance can only be used when type is Salary'); } else { setPaymentSourceError(''); } setForm(prev => ({ ...prev, paymentSource: v })); }} disabled={!emp.isActive} className="input-field bg-slate-700 disabled:opacity-50 text-sm">
                     <option value="manual">Manual</option>
                     <option value="today_sale">From Today's Sale</option>
+                    {form.type === 'salary' && (
+                      <option value="subtract_advance">Subtract from Advance (PKR {getTotalAdvanceBalance().toLocaleString()})</option>
+                    )}
                   </select>
                 </div>
               </div>

@@ -122,6 +122,7 @@ async function printBillReceipt(bill, options = {}) {
 
 function renderKhataReceiptText(profile, transactions, options = {}) {
   const restaurantName = options.restaurantName || 'Hamza & Brother Food ';
+  const { dateFrom, dateTo } = options;
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-PK', { timeZone: 'Asia/Karachi', day: '2-digit', month: '2-digit', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-PK', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -137,6 +138,11 @@ function renderKhataReceiptText(profile, transactions, options = {}) {
   parts.push(LEFT_MARGIN + `${typeLabel}: ${profile.name}` + '\n');
   if (profile.phone) parts.push(LEFT_MARGIN + `Phone: ${profile.phone}` + '\n');
   parts.push(LEFT_MARGIN + `Date: ${dateStr} ${timeStr}` + '\n');
+  if (dateFrom || dateTo) {
+    const fromStr = dateFrom ? dateFrom : 'Start';
+    const toStr = dateTo ? dateTo : 'Now';
+    parts.push(LEFT_MARGIN + `Period: ${fromStr} to ${toStr}` + '\n');
+  }
   parts.push(LEFT_MARGIN + line() + '\n');
 
   parts.push(LEFT_MARGIN + 'Date'.padEnd(10) + 'Due'.padStart(10) + 'Pay'.padStart(10) + 'Bal'.padStart(10) + '\n');

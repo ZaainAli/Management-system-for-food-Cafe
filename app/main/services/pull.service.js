@@ -53,6 +53,34 @@ function _extractQueuedId(payloadRaw) {
   return null;
 }
 
+function _formatError(err) {
+  if (!err) return 'Unknown error';
+  if (typeof err === 'string') return err;
+  const parts = [];
+  if (err.code) parts.push(`code=${err.code}`);
+  if (err.message) parts.push(err.message);
+  if (err.stack) parts.push(`stack=${err.stack}`);
+  if (parts.length) return parts.join(' | ');
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+function _normalizeName(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function _runPullStep(name, fn) {
+  try {
+    fn();
+  } catch (err) {
+    logger.error(`[pull] ${name} failed: ${_formatError(err)}`);
+    throw err;
+  }
+}
+
 function getPendingIdsByTable(db) {
   try {
     const rows = db.prepare('SELECT tableName, payload FROM sync_queue').all();
@@ -251,6 +279,20 @@ function _removeCustomerPaymentSideEffects(db, tx, profileName, now) {
   }
 }
 
+function _deleteKhataProfileCascade(db, profile, now) {
+  if (profile.profileType === 'customer') {
+    const txs = db.prepare(
+      "SELECT * FROM khata_transactions WHERE khataId = ? AND type = 'payment'"
+    ).all(profile.id);
+    for (const tx of txs) {
+      _removeCustomerPaymentSideEffects(db, tx, profile.name, now);
+    }
+  }
+
+  db.prepare('DELETE FROM khata_transactions WHERE khataId = ?').run(profile.id);
+  db.prepare('DELETE FROM khata_profiles WHERE id = ?').run(profile.id);
+}
+
 function upsertKhataProfiles(db, rows, pendingIds = new Set()) {
   const stmt = db.prepare(`
     INSERT INTO khata_profiles (id, name, phone, businessDetails, profileType, createdAt)
@@ -264,38 +306,66 @@ function upsertKhataProfiles(db, rows, pendingIds = new Set()) {
   const now     = new Date().toISOString();
   const cloudIds = rows.map(r => r.id);
   const cloudIdSet = new Set(cloudIds);
+  const cloudNameOwner = new Map();
+  for (const r of rows) {
+    const normalizedName = _normalizeName(r.name);
+    if (normalizedName && !cloudNameOwner.has(normalizedName)) {
+      cloudNameOwner.set(normalizedName, r.id);
+    }
+  }
   let upserted = 0;
   let skipped = 0;
+  let removed = 0;
 
   const run = db.transaction(() => {
+    const localProfiles = db.prepare('SELECT * FROM khata_profiles').all();
+    const pendingLocalNames = new Set();
+
+    for (const profile of localProfiles) {
+      if (pendingIds.has(profile.id)) {
+        pendingLocalNames.add(_normalizeName(profile.name));
+        continue;
+      }
+
+      const cloudOwnerId = cloudNameOwner.get(_normalizeName(profile.name));
+      if (!cloudIdSet.has(profile.id) && cloudOwnerId && cloudOwnerId !== profile.id) {
+        _deleteKhataProfileCascade(db, profile, now);
+        removed += 1;
+      }
+    }
+
+    const seenCloudNames = new Map();
+
     // Upsert cloud profiles
     for (const r of rows) {
       if (pendingIds.has(r.id)) { skipped += 1; continue; }
+      const normalizedName = _normalizeName(r.name);
+      const duplicateOwner = seenCloudNames.get(normalizedName);
+      if (duplicateOwner && duplicateOwner !== r.id) {
+        skipped += 1;
+        logger.warn(`[pull] khata_profiles: skipped duplicate cloud name "${r.name}" for id=${r.id}; first id=${duplicateOwner}`);
+        continue;
+      }
+      if (pendingLocalNames.has(normalizedName)) {
+        skipped += 1;
+        logger.warn(`[pull] khata_profiles: skipped cloud id=${r.id} because a pending local profile has the same name "${r.name}"`);
+        continue;
+      }
+      if (normalizedName) seenCloudNames.set(normalizedName, r.id);
       stmt.run(r.id, r.name, r.phone || '', r.notes || '', r.profile_type || 'supplier', now);
       upserted += 1;
     }
 
     // Delete local profiles that no longer exist in cloud
-    const localProfiles = db.prepare('SELECT * FROM khata_profiles').all();
-    for (const profile of localProfiles) {
+    const remainingLocalProfiles = db.prepare('SELECT * FROM khata_profiles').all();
+    for (const profile of remainingLocalProfiles) {
       if (cloudIdSet.has(profile.id) || pendingIds.has(profile.id)) continue;
-
-      // Clean up all customer payment transactions' bills + daily_sales
-      if (profile.profileType === 'customer') {
-        const txs = db.prepare(
-          "SELECT * FROM khata_transactions WHERE khataId = ? AND type = 'payment'"
-        ).all(profile.id);
-        for (const tx of txs) {
-          _removeCustomerPaymentSideEffects(db, tx, profile.name, now);
-        }
-      }
-
-      db.prepare('DELETE FROM khata_transactions WHERE khataId = ?').run(profile.id);
-      db.prepare('DELETE FROM khata_profiles WHERE id = ?').run(profile.id);
+      _deleteKhataProfileCascade(db, profile, now);
+      removed += 1;
     }
   });
   run();
-  logger.info(`[pull] khata_profiles: upserted ${upserted} rows${skipped ? `, skipped ${skipped} pending` : ''}`);
+  logger.info(`[pull] khata_profiles: upserted ${upserted} rows${removed ? `, removed ${removed} stale` : ''}${skipped ? `, skipped ${skipped} pending/conflicting` : ''}`);
 }
 
 function upsertKhataTransactions(db, rows, pendingIds = new Set()) {
@@ -556,13 +626,13 @@ async function pullAllFromSupabase({ skipPush = false } = {}) {
     for (const e of employees) employeeMap[e.id] = e.name;
 
     // Upsert in FK-safe order
-    if (cats.length)       upsertMenuCategories(db, cats, pendingByTable.get('menu_categories') || new Set());
-    if (items.length)      upsertMenuItems(db, items, pendingByTable.get('menu_items') || new Set());
-    if (expenses.length)   upsertExpenses(db, expenses, pendingByTable.get('expenses') || new Set());
-    if (kProfiles.length)  upsertKhataProfiles(db, kProfiles, pendingByTable.get('khata_profiles') || new Set());
-    if (kTxs.length)       upsertKhataTransactions(db, kTxs, pendingByTable.get('khata_transactions') || new Set());
-    if (employees.length)  upsertEmployees(db, employees, pendingByTable.get('employees') || new Set());
-    if (salaries.length)   upsertSalaryRecords(db, salaries, employeeMap, pendingByTable.get('salary_records') || new Set());
+    if (cats.length)       _runPullStep('menu_categories', () => upsertMenuCategories(db, cats, pendingByTable.get('menu_categories') || new Set()));
+    if (items.length)      _runPullStep('menu_items', () => upsertMenuItems(db, items, pendingByTable.get('menu_items') || new Set()));
+    if (expenses.length)   _runPullStep('expenses', () => upsertExpenses(db, expenses, pendingByTable.get('expenses') || new Set()));
+    if (kProfiles.length)  _runPullStep('khata_profiles', () => upsertKhataProfiles(db, kProfiles, pendingByTable.get('khata_profiles') || new Set()));
+    if (kTxs.length)       _runPullStep('khata_transactions', () => upsertKhataTransactions(db, kTxs, pendingByTable.get('khata_transactions') || new Set()));
+    if (employees.length)  _runPullStep('employees', () => upsertEmployees(db, employees, pendingByTable.get('employees') || new Set()));
+    if (salaries.length)   _runPullStep('salary_records', () => upsertSalaryRecords(db, salaries, employeeMap, pendingByTable.get('salary_records') || new Set()));
 
     logger.info('[pull] Startup pull complete');
 
@@ -570,7 +640,7 @@ async function pullAllFromSupabase({ skipPush = false } = {}) {
       await pushLocalToSupabase(db);
     }
   } catch (err) {
-    logger.error('[pull] Startup pull failed:', err.message);
+    logger.error(`[pull] Startup pull failed: ${_formatError(err)}`);
   }
 }
 

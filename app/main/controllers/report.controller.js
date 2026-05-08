@@ -270,40 +270,83 @@ function drawDiscountedContent(doc, d, y) {
 }
 
 function drawKhataContent(doc, d, y) {
-  y = drawBanner(doc, 'khata', y);
+  y = drawBanner(doc, 'Khata', y);
   y = drawSummaryCards(doc,
     ['Total Profiles', 'Outstanding Balance', 'Transactions In Range', 'Due In Range', 'Paid In Range'],
     [d.summary?.totalProfiles || 0, d.summary?.totalOutstandingBalance || 0, d.summary?.transactionsInRange || 0, d.summary?.totalDueInRange || 0, d.summary?.totalPaidInRange || 0], y);
-  
-  if (d.customerKhata && d.customerKhata.summary.totalProfiles > 0) {
-    y = drawSubLabel(doc, 'Customer Khata Borrow (Due)', y);
-    y = drawSummaryCards(doc,
-      ['Customer Profiles', 'Outstanding Due', 'Due In Range', 'Paid In Range'],
-      [d.customerKhata.summary.totalProfiles || 0, d.customerKhata.summary.totalOutstandingBalance || 0, d.customerKhata.summary.totalDueInRange || 0, d.customerKhata.summary.totalPaidInRange || 0], y);
-    y = drawSubLabel(doc, 'Customer Khata Borrow Transactions', y);
-    y = drawTable(doc, ['Date', 'Customer Name', 'Type', 'Amount', 'Note'],
-      (d.customerKhata.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.note]), y);
-  }
 
-  if (d.customerKhata && d.customerKhata.summary.totalPaidInRange > 0) {
-    y = drawSubLabel(doc, 'Customer Khata Payment', y);
+
+  const supplierProfiles = (d.profiles || []).filter(p => p.profileType !== 'customer');
+  const customerProfiles = (d.profiles || []).filter(p => p.profileType === 'customer');
+  const supplierTxs = (d.transactions || []).filter(tx => tx.profileType !== 'customer');
+  // const customerTxs = (d.transactions || []).filter(tx => tx.profileType === 'customer');
+  const supplierDueInRange = supplierTxs.filter(tx => tx.type === 'due').reduce((sum, tx) => sum + tx.amount, 0);
+  const supplierPaidInRange = supplierTxs.filter(tx => tx.type === 'payment').reduce((sum, tx) => sum + tx.amount, 0);
+  const supplierdueBalance = supplierDueInRange - supplierPaidInRange;
+  const supplierdueTxs = supplierTxs.filter(tx => tx.type === 'due');
+  const supplierpaidTxs = supplierTxs.filter(tx => tx.type === 'payment');
+
+
+  if (supplierProfiles.length > 0) {
+    y = drawBanner(doc, 'Supplier Khata', y);
+    y = drawSubLabel(doc, 'Supplier Khata Profiles', y);
+    y = drawTable(doc, ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance'],
+      supplierProfiles.map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance]), y);
+
+    y = drawSubLabel(doc, 'Supplier Khata Summary', y);
     y = drawSummaryCards(doc,
-      ['Total Paid In Range'],
-      [d.customerKhata.summary.totalPaidInRange || 0], y);
-    const paymentTxs = (d.customerKhata.transactions || []).filter(tx => tx.type === 'payment');
-    if (paymentTxs.length > 0) {
-      y = drawSubLabel(doc, 'Customer Khata Payment Transactions', y);
-      y = drawTable(doc, ['Date', 'Customer Name', 'Amount', 'Payment Source', 'Note'],
-        paymentTxs.map(tx => [tx.date, tx.khataName, tx.amount, tx.paymentSource, tx.note]), y);
+      ['Total Due In Range', 'Total Paid In Range', 'Net Due In Range'],
+      [`Rs ${supplierDueInRange}`, `Rs ${supplierPaidInRange}`, `Rs ${supplierdueBalance}`], y);
+
+      if (supplierdueTxs.length > 0) {
+        y = drawSubLabel(doc, 'Supplier Due Khata Transactions', y);
+        y = drawTable(doc, ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note'],
+          supplierdueTxs.map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note]), y);
+      }
+      if (supplierpaidTxs.length > 0) {
+        y = drawSubLabel(doc, 'Supplier Payment Khata Transactions', y);
+        y = drawTable(doc, ['Date', 'Khata Name','Type', 'Amount', 'Payment Source', 'Note'],
+          supplierpaidTxs.map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note]), y);
+      }
+  }
+  
+
+  if (customerProfiles.length > 0) {
+    doc.addPage();
+    bgPage(doc);
+    y = 30;
+    y = drawBanner(doc, 'Customer Khata', y);
+    y = drawSubLabel(doc, 'Customer Khata Profiles', y);
+    y = drawTable(doc, ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance'],
+      customerProfiles.map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance]), y);
+
+    if (d.customerKhata && d.customerKhata.summary.totalProfiles > 0) {
+      y = 30;
+      y = drawSummaryCards(doc,
+        ['Customer Profiles', 'Outstanding Due', 'Due In Range', 'Paid In Range'],
+        [d.customerKhata.summary.totalProfiles || 0, d.customerKhata.summary.totalOutstandingBalance || 0, d.customerKhata.summary.totalDueInRange || 0, d.customerKhata.summary.totalPaidInRange || 0], y);
+      y = drawSubLabel(doc, 'Customer  Transactions ( Due)', y);
+      y = drawTable(doc, ['Date', 'Customer Name', 'Type', 'Amount', 'Note'],
+        (d.customerKhata.transactions || []).filter(tx => tx.type === 'due').map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.note]), y);
+    }
+
+    if (d.customerKhata && d.customerKhata.summary.totalPaidInRange > 0) {
+      y = drawSubLabel(doc, 'Customer Khata Payment', y);
+      y = drawSummaryCards(doc,
+        ['Total Paid In Range'],
+        [d.customerKhata.summary.totalPaidInRange || 0], y);
+      const paymentTxs = (d.customerKhata.transactions || []).filter(tx => tx.type === 'payment');
+      if (paymentTxs.length > 0) {
+        y = drawSubLabel(doc, 'Customer Khata Payment Transactions', y);
+        y = drawTable(doc, ['Date', 'Customer Name','Type', 'Amount', 'Note'],
+          paymentTxs.map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.note]), y);
+      }
     }
   }
+  
+  
 
-  y = drawSubLabel(doc, 'Khata Profiles', y);
-  y = drawTable(doc, ['Name', 'Phone', 'Business Details', 'Total Due', 'Total Paid', 'Balance'],
-    (d.profiles || []).map(p => [p.name, p.phone, p.businessDetails, p.totalDue, p.totalPaid, p.balance]), y);
-  y = drawSubLabel(doc, 'Khata Transactions', y);
-  y = drawTable(doc, ['Date', 'Khata Name', 'Type', 'Amount', 'Payment Source', 'Note'],
-    (d.transactions || []).map(tx => [tx.date, tx.khataName, tx.type, tx.amount, tx.paymentSource, tx.note]), y);
+
   return y;
 }
 
@@ -371,8 +414,10 @@ function estimateExportRows(type, data) {
         (data.expense?.dailyTotals?.length || 0) +
         (data.staff?.employees?.length || 0) +
         (data.discounted?.records?.length || 0) +
-        (data.khata?.profiles?.length || 0) +
-        (data.khata?.transactions?.length || 0)
+        ((data.khata?.profiles || []).filter(p => p.profileType !== 'customer').length +
+         (data.khata?.profiles || []).filter(p => p.profileType === 'customer').length) +
+        ((data.khata?.transactions || []).filter(tx => tx.profileType !== 'customer').length +
+         (data.khata?.transactions || []).filter(tx => tx.profileType === 'customer').length)
       );
     case 'sales':
       return (data.dailyTotals?.length || 0) + (data.topItems?.length || 0);
@@ -382,8 +427,14 @@ function estimateExportRows(type, data) {
       return data.employees?.length || 0;
     case 'discounted':
       return (data.records?.length || 0) + (data.khataBills?.length || 0);
-    case 'khata':
-      return (data.profiles?.length || 0) + (data.transactions?.length || 0);
+    case 'khata': {
+      const supplierProfiles = (data.profiles || []).filter(p => p.profileType !== 'customer');
+      const customerProfiles = (data.profiles || []).filter(p => p.profileType === 'customer');
+      const supplierTxs = (data.transactions || []).filter(tx => tx.profileType !== 'customer');
+      const customerTxs = (data.transactions || []).filter(tx => tx.profileType === 'customer');
+      return supplierProfiles.length + customerProfiles.length +
+             supplierTxs.length + customerTxs.length;
+    }
     case 'pl':
     default:
       return 1;

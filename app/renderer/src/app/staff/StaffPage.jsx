@@ -26,6 +26,7 @@ export default function StaffPage() {
   const [customPosition, setCustomPosition] = useState('');
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
 
   const fetchEmployees = async () => {
     const res = await window.api.staff.getAll({});
@@ -68,21 +69,25 @@ export default function StaffPage() {
   };
 
   const filteredEmployees = useMemo(() => {
+    let list = employees;
+    if (!showInactive) list = list.filter((emp) => !!emp.isActive);
+    else list = list.filter((emp) => !emp.isActive);
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return employees;
-    return employees.filter((emp) => {
+    if (!query) return list;
+    return list.filter((emp) => {
       const name = String(emp.name || '').toLowerCase();
       const position = String(emp.position || '').toLowerCase();
       return name.includes(query) || position.includes(query);
     });
-  }, [employees, searchTerm]);
+  }, [employees, searchTerm, showInactive]);
 
   const employeeStats = useMemo(() => {
     const total = employees.length;
     const active = employees.filter((emp) => !!emp.isActive).length;
     const inactive = total - active;
-    return { total, active, inactive };
-  }, [employees]);
+    const showing = filteredEmployees.length;
+    return { total, active, inactive, showing };
+  }, [employees, filteredEmployees]);
 
   if (loading) return <div className="text-slate-400">Loading staff...</div>;
 
@@ -92,6 +97,14 @@ export default function StaffPage() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-white">Staff</h1>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowInactive(!showInactive)}
+              className={`btn-secondary text-sm ${
+                showInactive ? "!bg-slate-600 !text-white" : ""
+              }`}
+            >
+              {showInactive ? "Hide Inactive" : "Show Inactive"}
+            </button>
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -103,7 +116,7 @@ export default function StaffPage() {
         </div>
 
         <div className="card p-0 overflow-hidden">
-          <div className="grid grid-cols-3 gap-2 p-3 border-b border-slate-700 bg-slate-800/40">
+          <div className="grid grid-cols-2 gap-2 p-3 border-b border-slate-700 bg-slate-800/40">
             <div className="bg-slate-700/40 rounded-lg px-3 py-2">
               <p className="text-slate-500 text-xs">Total Employees</p>
               <p className="text-white font-semibold text-sm">{employeeStats.total}</p>
@@ -112,10 +125,15 @@ export default function StaffPage() {
               <p className="text-slate-500 text-xs">Active Employees</p>
               <p className="text-green-400 font-semibold text-sm">{employeeStats.active}</p>
             </div>
-            <div className="bg-slate-700/40 rounded-lg px-3 py-2">
-              <p className="text-slate-500 text-xs">Non Active Employees</p>
-              <p className="text-amber-400 font-semibold text-sm">{employeeStats.inactive}</p>
-            </div>
+          </div>
+
+          <div className="px-4 py-2 border-b border-slate-700 bg-slate-800/30 flex items-center justify-between">
+            <span className="text-slate-400 text-sm">
+              Showing {employeeStats.showing} of {employeeStats.total} employees
+              {!showInactive && employeeStats.inactive > 0 && (
+                <span className="ml-2">- {employeeStats.inactive} inactive hidden</span>
+              )}
+            </span>
           </div>
 
           <table className="w-full text-sm">

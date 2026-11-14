@@ -293,8 +293,26 @@ function runMigrations(db) {
   if (!menuCols.includes('halfPrice')) {
     db.prepare('ALTER TABLE menu_items ADD COLUMN halfPrice REAL').run();
   }
+  if (!menuCols.includes('itemCode')) {
+    db.prepare('ALTER TABLE menu_items ADD COLUMN itemCode TEXT').run();
+  }
+  try {
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_items_itemCode ON menu_items(itemCode) WHERE itemCode IS NOT NULL AND TRIM(itemCode) <> ""').run();
+  } catch (e) {
+    logger.warn('Could not create unique index on menu_items.itemCode (duplicate codes may exist): ' + e.message);
+  }
 
-  let expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+  const billItemCols = db.prepare("PRAGMA table_info(bill_items)").all().map(c => c.name);
+  if (!billItemCols.includes('itemCode')) {
+    db.prepare("ALTER TABLE bill_items ADD COLUMN itemCode TEXT DEFAULT ''").run();
+  }
+
+  const heldBillItemCols = db.prepare("PRAGMA table_info(held_bill_items)").all().map(c => c.name);
+  if (!heldBillItemCols.includes('itemCode')) {
+    db.prepare("ALTER TABLE held_bill_items ADD COLUMN itemCode TEXT DEFAULT ''").run();
+  }
+
+    let expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
   
   // Migration: If old snake_case columns exist, copy data to camelCase and drop snake_case
   const hasSnakeCase = expenseCols.includes('source_type');

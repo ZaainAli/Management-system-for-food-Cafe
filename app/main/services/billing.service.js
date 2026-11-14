@@ -41,8 +41,25 @@ async function addMenuItem(item) {
   if (item.halfPrice !== undefined && item.halfPrice !== null && item.halfPrice < 0) {
     throw new Error('Half price cannot be negative');
   }
+  const allItems = await billModel.getAllMenuItems();
+  const maxCode = allItems.length + 1;
+  const itemCodeRaw = item.itemCode !== undefined && item.itemCode !== null ? String(item.itemCode).trim() : '';
+  let itemCode = null;
+  if (itemCodeRaw !== '') {
+    if (!/^[1-9]\d*$/.test(itemCodeRaw)) {
+      throw new Error('Item code must be a number (1 or above).');
+    }
+    const codeNum = parseInt(itemCodeRaw, 10);
+    if (codeNum > maxCode) {
+      throw new Error(`There are only ${allItems.length} items in menu. You are allowed to set item code only from 1 to ${maxCode}.`);
+    }
+    const existing = allItems.find((m) => String(m.itemCode || '').trim() === itemCodeRaw);
+    if (existing) throw new Error(`Item code "${itemCodeRaw}" is already assigned to another item`);
+    itemCode = itemCodeRaw;
+  }
   const newItem = {
     id: uuidv4(),
+    itemCode,
     name: item.name,
     description: item.description || '',
     price: parseFloat(item.price),
@@ -62,7 +79,32 @@ async function updateMenuItem(id, updates) {
   if (updates.halfPrice !== undefined && updates.halfPrice !== null && updates.halfPrice < 0) {
     throw new Error('Half price cannot be negative');
   }
-  const updated = { ...item, ...updates, updatedAt: new Date().toISOString() };
+  const next = { ...updates };
+  if (Object.prototype.hasOwnProperty.call(updates, 'itemCode')) {
+    const itemCodeRaw = updates.itemCode !== undefined && updates.itemCode !== null ? String(updates.itemCode).trim() : '';
+    if (itemCodeRaw !== '') {
+      if (!/^[1-9]\d*$/.test(itemCodeRaw)) {
+        throw new Error('Item code must be a number (1 or above).');
+      }
+      const allItems = await billModel.getAllMenuItems();
+      const maxCode = allItems.length;
+      const codeNum = parseInt(itemCodeRaw, 10);
+      if (codeNum > maxCode) {
+        throw new Error(`There are only ${maxCode} items in menu. You are allowed to set item code only from 1 to ${maxCode}.`);
+      }
+      const existing = allItems.find(
+        (m) => m.id !== id && String(m.itemCode || '').trim() === itemCodeRaw
+      );
+      if (existing) throw new Error(`Item code "${itemCodeRaw}" is already assigned to another item`);
+      next.itemCode = itemCodeRaw;
+    } else {
+      next.itemCode = null;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'unit')) {
+    next.unit = updates.unit !== undefined && updates.unit !== null ? String(updates.unit).trim() : '';
+  }
+  const updated = { ...item, ...next, updatedAt: new Date().toISOString() };
   const saved = billModel.updateMenuItem(updated);
   syncService.pushMenuItem(saved).catch(() => {});
   return saved;
@@ -122,6 +164,7 @@ async function createBill({ items, tableId, discount = 0, paymentMethod = 'cash'
     lineItems.push({
       id: uuidv4(),
       menuItemId: menuItem.id,
+      itemCode: menuItem.itemCode || '',
       name: menuItem.name,
       price: unitPrice,
       quantity: qty,
@@ -252,6 +295,7 @@ async function holdBill({ items, tableId, discount = 0, paymentMethod = 'cash' }
     normalizedItems.push({
       id: uuidv4(),
       menuItemId: item.menuItemId,
+      itemCode: item.itemCode || menuItem.itemCode || '',
       name: item.name || menuItem.name,
       description: item.description || '',
       isAvailable: item.isAvailable !== undefined ? !!item.isAvailable : !!menuItem.isAvailable,

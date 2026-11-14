@@ -59,22 +59,24 @@ function renderReceiptText(bill, options = {}) {
   if (bill.tableId) parts.push(LEFT_MARGIN + `Table: ${bill.tableId}\n`);
   parts.push(LEFT_MARGIN + line() + '\n');
 
-  // Column header
-    parts.push(
-    LEFT_MARGIN + 'Qty'.padEnd(4) +
-    'Item'.padEnd(18- LEFT_MARGIN.length) +
-    'Price'.padStart(10) +
-    'Total'.padStart(10) + '\n'
+  // Column header (each item printed once). 40 chars after margin: 4+14+4+9+9
+  parts.push(
+    LEFT_MARGIN +
+    'Code'.padEnd(5) +
+    'Item'.padEnd(13) +
+    'Qty'.padStart(5) +
+    'Price'.padStart(8) +
+    'Total'.padStart(8) + '\n'
   );
   parts.push(LEFT_MARGIN + line() + '\n');
 
-  // Qty is 4 chars left-aligned, Item is 18 chars, price and total are 10 chars each, right-aligned.
   for (const item of (bill.items || [])) {
-    const qty = String(item.quantity).padEnd(4);
-    const name = String(item.name).substring(0, 18- LEFT_MARGIN.length).padEnd(18- LEFT_MARGIN.length);
-    const price = formatAmount(item.price).padStart(10);
-    const total = formatAmount(item.lineTotal).padStart(10);
-    parts.push(LEFT_MARGIN + `${qty}${name}${price}${total}\n`);
+    const code = String(item.itemCode || '').substring(0, 5).padEnd(5);
+    const name = String(item.name || '').substring(0, 13).padEnd(13);
+    const qty = String(item.quantity ?? '').substring(0, 5).padStart(5);
+    const price = formatAmount(item.price).padStart(8);
+    const total = formatAmount(item.lineTotal).padStart(8);
+    parts.push(LEFT_MARGIN + `${code}${name}${qty}${price}${total}\n`);
   }
 
   parts.push(LEFT_MARGIN + line() + '\n');

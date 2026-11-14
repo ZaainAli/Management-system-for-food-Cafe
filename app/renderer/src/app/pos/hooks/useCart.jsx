@@ -18,6 +18,7 @@ export function useCart() {
     setCart(prev => [...prev, {
       lineId,
       id: item.id,
+      itemCode: item.itemCode || '',
       name: item.name,
       description: item.description,
       isAvailable: item.isAvailable,

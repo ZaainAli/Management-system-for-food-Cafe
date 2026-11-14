@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 const QUICK_KEYS = ['1','2','3','4','5','6','7','8','9','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'];
 
 const emptyForm = {
+  itemCode: '',
   name: '',
   description: '',
   price: '',
@@ -45,9 +46,21 @@ export default function MenuPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const filtered = activeCategory === 'All'
-    ? items
-    : items.filter(i => i.categoryId === activeCategory);
+  const sortByCode = (list) =>
+    [...list].sort((a, b) => {
+      const ac = String(a.itemCode || '').trim();
+      const bc = String(b.itemCode || '').trim();
+      const an = /^\d+$/.test(ac) ? parseInt(ac, 10) : null;
+      const bn = /^\d+$/.test(bc) ? parseInt(bc, 10) : null;
+      if (an !== null && bn !== null) return an - bn;
+      if (an !== null) return -1;
+      if (bn !== null) return 1;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+  const filtered = sortByCode(
+    activeCategory === 'All' ? items : items.filter(i => i.categoryId === activeCategory)
+  );
   const totalItems = items.length;
   const unavailableItems = items.filter(i => !i.isAvailable).length;
   const availableItems = totalItems - unavailableItems;
@@ -61,6 +74,7 @@ export default function MenuPage() {
 
   const openEdit = (item) => {
     setForm({
+      itemCode: item.itemCode || '',
       name: item.name || '',
       description: item.description || '',
       price: item.price !== null && item.price !== undefined ? Number(item.price) : '',
@@ -94,10 +108,24 @@ export default function MenuPage() {
         return;
       }
     }
+    const itemCode = form.itemCode ? String(form.itemCode).trim() : '';
+    if (itemCode !== '') {
+      if (!/^[1-9]\d*$/.test(itemCode)) {
+        setFormError('Item code must be a number (1 or above).');
+        return;
+      }
+      const maxCode = editId ? items.length : items.length + 1;
+      const codeNum = parseInt(itemCode, 10);
+      if (codeNum > maxCode) {
+        setFormError(`There are only ${editId ? items.length : items.length} items in menu. You are allowed to set item code only from 1 to ${maxCode}.`);
+        return;
+      }
+    }
     setFormError('');
 
     const payload = {
       ...form,
+      itemCode,
       price,
       halfPrice: form.halfPrice === '' ? null : Number(form.halfPrice),
       categoryId: form.categoryId || null,
@@ -245,6 +273,7 @@ export default function MenuPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-700">
+              <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Code</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Name</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Category</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs uppercase">Price</th>
@@ -256,6 +285,7 @@ export default function MenuPage() {
           <tbody>
             {filtered.map(item => (
               <tr key={item.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                <td className="px-4 py-3 text-slate-300 font-mono text-xs">{item.itemCode || '—'}</td>
                 <td className="px-4 py-3 text-white font-medium">
                   <div className="flex flex-col">
                     <span>{item.name}</span>
@@ -281,7 +311,7 @@ export default function MenuPage() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-600 text-sm">No menu items found</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-600 text-sm">No menu items found</td></tr>
             )}
           </tbody>
         </table>
@@ -296,6 +326,18 @@ export default function MenuPage() {
               <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white">✕</button>
             </div>
             <div className="space-y-3">
+              <div>
+                <label className="label">Item Code (1–{editId ? items.length : items.length + 1})</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={form.itemCode}
+                  onChange={e => setForm({ ...form, itemCode: e.target.value })}
+                  className="input-field"
+                  placeholder={`1 to ${editId ? items.length : items.length + 1}`}
+                />
+              </div>
               <div>
                 <label className="label">Name</label>
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-field" />

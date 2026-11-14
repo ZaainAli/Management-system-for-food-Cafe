@@ -8,7 +8,10 @@ function getAllMenuItems() {
     SELECT mi.*, mc.name as categoryName
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.categoryId = mc.id
-    ORDER BY mc.name ASC, mi.name ASC
+    ORDER BY
+      CASE WHEN mi.itemCode IS NULL OR TRIM(mi.itemCode) = '' OR mi.itemCode GLOB '*[^0-9]*' THEN 1 ELSE 0 END,
+      CAST(mi.itemCode AS INTEGER) ASC,
+      mi.name ASC
   `).all();
 }
 
@@ -20,18 +23,39 @@ function getMenuItemById(id) {
 function insertMenuItem(item) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO menu_items (id, name, description, price, halfPrice, categoryId, isAvailable, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(item.id, item.name, item.description, item.price, item.halfPrice, item.categoryId, item.isAvailable ? 1 : 0, item.createdAt);
+    INSERT INTO menu_items (id, itemCode, name, description, price, halfPrice, unit, categoryId, isAvailable, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    item.id,
+    item.itemCode || null,
+    item.name,
+    item.description,
+    item.price,
+    item.halfPrice,
+    item.unit || '',
+    item.categoryId,
+    item.isAvailable ? 1 : 0,
+    item.createdAt
+  );
   return item;
 }
 
 function updateMenuItem(item) {
   const db = getDb();
   db.prepare(`
-    UPDATE menu_items SET name = ?, description = ?, price = ?, halfPrice = ?, categoryId = ?, isAvailable = ?, updatedAt = ?
+    UPDATE menu_items SET itemCode = ?, name = ?, description = ?, price = ?, halfPrice = ?, categoryId = ?, isAvailable = ?, updatedAt = ?
     WHERE id = ?
-  `).run(item.name, item.description, item.price, item.halfPrice, item.categoryId, item.isAvailable ? 1 : 0, item.updatedAt, item.id);
+  `).run(
+    item.itemCode || null,
+    item.name,
+    item.description,
+    item.price,
+    item.halfPrice,
+    item.categoryId,
+    item.isAvailable ? 1 : 0,
+    item.updatedAt,
+    item.id
+  );
   return item;
 }
 
@@ -106,12 +130,21 @@ function insertBill(bill, stockAdjustments = []) {
     `).run(bill.id, bill.tableId, bill.customerName, bill.subtotal, bill.tax, bill.discount, bill.total, bill.paymentMethod, bill.status, bill.createdAt);
 
     const insertItem = db.prepare(`
-      INSERT INTO bill_items (id, billId, menuItemId, name, price, quantity, lineTotal)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bill_items (id, billId, menuItemId, itemCode, name, price, quantity, lineTotal)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of bill.items) {
-      insertItem.run(item.id, bill.id, item.menuItemId, item.name, item.price, item.quantity, item.lineTotal);
+      insertItem.run(
+        item.id,
+        bill.id,
+        item.menuItemId,
+        item.itemCode || '',
+        item.name,
+        item.price,
+        item.quantity,
+        item.lineTotal
+      );
     }
 
     if (stockAdjustments.length > 0) {
@@ -180,8 +213,8 @@ function insertHeldBill(heldBill) {
 
     const insertItem = db.prepare(`
       INSERT INTO held_bill_items (
-        id, heldBillId, menuItemId, name, description, isAvailable, basePrice, halfPrice, price, quantity, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, heldBillId, menuItemId, itemCode, name, description, isAvailable, basePrice, halfPrice, price, quantity, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of heldBill.items) {
@@ -189,6 +222,7 @@ function insertHeldBill(heldBill) {
         item.id,
         heldBill.id,
         item.menuItemId,
+        item.itemCode || '',
         item.name,
         item.description || '',
         item.isAvailable ? 1 : 0,

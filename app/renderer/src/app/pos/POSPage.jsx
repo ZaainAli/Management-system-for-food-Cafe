@@ -225,6 +225,7 @@ export default function POSPage() {
     const res = await window.api.pos.holdBill({
       items: cart.map(i => ({
         menuItemId: i.id,
+        itemCode: i.itemCode || '',
         name: i.name,
         description: i.description,
         isAvailable: i.isAvailable,
@@ -260,6 +261,7 @@ export default function POSPage() {
     setCart((held.items || []).map(item => ({
       lineId: `${item.menuItemId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       id: item.menuItemId,
+      itemCode: item.itemCode || '',
       name: item.name,
       description: item.description,
       isAvailable: !!item.isAvailable,

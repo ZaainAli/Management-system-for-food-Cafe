@@ -23,8 +23,8 @@ function getMenuItemById(id) {
 function insertMenuItem(item) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO menu_items (id, itemCode, name, description, price, halfPrice, unit, categoryId, isAvailable, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO menu_items (id, itemCode, name, description, price, halfPrice, categoryId, isAvailable, createdAt)
+    VALUES (?,?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     item.id,
     item.itemCode || null,
@@ -32,7 +32,7 @@ function insertMenuItem(item) {
     item.description,
     item.price,
     item.halfPrice,
-    item.unit || '',
+    // item.unit || '',
     item.categoryId,
     item.isAvailable ? 1 : 0,
     item.createdAt

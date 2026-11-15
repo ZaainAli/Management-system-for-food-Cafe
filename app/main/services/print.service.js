@@ -2,7 +2,13 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const net = require('net');
 const logger = require('../utils/logger');
+
+// How long (ms) to attempt a direct raw-socket connection before giving up.
+// Kept short so the fallback to the CUPS `lp` spooler is fast on machines
+// where the printer has no LPD port (e.g. USB-attached thermal printers).
+const PRINT_SOCKET_TIMEOUT = 250;
 
 const RECEIPT_WIDTH = 42; // characters for 80mm thermal printer
 const LEFT_MARGIN = '  '; // 2 spaces for left margin
@@ -192,6 +198,19 @@ async function printKhataReceipt(profile, transactions, options = {}) {
 }
 
 function printUnix(text, printerName) {
+  // Try a direct raw-socket write first (LPD port 9100). This bypasses the CUPS
+  // spooler entirely and is what makes thermal receipts print near-instantly.
+  // Falls back to the `lp` spooler if the socket isn't reachable.
+  return tryDirectSocket(printerName, text).then(
+    () => {
+      logger.info(`Print sent via direct socket to ${printerName}`);
+      return { skipped: false };
+    },
+    () => printViaSpooler(printerName, text)
+  );
+}
+
+function printViaSpooler(printerName, text) {
   return new Promise((resolve, reject) => {
     const lp = execFile('lp', ['-d', printerName, '-o', 'raw'], (err, stdout, stderr) => {
       if (err) {
@@ -208,6 +227,57 @@ function printUnix(text, printerName) {
     lp.stdin.write(text, 'binary');
     lp.stdin.end();
   });
+}
+
+function tryDirectSocket(printerName, text) {
+  const candidates = directSocketCandidates(printerName);
+  if (candidates.length === 0) return Promise.reject(new Error('No socket candidates'));
+
+  const buf = Buffer.from(text, 'binary');
+  // Race all candidates in parallel. The first one to successfully connect
+  // and flush the buffer wins; the rest are abandoned. This keeps the total
+  // wait bounded by a single socket timeout instead of N timeouts in series.
+  return new Promise((resolve, reject) => {
+    let settled = 0;
+    const done = (ok, reason) => {
+      settled += 1;
+      if (ok) resolve();
+      else if (settled >= candidates.length) reject(new Error(reason));
+    };
+
+    for (const { host, port } of candidates) {
+      const sock = new net.Socket();
+      sock.setTimeout(PRINT_SOCKET_TIMEOUT);
+      sock.once('connect', () => {
+        sock.write(buf, () => sock.end());
+      });
+      sock.once('finish', () => done(true));
+      sock.on('error', (e) => done(false, `Direct socket ${host}:${port} error: ${e.message}`));
+      sock.once('timeout', () => {
+        sock.destroy();
+        done(false, `Direct socket ${host}:${port} timed out`);
+      });
+      sock.connect(port, host);
+    }
+  });
+}
+
+function directSocketCandidates(printerName) {
+  const candidates = [];
+  const add = (host, port) => candidates.push({ host, port });
+
+  // Allow explicit config like "host:9100" or "192.168.1.50:9100".
+  if (printerName && /^[\w.\-]+:\d+$/.test(printerName)) {
+    const [host, port] = printerName.split(':');
+    add(host, Number(port));
+    return candidates;
+  }
+
+  // Otherwise try the printer name as a hostname on the standard LPD port.
+  if (printerName) add(printerName, 9100);
+  // And the loopback as a last resort.
+  add('127.0.0.1', 9100);
+  return candidates;
 }
 
 function printWindows(text, printerName) {

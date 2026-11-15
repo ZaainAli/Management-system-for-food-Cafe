@@ -70,31 +70,31 @@ async function createBill(billData) {
     const { skipPrint = false, ...billPayload } = billData || {};
     const bill = await billingService.createBill(billPayload);
     logger.info(`Bill created: #${bill.id}`);
-    let printError = null;
-    let printSkipped = false;
+
+    // Fire the print in the background and resolve immediately so the
+    // cashier can take the next order while the printer works. Any print
+    // failure is logged but does not block bill creation.
     if (!skipPrint) {
+      const receiptOptions = {};
       try {
-        const receiptOptions = {};
-        try {
-          const branchRes = await setupController.getBranchInfo();
-          const branchName = branchRes?.data?.name?.trim();
-          if (branchName) {
-            receiptOptions.restaurantName = branchName;
-          }
-        } catch (branchErr) {
-          logger.warn('Unable to load branch info for receipt header', branchErr);
+        const branchName = await setupController.getBranchName();
+        if (branchName) {
+          receiptOptions.restaurantName = branchName;
         }
-        const printResult = await printBillReceipt(bill, receiptOptions);
-        if (printResult?.skipped) {
-          printSkipped = true;
-          printError = printResult.reason || 'Receipt print skipped';
-        }
-      } catch (err) {
-        printError = err.message || 'Receipt print failed';
-        logger.error('Receipt print failed', err);
+      } catch (branchErr) {
+        logger.warn('Unable to load branch info for receipt header', branchErr);
       }
+      printBillReceipt(bill, receiptOptions).then((printResult) => {
+        if (printResult?.skipped) {
+          logger.warn(`Receipt print skipped for bill #${bill.id}: ${printResult.reason || 'unknown'}`);
+        } else {
+          logger.info(`Receipt printed for bill #${bill.id}`);
+        }
+      }).catch((err) => {
+        logger.error(`Receipt print failed for bill #${bill.id}`, err);
+      });
     }
-    return { success: true, data: bill, printError, printSkipped };
+    return { success: true, data: bill };
   } catch (err) {
     logger.error('createBill failed', err);
     return { success: false, error: err.message };
@@ -198,8 +198,7 @@ async function reprintBill(billId) {
     }
     const receiptOptions = { reprint: true };
     try {
-      const branchRes = await setupController.getBranchInfo();
-      const branchName = branchRes?.data?.name?.trim();
+      const branchName = await setupController.getBranchName();
       if (branchName) {
         receiptOptions.restaurantName = branchName;
       }

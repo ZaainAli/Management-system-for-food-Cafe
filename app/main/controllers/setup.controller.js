@@ -5,6 +5,13 @@ const { createClient } = require('@supabase/supabase-js');
 const logger = require('../utils/logger');
 
 let _client = null;
+
+// Cache the branch name so printing never depends on a live cloud round-trip.
+// Supabase keep-alives die after ~2-3 min of idle, so a fresh bill would pay a
+// full TCP+TLS handshake before the printer could be reached. TTL cache means
+// the name is reused for a while and the print path stays fast.
+let _branchCache = { name: null, fetchedAt: 0 };
+const BRANCH_CACHE_TTL_MS = 60 * 1000;
 function getSupabaseClient() {
   if (!_client) {
     const url = process.env.SUPABASE_URL;
@@ -133,6 +140,26 @@ async function getBranchInfo() {
   }
 }
 
+/**
+ * Return the branch name for the receipt header WITHOUT making a live cloud
+ * call. Uses a short TTL cache so the print path stays fast even when the
+ * Supabase keep-alive has died (which happens after 2-3 min of idle).
+ */
+async function getBranchName() {
+  const now = Date.now();
+  if (_branchCache.name && (now - _branchCache.fetchedAt) < BRANCH_CACHE_TTL_MS) {
+    return _branchCache.name;
+  }
+  try {
+    const res = await getBranchInfo();
+    const name = res?.data?.name?.trim() || null;
+    _branchCache = { name, fetchedAt: now };
+    return name;
+  } catch {
+    return _branchCache.name;
+  }
+}
+
 async function getSupabaseConfig() {
   try {
     const configured = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -166,4 +193,4 @@ async function saveSupabaseConfig({ supabaseUrl, supabaseKey }) {
   }
 }
 
-module.exports = { getBranchId, saveBranchId, getBranchInfo, getSupabaseConfig, saveSupabaseConfig };
+module.exports = { getBranchId, saveBranchId, getBranchInfo, getBranchName, getSupabaseConfig, saveSupabaseConfig };

@@ -205,9 +205,6 @@ export default function POSPage() {
         setBillSuccess(res.data);
         const stockRes = await window.api.stock.getAll();
         if (stockRes.success) setStockItems(stockRes.data);
-        if (res.printError || res.printSkipped) {
-          setPrintWarning(res.printError || 'Receipt could not be printed');
-        }
         clear();
         setSelectedTableId('');
         resetFSM();

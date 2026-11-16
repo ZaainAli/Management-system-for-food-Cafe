@@ -70,7 +70,15 @@ function renderReceiptText(bill, options = {}) {
   );
   parts.push(LEFT_MARGIN + line() + '\n');
 
-  for (const item of (bill.items || [])) {
+const sortedItems = (bill.items || [])
+    .map((item) => ({
+      item,
+      code: Number.isFinite(Number(item.itemCode)) ? Number(item.itemCode) : Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((a, b) => a.code - b.code || String(a.item.name || '').localeCompare(String(b.item.name || '')))
+    .map((x) => x.item);
+
+  for (const item of sortedItems) {
     const code = String(item.itemCode || '').substring(0, 5).padEnd(5);
     const name = String(item.name || '').substring(0, 13).padEnd(13);
     const qty = String(item.quantity ?? '').substring(0, 5).padStart(5);
